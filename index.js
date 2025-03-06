@@ -5,6 +5,7 @@ const PDFDocument = require('pdfkit');
 const bodyParser = require('body-parser');
 const session = require('express-session');
 const puppeteer = require('puppeteer');
+const fetch = require('node-fetch'); // NEW: require node-fetch
 const Crawler = require('simplecrawler');  // new dependency
 
 const app = express();
@@ -57,20 +58,36 @@ app.post('/test', async (req, res) => {
     const screenshotBuffer = await page.screenshot();
     // Capture meta data, including OG tags and favicon
     const metaData = await page.evaluate(() => {
+      // Helper to convert relative URLs to absolute based on window.location.origin
+      const toAbsolute = (url) => {
+        if (!url) return 'Not found';
+        try {
+          return new URL(url, window.location.origin).href;
+        } catch (e) {
+          return url;
+        }
+      };
       return {
         metaTitle: document.title || 'Not found',
         metaDescription: document.querySelector('meta[name="description"]')?.getAttribute('content') || 'Not found',
         metaViewport: document.querySelector('meta[name="viewport"]')?.getAttribute('content') || 'Not found',
-        favicon: document.querySelector('link[rel="icon"]')?.getAttribute('href') || 'Not found',
+        favicon: toAbsolute(document.querySelector('link[rel="icon"]')?.getAttribute('href')),
         ogTitle: document.querySelector('meta[property="og:title"]')?.getAttribute('content') || document.title || 'Not found',
         ogDescription: document.querySelector('meta[property="og:description"]')?.getAttribute('content') || 'Not found',
-        ogImage: document.querySelector('meta[property="og:image"]')?.getAttribute('content') || 'Not found',
-        ogVideo: document.querySelector('meta[property="og:video"]')?.getAttribute('content') || 'Not found'
+        ogImage: toAbsolute(document.querySelector('meta[property="og:image"]')?.getAttribute('content')),
+        ogVideo: toAbsolute(document.querySelector('meta[property="og:video"]')?.getAttribute('content'))
       };
     });
+    
+    // Also, fetch security headers using node-fetch
+    const headerResponse = await fetch(url);
+    // We capture all headers. You can filter for specific ones if needed.
+    const securityHeaders = headerResponse.headers.raw();
+    
     await browser.close();
     results.screenshot = screenshotBuffer.toString('base64');
     results.metaData = metaData;
+    results.securityHeaders = securityHeaders; // NEW: Attach security headers
 
     // Group similar issues by their error code
     let groupedIssues = {};
@@ -194,7 +211,7 @@ app.get('/download', (req, res) => {
   doc.end();
 });
 
-// Route: Crawl the site and test multiple pages (unchanged)
+// Route: Crawl the site and test multiple pages
 app.post('/crawl', async (req, res) => {
   let startUrl = req.body.url.trim();
   if (!/^https?:\/\//i.test(startUrl)) {

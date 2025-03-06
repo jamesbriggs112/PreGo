@@ -11,18 +11,66 @@
 <body class="bg-gray-100">
   <div class="container mx-auto p-4">
     <div class="bg-white shadow-md rounded p-8 mt-10">
-      <h3 class="text-2xl font-bold text-center mb-6">Prego Accessibility Test</h3>
-      <form id="testForm" action="/test" method="POST">
-        <div class="mb-4">
-          <input type="text" id="url" name="url" placeholder="https://example.com" required class="w-full px-3 py-2 border rounded focus:outline-none focus:ring focus:border-blue-300">
-          <label for="url" class="block text-gray-700 mt-2">Enter URL</label>
-        </div>
-        <div class="text-center">
-          <button type="submit" class="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700">
-            Run Test
-          </button>
-        </div>
-      </form>
+      <h3 class="text-2xl font-bold text-center mb-6">Prego Dashboard</h3>
+      <!-- Your existing form in index.ejs -->
+<form id="testForm" action="/test" method="POST">
+  <div class="mb-4">
+    <input type="text" id="url" name="url" placeholder="https://example.com" required class="w-full px-3 py-2 border rounded focus:outline-none focus:ring focus:border-blue-300">
+    <label for="url" class="block text-gray-700 mt-2">Enter URL</label>
+  </div>
+  <div class="text-center">
+    <button type="submit" class="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700">
+      Run Test
+    </button>
+  </div>
+</form>
+
+<!-- Recently tested URLs section -->
+<div class="mt-8">
+  <h4 class="text-lg font-bold">Recently Tested URLs</h4>
+  <ul id="urlHistory" class="list-disc pl-5 text-blue-600 cursor-pointer"></ul>
+</div>
+
+<script>
+  const MAX_HISTORY = 3;
+  const storageKey = 'testedUrls';
+
+  // Display history
+  function displayHistory() {
+    const history = JSON.parse(localStorage.getItem(storageKey)) || [];
+    const historyList = document.getElementById('urlHistory');
+    historyList.innerHTML = '';
+    history.forEach(url => {
+      const li = document.createElement('li');
+      li.textContent = url;
+      // When clicked, populate the URL field
+      li.addEventListener('click', () => {
+        document.getElementById('url').value = url;
+      });
+      historyList.appendChild(li);
+    });
+  }
+
+  // Add current URL to history on form submit
+  document.getElementById('testForm').addEventListener('submit', function() {
+    const urlInput = document.getElementById('url').value.trim();
+    let history = JSON.parse(localStorage.getItem(storageKey)) || [];
+    // Remove URL if it exists already
+    history = history.filter(u => u !== urlInput);
+    // Add new URL at the beginning
+    history.unshift(urlInput);
+    // Keep only the last MAX_HISTORY items
+    if (history.length > MAX_HISTORY) {
+      history = history.slice(0, MAX_HISTORY);
+    }
+    localStorage.setItem(storageKey, JSON.stringify(history));
+  });
+
+  // Display history on page load
+  window.addEventListener('load', displayHistory);
+</script>
+
+      
       
       <!-- Loading Spinner with Status Feedback -->
       <div id="loading" class="text-center mt-6 hidden">

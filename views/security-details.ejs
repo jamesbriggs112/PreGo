@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Prego Dashboard - Full Security Details</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body class="bg-gray-100">
+  <div class="container mx-auto p-4">
+    <h3 class="text-center text-3xl font-bold my-6">Full Security Details</h3>
+    
+    <% if (results.securitySummary) { %>
+      <div class="bg-white shadow-md rounded p-6 mb-8">
+        <h4 class="text-xl font-bold mb-4">Observatory-Style Checks</h4>
+        <p><strong>Security Score:</strong> <%= results.securitySummary.score %>/100</p>
+        <p><strong>Letter Grade:</strong> <%= results.securitySummary.letterGrade %></p>
+        <p><strong>Tests Passed:</strong> <%= results.securitySummary.passedCount %>/<%= results.securitySummary.totalChecks %></p>
+        <div class="mt-4">
+          <h5 class="text-lg font-semibold mb-2">Detailed Checks:</h5>
+          <ul class="list-disc pl-5">
+            <% for (const check in results.securitySummary.checks) { %>
+              <li>
+                <strong><%= check %>:</strong> 
+                <% if (results.securitySummary.checks[check]) { %>
+                  <span class="text-green-600">Passed</span>
+                <% } else { %>
+                  <span class="text-red-600">Failed</span>
+                <% } %>
+              </li>
+            <% } %>
+          </ul>
+        </div>
+      </div>
+    <% } %>
+    
+    <% if (results.securityHeaders) { %>
+      <div class="bg-white shadow-md rounded p-6 mb-8">
+        <h4 class="text-xl font-bold mb-4">Raw Response Headers</h4>
+        <ul class="list-disc pl-5">
+          <% for (const header in results.securityHeaders) { %>
+            <li>
+              <strong><%= header %>:</strong> <%= results.securityHeaders[header].join(', ') %>
+            </li>
+          <% } %>
+        </ul>
+      </div>
+    <% } %>
+
+    <div class="text-center my-8">
+      <a href="/results" class="bg-gray-600 text-white px-4 py-2 rounded hover:bg-gray-700 inline-block mr-2">
+        Back to Summary
+      </a>
+      <a href="/" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 inline-block">
+        Run Another Test
+      </a>
+    </div>
+  </div>
+</body>
+</html>

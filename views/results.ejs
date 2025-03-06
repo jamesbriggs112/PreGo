@@ -18,28 +18,32 @@
     <h3 class="text-center text-3xl font-bold my-6">Prego Dashboard - Results Summary</h3>
     <p class="text-center text-lg mb-4">Results for URL: <strong><%= results.pageUrl %></strong></p>
 
+    <% 
+      // Use a fallback object if results.summary is undefined
+      const summary = results.summary || { levelAAA: 0, levelAA: 0, levelA: 0 };
+    %>
+
     <!-- Panel 1: Accessibility Summary -->
     <div class="bg-white shadow-md rounded p-6 mb-8">
       <h4 class="text-2xl font-bold mb-4">Accessibility Summary</h4>
-      <!-- (Score removed as requested) -->
       <!-- WCAG Level Summary Boxes -->
       <div class="flex flex-wrap justify-around">
-        <div class="w-full md:w-1/3 p-2">
+        <div class="w-full md:w-1/2 p-2">
           <div class="bg-red-500 text-white rounded p-4 text-center">
             <h4 class="text-2xl font-bold">AAA</h4>
-            <p class="text-lg"><%= results.summary.levelAAA %> issues</p>
+            <p class="text-lg"><%= summary.levelAAA %> issues</p>
           </div>
         </div>
-        <div class="w-full md:w-1/3 p-2">
+        <div class="w-full md:w-1/2 p-2">
           <div class="bg-orange-500 text-white rounded p-4 text-center">
             <h4 class="text-2xl font-bold">AA</h4>
-            <p class="text-lg"><%= results.summary.levelAA %> issues</p>
+            <p class="text-lg"><%= summary.levelAA %> issues</p>
           </div>
         </div>
-        <div class="w-full md:w-1/3 p-2">
+        <div class="w-full md:w-1/2 p-2">
           <div class="bg-gray-500 text-white rounded p-4 text-center">
             <h4 class="text-2xl font-bold">A</h4>
-            <p class="text-lg"><%= results.summary.levelA %> issues</p>
+            <p class="text-lg"><%= summary.levelA %> issues</p>
           </div>
         </div>
       </div>

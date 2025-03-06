@@ -12,7 +12,6 @@
     <h3 class="text-center text-3xl font-bold my-6">Full Accessibility Details</h3>
     <p class="text-center text-lg mb-4">Results for URL: <strong><%= results.pageUrl %></strong></p>
     
-    <!-- Detailed Grouped Issues -->
     <% if (results.issues && results.issues.length > 0) { %>
       <% Object.keys(results.groupedIssues).forEach(function(code) { 
            let issues = results.groupedIssues[code]; %>
@@ -39,7 +38,6 @@
       </div>
     <% } %>
     
-    <!-- Navigation -->
     <div class="text-center my-8">
       <a href="/results" class="bg-gray-600 text-white px-4 py-2 rounded hover:bg-gray-700 inline-block mr-2">
         Back to Summary

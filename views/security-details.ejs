@@ -22,7 +22,7 @@
           <ul class="list-disc pl-5">
             <% for (const check in results.securitySummary.checks) { %>
               <li>
-                <strong><%= check %>:</strong> 
+                <strong><%= check %>:</strong>
                 <% if (results.securitySummary.checks[check]) { %>
                   <span class="text-green-600">Passed</span>
                 <% } else { %>
@@ -33,6 +33,8 @@
           </ul>
         </div>
       </div>
+    <% } else { %>
+      <p>No security summary available.</p>
     <% } %>
     
     <% if (results.securityHeaders) { %>

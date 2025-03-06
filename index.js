@@ -27,7 +27,7 @@ app.get('/', (req, res) => {
   res.render('index');
 });
 
-// Existing route for a single page test
+// Route for a single page test
 app.post('/test', async (req, res) => {
   let url = req.body.url.trim();
   // Add protocol if missing
@@ -40,7 +40,7 @@ app.post('/test', async (req, res) => {
     const results = await pa11y(url);
 
     // Compute a basic accessibility score:
-    // Start at 100 and subtract 5 points for each issue (min score = 0)
+    // Score = 100 - (5 * total issues); minimum 0.
     let score = 100;
     if (results.issues && results.issues.length > 0) {
       score = Math.max(100 - results.issues.length * 5, 0);
@@ -50,14 +50,27 @@ app.post('/test', async (req, res) => {
     // Add the test date
     results.dateTested = new Date();
 
-    // Capture a screenshot of the page using Puppeteer
+    // Capture screenshot and meta data using Puppeteer
     const browser = await puppeteer.launch();
     const page = await browser.newPage();
     await page.goto(url, { waitUntil: 'networkidle2' });
     const screenshotBuffer = await page.screenshot();
+    // Capture meta data, including OG tags and favicon
+    const metaData = await page.evaluate(() => {
+      return {
+        metaTitle: document.title || 'Not found',
+        metaDescription: document.querySelector('meta[name="description"]')?.getAttribute('content') || 'Not found',
+        metaViewport: document.querySelector('meta[name="viewport"]')?.getAttribute('content') || 'Not found',
+        favicon: document.querySelector('link[rel="icon"]')?.getAttribute('href') || 'Not found',
+        ogTitle: document.querySelector('meta[property="og:title"]')?.getAttribute('content') || document.title || 'Not found',
+        ogDescription: document.querySelector('meta[property="og:description"]')?.getAttribute('content') || 'Not found',
+        ogImage: document.querySelector('meta[property="og:image"]')?.getAttribute('content') || 'Not found',
+        ogVideo: document.querySelector('meta[property="og:video"]')?.getAttribute('content') || 'Not found'
+      };
+    });
     await browser.close();
-    // Store screenshot as a Base64 string
     results.screenshot = screenshotBuffer.toString('base64');
+    results.metaData = metaData;
 
     // Group similar issues by their error code
     let groupedIssues = {};
@@ -73,7 +86,6 @@ app.post('/test', async (req, res) => {
     results.groupedIssues = groupedIssues;
 
     // Compute summary for severity and WCAG levels
-    // First, count severity from raw issues
     const summary = {
       error: 0,
       warning: 0,
@@ -88,95 +100,57 @@ app.post('/test', async (req, res) => {
         if (type === 'error') summary.error++;
         else if (type === 'warning') summary.warning++;
         else if (type === 'notice') summary.notice++;
-      });
-    }
-    // Then, compute WCAG level counts from the groupedIssues keys
-    if (groupedIssues) {
-      Object.keys(groupedIssues).forEach(code => {
-        if (code.includes('WCAG2AAA')) {
-          summary.levelAAA += groupedIssues[code].length;
-        } else if (code.includes('WCAG2AA')) {
-          summary.levelAA += groupedIssues[code].length;
-        } else if (code.includes('WCAG2A')) {
-          summary.levelA += groupedIssues[code].length;
+        
+        if (issue.code) {
+          if (issue.code.includes('WCAG2AAA')) {
+            summary.levelAAA++;
+          } else if (issue.code.includes('WCAG2AA')) {
+            summary.levelAA++;
+          } else if (issue.code.includes('WCAG2A')) {
+            summary.levelA++;
+          }
         }
       });
     }
     results.summary = summary;
 
-    // Store results in session so we can use them for PDF generation
+    // Save results in session and redirect to summary dashboard
     req.session.results = results;
-    res.render('results', { results });
+    res.redirect('/results');
   } catch (error) {
     res.send('Error running accessibility test: ' + error.message);
   }
 });
 
-// New route: Crawl the site and test multiple pages
-app.post('/crawl', async (req, res) => {
-  let startUrl = req.body.url.trim();
-  // Add protocol if missing
-  if (!/^https?:\/\//i.test(startUrl)) {
-    startUrl = 'https://' + startUrl;
-  }
+// Route: Summary Dashboard
+app.get('/results', (req, res) => {
+  const results = req.session.results;
+  if (!results) return res.send('No results available. Please run a test first.');
+  res.render('results', { results });
+});
 
-  const urlObj = new URL(startUrl);
-  const domain = urlObj.hostname;
+// Route: Full Accessibility Details Page
+app.get('/accessibility-details', (req, res) => {
+  const results = req.session.results;
+  if (!results) return res.send('No results available. Please run a test first.');
+  res.render('accessibility-details', { results });
+});
 
-  // Array to hold URLs to be tested
-  let pagesToTest = [];
-
-  // Configure the crawler
-  const crawler = new Crawler(startUrl);
-  // Limit crawling to the same domain
-  crawler.hostBlacklist = [];
-  crawler.addFetchCondition((queueItem, referrerQueueItem) => {
-    return new URL(queueItem.url).hostname === domain;
-  });
-  
-  // Only process HTML pages
-  crawler.downloadUnsupported = false;
-  crawler.discoverResources = true;
-
-  // Event: For each fetched page, if HTML then add to our list.
-  crawler.on("fetchcomplete", (queueItem, responseBuffer, response) => {
-    if (response.headers['content-type'] && response.headers['content-type'].includes("text/html")) {
-      pagesToTest.push(queueItem.url);
-    }
-  });
-
-  // Once crawling is complete, run pa11y on each page sequentially
-  crawler.on("complete", async () => {
-    let crawlResults = [];
-    for (const pageUrl of pagesToTest) {
-      try {
-        const result = await pa11y(pageUrl);
-        result.pageUrl = pageUrl;
-        // (Optionally: compute scores, summaries, etc. per page)
-        crawlResults.push(result);
-      } catch (err) {
-        console.error("Error testing page:", pageUrl, err);
-      }
-    }
-    // Render a new view to display crawl results
-    res.render('crawlResults', { resultsArray: crawlResults });
-  });
-
-  // Start crawling
-  crawler.start();
+// Route: Full Meta Data Details Page
+app.get('/meta-details', (req, res) => {
+  const results = req.session.results;
+  if (!results || !results.metaData) return res.send('No meta data available. Please run a test first.');
+  res.render('meta-details', { meta: results.metaData });
 });
 
 // Route: Download PDF report of test results (for single page)
 app.get('/download', (req, res) => {
   const results = req.session.results;
-  if (!results) {
-    return res.send('No results available. Please run a test first.');
-  }
+  if (!results) return res.send('No results available. Please run a test first.');
   
   const doc = new PDFDocument();
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', 'attachment; filename="accessibility_report.pdf"');
-
   doc.pipe(res);
 
   // PDF Header
@@ -218,6 +192,43 @@ app.get('/download', (req, res) => {
   }
   
   doc.end();
+});
+
+// Route: Crawl the site and test multiple pages (unchanged)
+app.post('/crawl', async (req, res) => {
+  let startUrl = req.body.url.trim();
+  if (!/^https?:\/\//i.test(startUrl)) {
+    startUrl = 'https://' + startUrl;
+  }
+  const urlObj = new URL(startUrl);
+  const domain = urlObj.hostname;
+  let pagesToTest = [];
+  const crawler = new Crawler(startUrl);
+  crawler.hostBlacklist = [];
+  crawler.addFetchCondition((queueItem, referrerQueueItem) => {
+    return new URL(queueItem.url).hostname === domain;
+  });
+  crawler.downloadUnsupported = false;
+  crawler.discoverResources = true;
+  crawler.on("fetchcomplete", (queueItem, responseBuffer, response) => {
+    if (response.headers['content-type'] && response.headers['content-type'].includes("text/html")) {
+      pagesToTest.push(queueItem.url);
+    }
+  });
+  crawler.on("complete", async () => {
+    let crawlResults = [];
+    for (const pageUrl of pagesToTest) {
+      try {
+        const result = await pa11y(pageUrl);
+        result.pageUrl = pageUrl;
+        crawlResults.push(result);
+      } catch (err) {
+        console.error("Error testing page:", pageUrl, err);
+      }
+    }
+    res.render('crawlResults', { resultsArray: crawlResults });
+  });
+  crawler.start();
 });
 
 // Start the server

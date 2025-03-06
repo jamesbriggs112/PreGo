@@ -59,7 +59,21 @@ app.post('/test', async (req, res) => {
     // Store screenshot as a Base64 string
     results.screenshot = screenshotBuffer.toString('base64');
 
+    // Group similar issues by their error code
+    let groupedIssues = {};
+    if (results.issues && results.issues.length > 0) {
+      results.issues.forEach(issue => {
+        const codeKey = issue.code ? issue.code : "Unknown";
+        if (!groupedIssues[codeKey]) {
+          groupedIssues[codeKey] = [];
+        }
+        groupedIssues[codeKey].push(issue);
+      });
+    }
+    results.groupedIssues = groupedIssues;
+
     // Compute summary for severity and WCAG levels
+    // First, count severity from raw issues
     const summary = {
       error: 0,
       warning: 0,
@@ -68,36 +82,27 @@ app.post('/test', async (req, res) => {
       levelAA: 0,
       levelAAA: 0,
     };
-
     if (results.issues && results.issues.length > 0) {
       results.issues.forEach(issue => {
-        // Count severity (defaulting to 'error' if type not defined)
         const type = (issue.type || 'error').toLowerCase();
         if (type === 'error') summary.error++;
         else if (type === 'warning') summary.warning++;
         else if (type === 'notice') summary.notice++;
-
-        // Count WCAG level if provided
-        if (issue.wcagLevel) {
-          if (issue.wcagLevel === 'A') summary.levelA++;
-          else if (issue.wcagLevel === 'AA') summary.levelAA++;
-          else if (issue.wcagLevel === 'AAA') summary.levelAAA++;
+      });
+    }
+    // Then, compute WCAG level counts from the groupedIssues keys
+    if (groupedIssues) {
+      Object.keys(groupedIssues).forEach(code => {
+        if (code.includes('WCAG2AAA')) {
+          summary.levelAAA += groupedIssues[code].length;
+        } else if (code.includes('WCAG2AA')) {
+          summary.levelAA += groupedIssues[code].length;
+        } else if (code.includes('WCAG2A')) {
+          summary.levelA += groupedIssues[code].length;
         }
       });
     }
     results.summary = summary;
-
-    // Group similar issues by their error code
-    let groupedIssues = {};
-    if (results.issues && results.issues.length > 0) {
-      results.issues.forEach(issue => {
-        if (!groupedIssues[issue.code]) {
-          groupedIssues[issue.code] = [];
-        }
-        groupedIssues[issue.code].push(issue);
-      });
-    }
-    results.groupedIssues = groupedIssues;
 
     // Store results in session so we can use them for PDF generation
     req.session.results = results;

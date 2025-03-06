@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Accessibility Test Results</title>
+  <!-- Materialize CSS CDN -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/css/materialize.min.css">
+  <!-- Optional custom CSS -->
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body class="grey lighten-4">
+  <div class="container">
+    <h3 class="center-align">Accessibility Test Results</h3>
+    <p class="flow-text center-align">Results for URL: <strong><%= results.pageUrl %></strong></p>
+    
+    <!-- WCAG Level Summary Boxes -->
+    <div class="row">
+      <!-- AAA Box (Red) -->
+      <div class="col s12 m4">
+        <div class="card red lighten-2">
+          <div class="card-content white-text center-align">
+            <span class="card-title" style="font-size: 1.8rem;">AAA</span>
+            <p style="font-size: 1.2rem;"><%= results.summary.levelAAA %> issues</p>
+          </div>
+        </div>
+      </div>
+      <!-- AA Box (Orange) -->
+      <div class="col s12 m4">
+        <div class="card orange lighten-2">
+          <div class="card-content white-text center-align">
+            <span class="card-title" style="font-size: 1.8rem;">AA</span>
+            <p style="font-size: 1.2rem;"><%= results.summary.levelAA %> issues</p>
+          </div>
+        </div>
+      </div>
+      <!-- A Box (Grey) -->
+      <div class="col s12 m4">
+        <div class="card grey lighten-2">
+          <div class="card-content center-align">
+            <span class="card-title" style="font-size: 1.8rem;">A</span>
+            <p style="font-size: 1.2rem;"><%= results.summary.levelA %> issues</p>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Severity Summary Section (if needed) -->
+    <div class="row">
+      <div class="col s12 m6">
+        <div class="card blue lighten-4">
+          <div class="card-content">
+            <span class="card-title">Severity Summary</span>
+            <ul>
+              <li><strong>Errors:</strong> <%= results.summary.error %></li>
+              <li><strong>Warnings:</strong> <%= results.summary.warning %></li>
+              <li><strong>Notices:</strong> <%= results.summary.notice %></li>
+            </ul>
+          </div>
+        </div>
+      </div>
+      <!-- Optional additional summary card -->
+      <div class="col s12 m6">
+        <div class="card green lighten-4">
+          <div class="card-content">
+            <span class="card-title">General Summary</span>
+            <ul>
+              <li><strong>Accessibility Score:</strong> <%= results.score %>/100</li>
+              <li><strong>Date Tested:</strong> <%= new Date(results.dateTested).toLocaleString() %></li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Progress Bar -->
+    <div class="progress">
+      <div class="determinate" style="width: auto"></div>
+    </div>
+    
+    <!-- Screenshot Section (if available) -->
+    <% if (results.screenshot) { %>
+      <div class="section">
+        <h5>Screenshot of Tested Site:</h5>
+        <div class="card">
+          <div class="card-image">
+            <img src="data:image/png;base64,<%= results.screenshot %>" alt="Screenshot" class="responsive-img">
+          </div>
+        </div>
+      </div>
+    <% } %>
+    
+    <!-- Issues Section -->
+    <% if (results.issues && results.issues.length > 0) { %>
+      <h5>Issues:</h5>
+      <% Object.keys(results.groupedIssues).forEach(function(code) { %>
+        <div class="card">
+          <div class="card-content">
+            <span class="card-title">Code: <%= code %> (Total: <%= results.groupedIssues[code].length %>)</span>
+            <ul class="collection">
+              <% results.groupedIssues[code].forEach(function(issue, index) { %>
+                <li class="collection-item">
+                  <span class="badge"><%= index + 1 %></span>
+                  <span>
+                    <strong><%= issue.type ? issue.type.toUpperCase() : 'ERROR' %>:</strong>
+                    <%= issue.message %>
+                  </span>
+                  <br>
+                  <em>Selector:</em> <%= issue.selector %>
+                  <% if (issue.wcagLevel) { %>
+                    <br>
+                    <em>WCAG Level:</em> <%= issue.wcagLevel %>
+                  <% } %>
+                </li>
+              <% }); %>
+            </ul>
+          </div>
+        </div>
+      <% }); %>
+    <% } else { %>
+      <div class="card-panel green lighten-4">
+        <span class="green-text text-darken-4">No accessibility issues found!</span>
+      </div>
+    <% } %>
+    
+    <!-- Action Buttons -->
+    <div class="section center-align">
+      <a href="/download" class="btn waves-effect waves-light">Download PDF Report</a>
+      <a href="/" class="btn waves-effect waves-light">Run Another Test</a>
+    </div>
+  </div>
+  
+  <!-- Materialize JavaScript -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/js/materialize.min.js"></script>
+</body>
+</html>

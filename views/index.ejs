@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Pa11y Dashboard</title>
+  <!-- Materialize CSS CDN -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/css/materialize.min.css">
+  <!-- Custom CSS -->
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body class="grey lighten-4">
+  <div class="container">
+    <div class="card z-depth-2" style="margin-top: 40px; padding: 20px;">
+      <h3 class="center-align">Pa11y Accessibility Test</h3>
+      <form id="testForm" action="/test" method="POST">
+        <div class="input-field">
+          <input type="text" id="url" name="url" placeholder="https://example.com" required>
+          <label for="url">Enter URL</label>
+        </div>
+        <div class="center-align">
+          <button type="submit" class="btn waves-effect waves-light">
+            Run Test
+          </button>
+        </div>
+      </form>
+
+      <!-- Loading Spinner with Status Message -->
+      <div id="loading" class="center-align" style="display:none; margin-top:20px;">
+        <div class="preloader-wrapper big active">
+          <div class="spinner-layer spinner-blue-only">
+            <div class="circle-clipper left">
+              <div class="circle"></div>
+            </div>
+            <div class="gap-patch">
+              <div class="circle"></div>
+            </div>
+            <div class="circle-clipper right">
+              <div class="circle"></div>
+            </div>
+          </div>
+        </div>
+        <p id="status">Preparing test...</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Materialize JavaScript -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/js/materialize.min.js"></script>
+  <script>
+    // When the form is submitted, hide the form and show the loading spinner with dynamic status messages.
+    document.getElementById("testForm").addEventListener("submit", function() {
+      this.style.display = "none";
+      const loading = document.getElementById("loading");
+      loading.style.display = "block";
+      
+      // Define the status messages and update interval (in milliseconds)
+      const messages = ["Preparing test...", "Loading page...", "Running tests...", "Almost done..."];
+      let index = 0;
+      const statusEl = document.getElementById("status");
+      statusEl.innerText = messages[index];
+      
+      // Update the status message every 3 seconds
+      const intervalId = setInterval(function(){
+        index = (index + 1) % messages.length;
+        statusEl.innerText = messages[index];
+      }, 3000);
+      
+      // When the new page loads (i.e., results page), the interval will stop automatically because this page unloads.
+      // If you want to clear the interval before navigating, you could attach an event listener to the window's unload event.
+    });
+  </script>
+</body>
+</html>

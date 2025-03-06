@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Crawl Test Results</title>
+  <!-- Materialize CSS CDN -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/css/materialize.min.css">
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body class="grey lighten-4">
+  <div class="container">
+    <h3 class="center-align">Crawl Test Results</h3>
+    <% if (resultsArray.length > 0) { %>
+      <ul class="collection">
+        <% resultsArray.forEach(result => { %>
+          <li class="collection-item">
+            <strong><%= result.pageUrl %></strong>
+            <br>
+            Score: <%= result.score %>/100, Issues: <%= result.issues.length %>
+          </li>
+        <% }) %>
+      </ul>
+    <% } else { %>
+      <p class="center-align">No pages were crawled or tested.</p>
+    <% } %>
+    <div class="center-align">
+      <a href="/" class="btn waves-effect waves-light">Run Another Test</a>
+    </div>
+  </div>
+  <!-- Materialize JavaScript -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/js/materialize.min.js"></script>
+</body>
+</html>

@@ -1,0 +1,18 @@
+/* public/css/style.css */
+body {
+    font-family: 'Roboto', sans-serif;
+  }
+  
+  .card .card-title {
+    font-size: 1.4rem;
+    margin-bottom: 10px;
+  }
+  
+  ul {
+    list-style-type: none;
+    padding: 0;
+  }
+  
+  ul li {
+    margin-bottom: 5px;
+  }

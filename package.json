@@ -1,0 +1,22 @@
+{
+  "name": "pa11y-dashboard",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "body-parser": "^1.20.3",
+    "ejs": "^3.1.10",
+    "express": "^4.21.2",
+    "express-session": "^1.18.1",
+    "pa11y": "^8.0.0",
+    "pdfkit": "^0.16.0",
+    "puppeteer": "^24.2.0",
+    "simplecrawler": "^1.1.9"
+  }
+}

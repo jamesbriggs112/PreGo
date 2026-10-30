@@ -29,6 +29,10 @@ export interface CsvPreset {
   extra?: { header: string; value: (ticket: PlannedTicket) => string }[];
   /** Split Labels into one column per label (Jira imports multiple labels this way). */
   splitLabels?: boolean;
+  /** Write exactly these columns instead of the standard ones, for importers that reject anything else. */
+  only?: { header: string; value: (ticket: PlannedTicket) => string }[];
+  /** Leave out the byte-order mark, for importers that would read it as part of the first header. */
+  noBom?: boolean;
 }
 
 const JIRA_PRIORITY: Record<Priority, string> = { P1: 'Highest', P2: 'High', P3: 'Medium', P4: 'Low' };
@@ -75,6 +79,22 @@ export const CSV_PRESETS: Record<string, CsvPreset> = {
       Labels: (_v, t) => t.labels.join(','),
     },
   },
+  productive: {
+    id: 'productive',
+    name: 'Productive',
+    // Productive's task template: these seven columns, in this order, none removed. Assignee, dates and
+    // estimate are left for the team to fill in Productive; everything else goes in the description.
+    only: [
+      { header: 'Title', value: (t) => `${t.ticketId}: ${t.title}` },
+      { header: 'Assignee', value: () => '' },
+      { header: 'Description', value: (t) => `Severity: ${t.severity} · Priority: ${t.priority} · Category: ${t.category} · Effort: ${t.effort}${t.screenshotFile ? ` · Screenshot: screenshots/${t.screenshotFile}` : ''}\n\n${fullDescription(t)}` },
+      { header: 'Start Date', value: () => '' },
+      { header: 'Due Date', value: () => '' },
+      { header: 'Initial Estimate', value: () => '' },
+      { header: 'Workflow Status', value: (t) => (t.status === 'Fixed' || t.status === 'Dismissed' ? 'Closed' : 'Open') },
+    ],
+    noBom: true,
+  },
   trello: {
     id: 'trello',
     name: 'Trello',
@@ -116,13 +136,14 @@ function ticketRow(t: PlannedTicket): Row {
 }
 
 /** UTF-8 with BOM (so Excel and Numbers read accents correctly), comma-separated, every field quoted. */
-function toCsv(rows: string[][]): string {
-  return stringify(rows, { bom: true, quoted: true, quoted_empty: true, record_delimiter: 'windows' });
+function toCsv(rows: string[][], bom = true): string {
+  return stringify(rows, { bom, quoted: true, quoted_empty: true, record_delimiter: 'windows' });
 }
 
 export function ticketsCsv(plan: ExportPlan, presetId = 'prego'): string {
   const preset = CSV_PRESETS[presetId];
   if (!preset) throw new Error(`Unknown CSV preset "${presetId}". Choose from: ${Object.keys(CSV_PRESETS).join(', ')}`);
+  if (preset.only) return toCsv([preset.only.map((c) => c.header), ...plan.tickets.map((t) => preset.only!.map((c) => c.value(t)))], !preset.noBom);
   const columns = TICKET_COLUMNS.filter((c) => !(preset.splitLabels && c === 'Labels'));
   const maxLabels = preset.splitLabels ? Math.max(1, ...plan.tickets.map((t) => t.labels.length)) : 0;
   const header = [

@@ -81,6 +81,18 @@ describe('tickets.csv', () => {
     expect(rows[0].filter((_, i) => header[i] === 'Labels')).toEqual(['prego', 'accessibility', 'wcag-1.1.1']);
   });
 
+  it('applies the Productive preset: exactly its seven template columns, no byte-order mark', () => {
+    const csv = ticketsCsv(plan, 'productive');
+    expect(csv.charCodeAt(0)).not.toBe(0xfeff);
+    const [header, ...rows] = read(csv);
+    expect(header).toEqual(['Title', 'Assignee', 'Description', 'Start Date', 'Due Date', 'Initial Estimate', 'Workflow Status']);
+    const row = Object.fromEntries(header.map((h, i) => [h, rows[0][i]]));
+    expect(row).toMatchObject({ Title: 'PRG-A11Y-001: Images have no text alternative (/)', Assignee: '', 'Start Date': '', 'Due Date': '', 'Initial Estimate': '', 'Workflow Status': 'Open' });
+    expect(row.Description).toMatch(/^Severity: Critical · Priority: P1 · Category: A11Y · Effort: Small · Screenshot: screenshots\/PRG-A11Y-001_01\.png\n\nImages are missing/);
+    expect(row.Description).toContain('Prego ticket: PRG-A11Y-001, report section 4.1');
+    expect(rows).toHaveLength(plan.tickets.length);
+  });
+
   it('applies the Linear and Trello presets and rejects unknown ones', () => {
     expect(read(ticketsCsv(plan, 'linear'))[1][4]).toBe('Urgent');
     expect(read(ticketsCsv(plan, 'trello'))[0][1]).toBe('Card Name');

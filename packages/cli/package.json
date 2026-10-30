@@ -1,0 +1,14 @@
+{
+  "name": "@prego/cli",
+  "version": "2.0.0-alpha.0",
+  "private": true,
+  "description": "Command-line wrapper around the Prego audit engine",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "prego": "dist/cli.js"
+  },
+  "dependencies": {
+    "@prego/core": "2.0.0-alpha.0"
+  }
+}

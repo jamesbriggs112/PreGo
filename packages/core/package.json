@@ -1,0 +1,17 @@
+{
+  "name": "@prego/core",
+  "version": "2.0.0-alpha.0",
+  "private": true,
+  "description": "Prego audit engine: crawl, explore, checks, tickets, exports",
+  "license": "MIT",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "development": "./src/index.ts",
+      "default": "./dist/index.js"
+    }
+  }
+}

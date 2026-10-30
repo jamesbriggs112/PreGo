@@ -1,22 +1,38 @@
 {
-  "name": "pa11y-dashboard",
-  "version": "1.0.0",
-  "main": "index.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+  "name": "prego",
+  "version": "2.0.0-alpha.0",
+  "private": true,
+  "description": "Automated UX, UI and accessibility audit tool",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "description": "",
-  "dependencies": {
-    "body-parser": "^1.20.3",
-    "ejs": "^3.1.10",
-    "express": "^4.21.2",
-    "express-session": "^1.18.1",
-    "pa11y": "^8.0.0",
-    "pdfkit": "^0.16.0",
-    "puppeteer": "^24.2.0",
-    "simplecrawler": "^1.1.9"
+  "workspaces": [
+    "packages/core",
+    "packages/cli"
+  ],
+  "scripts": {
+    "build": "tsc -b packages/core packages/cli",
+    "typecheck": "tsc -b packages/core packages/cli",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "prego": "tsx --conditions=development packages/cli/src/cli.ts",
+    "postinstall": "playwright install chromium"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.5",
+    "@types/node": "^22.20.5",
+    "eslint": "^9.39.5",
+    "globals": "^17.13.0",
+    "playwright": "^1.64.1",
+    "tsx": "^4.23.15",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.72.1",
+    "vitest": "^5.0.5"
+  },
+  "allowScripts": {
+    "esbuild@0.28.2": true
   }
 }

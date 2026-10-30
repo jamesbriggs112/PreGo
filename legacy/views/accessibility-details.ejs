@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Prego Dashboard - Full Accessibility Details</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="/css/style.css">
+  <!-- Tippy.js CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/tippy.js@6/dist/tippy.css" />
+</head>
+<body class="bg-gray-100">
+  <div class="container mx-auto p-4 text-left">
+    <h3 class="text-center text-3xl font-bold my-6">Full Accessibility Details</h3>
+    <p class="text-center text-lg mb-4">Results for URL: <strong><%= results.pageUrl %></strong></p>
+    
+    <!-- Summary Table for Accessibility Counters -->
+    <% const summary = results.summary || { levelAAA: 0, levelAA: 0, levelA: 0 }; %>
+    <div class="bg-white shadow-md rounded p-6 mb-6">
+      <h4 class="text-xl font-bold mb-4">Accessibility Summary</h4>
+      <table class="min-w-full border">
+        <thead>
+          <tr>
+            <th class="py-2 px-4 border text-left">WCAG Level</th>
+            <th class="py-2 px-4 border text-left">Number of Issues</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="py-2 px-4 border">AAA</td>
+            <td class="py-2 px-4 border"><%= summary.levelAAA %></td>
+          </tr>
+          <tr>
+            <td class="py-2 px-4 border">AA</td>
+            <td class="py-2 px-4 border"><%= summary.levelAA %></td>
+          </tr>
+          <tr>
+            <td class="py-2 px-4 border">A</td>
+            <td class="py-2 px-4 border"><%= summary.levelA %></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    
+    <!-- Detailed Tables for Each Error Code -->
+    <% if (results.issues && results.issues.length > 0) { %>
+      <% Object.keys(results.groupedIssues).forEach(function(code) { 
+           let issues = results.groupedIssues[code]; 
+           let explanation = errorMappings[code] || "No description available.";
+      %>
+        <div class="bg-white shadow-md rounded p-6 mb-6">
+          <!-- Title with tooltip -->
+          <h4 class="text-xl font-bold mb-2" data-tippy-content="<%= explanation %>">
+            Error Code: <%= code %> (Total: <%= issues.length %>)
+          </h4>
+          <table class="min-w-full border">
+            <thead>
+              <tr>
+                <th class="py-2 px-4 border text-left">Issue Message</th>
+                <th class="py-2 px-4 border text-left">Selector</th>
+                <th class="py-2 px-4 border text-left">Context</th>
+              </tr>
+            </thead>
+            <tbody>
+              <% issues.forEach(function(issue) { %>
+                <tr>
+                  <td class="py-2 px-4 border"><%= issue.message %></td>
+                  <td class="py-2 px-4 border"><%= issue.selector %></td>
+                  <td class="py-2 px-4 border"><%= issue.context || '' %></td>
+                </tr>
+              <% }); %>
+            </tbody>
+          </table>
+        </div>
+      <% }); %>
+    <% } else { %>
+      <div class="bg-green-100 text-green-700 p-4 rounded mb-6">
+        No accessibility issues found!
+      </div>
+    <% } %>
+    
+    <div class="text-left my-8">
+      <a href="/results" class="bg-gray-600 text-white px-4 py-2 rounded hover:bg-gray-700 inline-block mr-2">
+        Back to Summary
+      </a>
+      <a href="/" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 inline-block">
+        Run Another Test
+      </a>
+    </div>
+  </div>
+  
+  <!-- Tippy.js Scripts -->
+  <script src="https://unpkg.com/@popperjs/core@2"></script>
+  <script src="https://unpkg.com/tippy.js@6"></script>
+  <script>
+    tippy('[data-tippy-content]');
+  </script>
+</body>
+</html>

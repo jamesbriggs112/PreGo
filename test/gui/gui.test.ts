@@ -62,3 +62,28 @@ describe('New audit screen', () => {
     await gui.prego.jobs.get(runId)!.done;
   }, 120_000);
 });
+
+describe('Live run screen', () => {
+  it('shows progress and the current screenshot, and Stop works', async () => {
+    const { page } = gui;
+    const response = await page.request.post(`${gui.url}api/runs`, {
+      data: { project: 'Acme Widgets', target: fixture, delayMs: 1500, viewports: ['desktop', 'mobile'] },
+    });
+    const { runId: slowRun } = await response.json();
+    await page.goto(`${gui.url}runs/${slowRun}`);
+    await page.getByRole('heading', { name: 'Auditing Acme Widgets' }).waitFor();
+
+    // A screenshot of a checked page appears and actually loads.
+    const shot = page.getByRole('img', { name: /^Screenshot of http/ });
+    await shot.waitFor({ timeout: 30_000 });
+    await expect.poll(() => shot.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0)).toBe(true);
+    await expect(page.getByText(/\d+ of 10 page checks done/).count()).resolves.toBe(1);
+    expect(await page.getByRole('listitem').filter({ hasText: 'Checked' }).count()).toBeGreaterThan(0);
+
+    expect(await axeViolations(page)).toEqual([]);
+
+    await page.getByRole('button', { name: 'Stop audit' }).click();
+    await page.getByText('This audit was stopped before it finished.').waitFor({ timeout: 30_000 });
+    expect(gui.db.getRun(slowRun)!.status).toBe('stopped');
+  }, 120_000);
+});

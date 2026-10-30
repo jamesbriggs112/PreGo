@@ -39,6 +39,23 @@ dismiss false positives, add notes) and export. Triage is saved per project, so 
 later audits. Report branding (company name, accent colour, logo) and New audit defaults are in
 Settings; CLI exports use the same branding.
 
+## Three ways to explore
+
+| Mode | For | How |
+|---|---|---|
+| Site crawl | Websites and multi-page builds | Follows the sitemap and links, groups pages by template and audits a sample of each |
+| Interactive exploration | Single-page apps and kiosk interactives where the URL doesn't change | Presses every control on every screen, breadth-first, and maps every screen it reaches. Raises tickets for dead ends, buttons that do nothing, content buried too deep and inconsistent Home/Back |
+| Scripted journey | A specific flow, such as booking a ticket | Record it once in Playwright's recorder ("Record journey"), then Prego replays it with checks after every step |
+
+The explorer is careful with live sites: it never presses controls on its denylist (delete, buy,
+send, log out and so on, editable per project), never follows links off the site, only types the
+dummy values in [`config/dummy-data.json`](config/dummy-data.json) into forms, and freezes timers
+so kiosk idle resets and attract loops can't interrupt it. Mask selectors stop clocks and carousels
+making one screen look like many. A recorded journey can also log in before a crawl or exploration.
+
+Large `<canvas>` or WebGL content, which no automated tool can read, gets a "manual review
+required" ticket rather than being reported as fine.
+
 ## Running an audit from the command line
 
 ```bash
@@ -72,6 +89,20 @@ Useful options (see `npm run prego -- audit --help` for all of them):
 | `--preset` | `prego` | `tickets.csv` columns for `jira`, `linear` or `trello` |
 
 A local folder works as a target too: `npm run prego -- audit ./build`.
+
+Explore an interactive, or record and replay a journey:
+
+```bash
+npm run prego -- audit https://kiosk.example.org --mode explore --viewports kiosk-landscape --mask ".clock"
+```
+
+```bash
+npm run prego -- journey record "Example" book-a-ticket https://example.org
+```
+
+```bash
+npm run prego -- audit https://example.org --project "Example" --mode journey --journey book-a-ticket
+```
 
 Other commands:
 

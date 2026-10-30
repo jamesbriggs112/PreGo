@@ -21,7 +21,7 @@ export { reportDocx, writeReportDocx, categoryScore, type ReportBranding } from 
 export { exportRun, type ExportOptions, type ExportResult } from './export/bundle.js';
 export { verifyExport, type VerifyResult } from './export/verify.js';
 export { moduleCategories, checkedCategories } from './checks/categories.js';
-export { checkDefinitions, createChecks, defaultChecks, registerCheck, unknownChecks, type CheckDefinition, type CheckFactoryContext } from './checks/registry.js';
+export { checkCosts, checkDefinitions, createChecks, defaultChecks, registerCheck, unknownChecks, type CheckDefinition, type CheckFactoryContext } from './checks/registry.js';
 export { updateTicket, mergeTickets, TriageError, type TicketChanges } from './tickets/triage.js';
 export type { TicketOverride } from './db/database.js';
 export { DEFAULT_SETTINGS, getSettings, saveSettings, logoPath, reportBranding, type PregoSettings } from './settings.js';
@@ -44,3 +44,4 @@ export { securityModule, analyseHeaders, type HeaderReport } from './checks/secu
 export { markupModule } from './checks/markup/markup.js';
 export { brokenLinksModule } from './checks/links/links.js';
 export { ibmModule, dropDuplicates } from './checks/ibm/ibm.js';
+export * from './checks/estimate.js';

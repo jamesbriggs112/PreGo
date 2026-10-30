@@ -2,9 +2,12 @@ import { Children, cloneElement, isValidElement, useState, type FormEvent, type 
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { PROFILES, type ProfileName } from '@prego/core/profiles';
+import { estimateAudit, formatEstimate, groupChecks } from '@prego/core/estimate';
+import { Clock } from 'lucide-react';
 import { api, ApiError, type JourneySummary, type Settings, type StartRunBody } from '@/lib/api';
 import { JourneyPicker } from '@/components/JourneyPicker';
 import { useTitle } from '@/lib/use-title';
+import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -63,6 +66,7 @@ function NewAuditForm({ defaults, defaultDenyLabels }: { defaults?: Settings['de
   const [delay, setDelay] = useState(String(defaults?.delayMs ?? 500));
   const [mode, setMode] = useState<'crawl' | 'explore' | 'journey'>('crawl');
   const checkList = useQuery({ queryKey: ['checks'], queryFn: api.checks });
+  const checkGroups = useQuery({ queryKey: ['check-groups'], queryFn: api.checkGroups });
   const [checks, setChecks] = useState<string[]>(defaults?.checks ?? []);
   const [journey, setJourney] = useState<JourneySummary | null>(null);
   const [loginJourney, setLoginJourney] = useState<JourneySummary | null>(null);
@@ -362,9 +366,37 @@ function NewAuditForm({ defaults, defaultDenyLabels }: { defaults?: Settings['de
       <Card>
         <CardHeader>
           <CardTitle>Checks</CardTitle>
-          <CardDescription>Starting choices come from Settings.</CardDescription>
+          <CardDescription>Pick a test group, or choose checks one by one. Starting choices come from Settings.</CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-5">
+          {checkList.data && checkGroups.data && (
+            <fieldset>
+              <legend className="mb-2 text-sm font-medium">Test group</legend>
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                {checkGroups.data.groups.map((group) => {
+                  const ids = groupChecks(group, checkList.data);
+                  const selected = ids.length === checks.length && ids.every((id) => checks.includes(id));
+                  return (
+                    <label
+                      key={group.id}
+                      className={cn(
+                        'flex cursor-pointer flex-col gap-1 rounded-xl border p-3 text-sm transition-colors has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-ring',
+                        selected ? 'border-primary bg-secondary' : 'hover:bg-muted',
+                      )}
+                    >
+                      <span className="flex items-center gap-2 font-medium">
+                        <input type="radio" name="check-group" className="sr-only" checked={selected} onChange={() => setChecks(ids)} aria-describedby={`group-${group.id}-hint`} />
+                        {group.name}
+                      </span>
+                      <span id={`group-${group.id}-hint`} className="text-muted-foreground">
+                        {group.description} {ids.length === 1 ? '1 check' : `${ids.length} checks`}.
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+            </fieldset>
+          )}
           <fieldset className="grid gap-3 sm:grid-cols-2">
             <legend className="sr-only">Checks to run</legend>
             {checkList.data?.map((check) => (
@@ -390,6 +422,19 @@ function NewAuditForm({ defaults, defaultDenyLabels }: { defaults?: Settings['de
             <p className="mt-2 text-sm text-destructive" role="alert">
               Choose at least one check.
             </p>
+          )}
+          {checkList.data && checks.length > 0 && (
+            <TimeEstimate
+              mode={mode}
+              pages={mode === 'explore' ? Number(maxStates) : mode === 'journey' ? (journey?.steps.length ?? 5) : Number(maxPages)}
+              viewports={Math.max(1, viewports.length)}
+              auditAll={auditAll}
+              perTemplate={Number(perTemplate) || 3}
+              delayMs={Number(delay) || 0}
+              concurrency={Number(concurrency) || 1}
+              costs={checkList.data.filter((c) => checks.includes(c.id)).map((c) => c.cost)}
+              calibration={checkGroups.data?.calibration ?? null}
+            />
           )}
         </CardContent>
       </Card>
@@ -450,6 +495,27 @@ function CheckboxField({ id, label, checked, onChange }: { id: string; label: st
       <Label htmlFor={id} className="font-normal leading-snug">
         {label}
       </Label>
+    </div>
+  );
+}
+
+function TimeEstimate(props: Omit<Parameters<typeof estimateAudit>[0], 'checks'> & { costs: Parameters<typeof estimateAudit>[0]['checks'] }) {
+  const { costs, ...input } = props;
+  const estimate = estimateAudit({ ...input, checks: costs });
+  const noun = input.mode === 'explore' ? 'screens' : input.mode === 'journey' ? 'steps' : 'pages';
+  const [lo, hi] = estimate.audited;
+  return (
+    <div className="flex items-start gap-3 rounded-xl bg-muted p-4 text-sm" aria-live="polite">
+      <Clock aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+      <div className="grid gap-0.5">
+        <p className="font-medium">Estimated time: {formatEstimate(estimate)}</p>
+        <p className="text-muted-foreground">
+          {lo === hi ? `${lo} ${noun}` : `${lo}–${hi} ${noun} audited`} at {input.viewports === 1 ? '1 viewport' : `${input.viewports} viewports`}.{' '}
+          {input.calibration
+            ? `Based on ${input.calibration.runs === 1 ? '1 earlier audit' : `${input.calibration.runs} earlier audits`} on this computer; slow sites take longer.`
+            : 'A rough guide for a typical live site. It gets more accurate once Prego has timed a few audits.'}
+        </p>
+      </div>
     </div>
   );
 }

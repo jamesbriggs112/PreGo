@@ -391,3 +391,25 @@ describe('Dark mode', () => {
     await expect(page.locator('html').getAttribute('data-theme')).resolves.toBe('light');
   }, 60_000);
 });
+
+describe('Test groups', () => {
+  it('picks a group’s checks and estimates how long the audit takes', async () => {
+    const { page } = gui;
+    await page.goto(`${gui.url}audits/new`);
+    await page.getByRole('radio', { name: 'Performance' }).check({ force: true });
+    await expect(page.getByLabel('Performance and best practice (Lighthouse)').isChecked()).resolves.toBe(true);
+    await expect(page.getByLabel('Accessibility (axe-core)').isChecked()).resolves.toBe(false);
+    const estimate = page.getByText(/^Estimated time: /);
+    const performance = await estimate.textContent();
+
+    await page.getByRole('radio', { name: 'Quick check' }).check({ force: true });
+    await expect(page.getByLabel('Accessibility (axe-core)').isChecked()).resolves.toBe(true);
+    await expect.poll(() => estimate.textContent()).not.toBe(performance);
+    await page.getByText(/earlier audits? on this computer|rough guide/).waitFor();
+
+    // Changing a single check leaves no group selected.
+    await page.getByLabel('HTML validity', { exact: true }).check();
+    await expect(page.getByRole('group', { name: 'Test group' }).getByRole('radio', { checked: true }).count()).resolves.toBe(0);
+    expect(await axeViolations(page)).toEqual([]);
+  });
+});

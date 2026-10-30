@@ -197,6 +197,7 @@ export async function runAudit(db: PregoDb, options: AuditOptions): Promise<Audi
       await logInWithJourney(browser, options.loginJourney, storageStatePath);
     }
     const context: DiscoveryContext = { db, run, options, startUrl, storageStatePath, browser, viewports, delayMs, emit };
+    const discoveryStarted = Date.now();
     const discovery =
       mode === 'explore' ? await discoverByExploring(context) : mode === 'journey' ? await discoverByJourney(context) : await discoverByCrawling(context);
     const { toAudit } = discovery;
@@ -206,6 +207,7 @@ export async function runAudit(db: PregoDb, options: AuditOptions): Promise<Audi
     ];
     const firstViewport = viewportName(viewports[0], options.emulation);
     activeModules = modules;
+    const timings: AuditTimings = { discoveryMs: Date.now() - discoveryStarted, pageViews: 0, openMs: 0, checks: {} };
 
     const noun = mode === 'explore' ? 'screens' : mode === 'journey' ? 'steps' : 'pages';
     emit({ type: 'phase', phase: 'audit', message: `Auditing ${toAudit.length} ${noun} at ${viewports.length} viewport(s)` });
@@ -215,7 +217,7 @@ export async function runAudit(db: PregoDb, options: AuditOptions): Promise<Audi
     await runPool(jobs, mode === 'crawl' ? (options.concurrency ?? 2) : 1, async ({ location, profile }) => {
       throwIfAborted(options.signal);
       try {
-        const result = await auditLocation(db, () => discovery.open(location, profile), run, runDir, location, modules, options.maxCropsPerLocation ?? 100, firstViewport);
+        const result = await auditLocation(db, () => discovery.open(location, profile), run, runDir, location, modules, options.maxCropsPerLocation ?? 100, firstViewport, timings);
         done++;
         emit({ type: 'location-audited', url: location.title && mode !== 'crawl' ? location.title : location.url, viewport: result.viewport, findings: result.findings, done, total: jobs.length, screenshot: result.screenshot });
       } catch (error) {
@@ -229,7 +231,16 @@ export async function runAudit(db: PregoDb, options: AuditOptions): Promise<Audi
 
     // Checks that compare across locations (duplicate titles, colour drift) report now. Their example
     // pages are opened again, once each, to crop the element the finding points at.
-    const late = (await Promise.all(modules.map((m) => m.finish?.() ?? []))).flat();
+    const late = (
+      await Promise.all(
+        modules.map(async (m) => {
+          const started = Date.now();
+          const found = (await m.finish?.()) ?? [];
+          timings.checks[m.id] = (timings.checks[m.id] ?? 0) + Date.now() - started;
+          return found;
+        }),
+      )
+    ).flat();
     const byLocation = new Map<number, LocatedFinding[]>();
     for (const f of late) byLocation.set(f.locationId, [...(byLocation.get(f.locationId) ?? []), f]);
     for (const [locationId, findings] of byLocation) {
@@ -262,6 +273,7 @@ export async function runAudit(db: PregoDb, options: AuditOptions): Promise<Audi
       ...discovery.summary,
       findings: db.getRawFindings(run.id).length,
       tickets: db.getTickets(run.id).length,
+      timings: { ...timings, totalMs: Date.now() - new Date(run.startedAt).getTime(), locations: toAudit.length, viewports: viewports.length },
     });
     emit({ type: 'phase', phase: 'done', message: 'Audit complete' });
   } catch (error) {
@@ -277,6 +289,23 @@ export async function runAudit(db: PregoDb, options: AuditOptions): Promise<Audi
   return { run: db.getRun(run.id)!, runDir, locations: db.getLocations(run.id) };
 }
 
+/**
+ * Where an audit's time went, kept in the run summary so time estimates can learn from real audits.
+ * Concurrent page views overlap, so the parts can add up to more than the total.
+ */
+export interface AuditTimings {
+  discoveryMs: number;
+  /** Page views audited (locations × viewports reached). */
+  pageViews: number;
+  /** Opening pages and taking the full-page screenshot. */
+  openMs: number;
+  /** Time in each check, by check ID. */
+  checks: Record<string, number>;
+  totalMs?: number;
+  locations?: number;
+  viewports?: number;
+}
+
 async function auditLocation(
   db: PregoDb,
   open: () => Promise<OpenedPage>,
@@ -286,11 +315,15 @@ async function auditLocation(
   modules: CheckModule[],
   maxCrops: number,
   firstViewport: string,
+  timings: AuditTimings,
 ): Promise<{ viewport: string; findings: number; screenshot: string }> {
+  const opening = Date.now();
   const opened = await open();
   try {
     const screenshot = join('screenshots', `${location.id}-${safe(opened.viewport)}.png`);
     await captureFullPage(opened.page, join(runDir, screenshot));
+    timings.openMs += Date.now() - opening;
+    timings.pageViews++;
     db.updateLocation(location.id, { screenshots: { ...(db.getLocation(location.id)?.screenshots ?? {}), [opened.viewport]: screenshot } });
 
     let count = 0;
@@ -299,6 +332,7 @@ async function auditLocation(
     const byModule = new Map<CheckModule, CheckFinding[]>();
     for (const module of modules) {
       if (module.perViewport === false && opened.viewport !== firstViewport) continue;
+      const started = Date.now();
       byModule.set(
         module,
         await module.run({
@@ -310,6 +344,7 @@ async function auditLocation(
           recordMetrics: (metrics) => db.updateLocation(location.id, { metrics: { ...db.getLocation(location.id)!.metrics, ...metrics } }),
         }),
       );
+      timings.checks[module.id] = (timings.checks[module.id] ?? 0) + Date.now() - started;
     }
     for (const [module, own] of byModule) {
       if (!module.dedupe) continue;

@@ -27,6 +27,11 @@
       "types": "./dist/explore/layout.d.ts",
       "development": "./src/explore/layout.ts",
       "default": "./dist/explore/layout.js"
+    },
+    "./estimate": {
+      "types": "./dist/checks/estimate.d.ts",
+      "development": "./src/checks/estimate.ts",
+      "default": "./dist/checks/estimate.js"
     }
   },
   "dependencies": {

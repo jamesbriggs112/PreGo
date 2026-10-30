@@ -1,3 +1,4 @@
+import type { Calibration, CheckCost, CheckGroup } from '@prego/core/estimate';
 import type { Category, Location, Priority, Project, Run, Severity, Ticket } from '@prego/core/types';
 
 export type RunSummary = Pick<Run, 'id' | 'projectId' | 'mode' | 'target' | 'status' | 'startedAt' | 'finishedAt' | 'summary' | 'error'>;
@@ -58,6 +59,7 @@ export interface CheckInfo {
   categories: string[];
   defaultOn: boolean;
   slow: boolean;
+  cost: CheckCost;
 }
 
 export interface JourneySummary {
@@ -167,6 +169,7 @@ export const api = {
     request<Ticket>(`/api/runs/${runId}/tickets/${encodeURIComponent(ticketId)}`, { method: 'PATCH', body: JSON.stringify(changes) }),
   mergeTickets: (runId: number, into: string, from: string[]) => post<Ticket>(`/api/runs/${runId}/tickets/merge`, { into, from }),
   checks: () => request<CheckInfo[]>('/api/checks'),
+  checkGroups: () => request<{ groups: CheckGroup[]; calibration: Calibration | null }>('/api/check-groups'),
   journeys: (projectId: number) => request<JourneyList>(`/api/projects/${projectId}/journeys`),
   recordJourney: (projectId: number, name: string, url: string) => post<{ name: string; status: string }>(`/api/projects/${projectId}/journeys/record`, { name, url }),
   stateMap: (runId: number) => request<StateMapData>(`/api/runs/${runId}/state-map`),

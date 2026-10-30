@@ -13,6 +13,10 @@ import {
   TriageError,
   buildExportPlan,
   checkDefinitions,
+  checkCosts,
+  calibrate,
+  CHECK_GROUPS,
+  type RecordedTimings,
   unknownChecks,
   ensureJourneysDir,
   journeysDir,
@@ -167,8 +171,20 @@ export async function buildApp(options: AppOptions): Promise<PregoApp> {
 
   // The checks a run can choose from, for the New audit form.
   app.get('/api/checks', async () =>
-    checkDefinitions().map(({ id, name, description, categories, defaultOn, slow }) => ({ id, name, description, categories, defaultOn, slow: !!slow })),
+    checkDefinitions().map(({ id, name, description, categories, defaultOn, slow, cost }) => ({ id, name, description, categories, defaultOn, slow: !!slow, cost: { id, ...cost } })),
   );
+
+  // Test groups, and how long checks took in the last 20 audits on this machine, for time estimates.
+  app.get('/api/check-groups', async () => {
+    const recent = db
+      .listProjects()
+      .flatMap((p) => db.listRuns(p.id))
+      .filter((r) => r.status === 'complete' && r.summary.timings)
+      .sort((a, b) => b.id - a.id)
+      .slice(0, 20)
+      .map((r) => r.summary.timings as RecordedTimings);
+    return { groups: CHECK_GROUPS, calibration: calibrate(recent, checkCosts()) };
+  });
 
   // Projects
 

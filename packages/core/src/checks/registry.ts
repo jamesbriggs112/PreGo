@@ -1,6 +1,7 @@
 import type { Category } from '../types.js';
 import type { FailedPage } from '../crawl/crawler.js';
 import type { CheckModule } from './types.js';
+import type { CheckCost } from './estimate.js';
 import { axeModule } from './axe/axe.js';
 import { canvasModule } from './canvas/canvas.js';
 import { customA11yModule } from './a11y-custom/a11y-custom.js';
@@ -33,6 +34,8 @@ export interface CheckDefinition {
   defaultOn: boolean;
   /** Takes long enough that tests and quick runs skip it unless asked (e.g. Lighthouse). */
   slow?: boolean;
+  /** Typical time it adds, for estimates before Prego has timed real audits. */
+  cost: Omit<CheckCost, 'id'>;
   create: (context: CheckFactoryContext) => CheckModule;
 }
 
@@ -43,6 +46,7 @@ const definitions: CheckDefinition[] = [
     description: 'WCAG 2.2 A and AA rules.',
     categories: ['A11Y'],
     defaultOn: true,
+    cost: { seconds: [0.3, 0.8] },
     create: () => axeModule(),
   },
   {
@@ -51,6 +55,7 @@ const definitions: CheckDefinition[] = [
     description: 'Keyboard traps, visible focus, reflow at 320px, 200% zoom, text spacing, touch target size, skip links, headings, landmarks and duplicate page titles.',
     categories: ['A11Y'],
     defaultOn: true,
+    cost: { seconds: [0.6, 1.5] },
     create: () => customA11yModule(),
   },
   {
@@ -59,6 +64,7 @@ const definitions: CheckDefinition[] = [
     description: 'Colours, typefaces, text sizes, line heights and spacing used across the site, with near-duplicates flagged.',
     categories: ['UI'],
     defaultOn: true,
+    cost: { seconds: [0.2, 0.5], perPage: true },
     create: () => uiConsistencyModule(),
   },
   {
@@ -67,6 +73,7 @@ const definitions: CheckDefinition[] = [
     description: 'Page titles, meta descriptions, Open Graph tags, and alt text that names a file or just says “image”.',
     categories: ['CONT', 'A11Y'],
     defaultOn: true,
+    cost: { seconds: [0.05, 0.15], perPage: true },
     create: () => contentModule(),
   },
   {
@@ -76,6 +83,7 @@ const definitions: CheckDefinition[] = [
     categories: ['PERF', 'TECH', 'CONT'],
     defaultOn: true,
     slow: true,
+    cost: { seconds: [6, 12], perPage: true, serial: true, setupSeconds: [3, 6] },
     create: (context) => lighthouseModule({ basicAuth: context.basicAuth, onRequest: context.onRequest }),
   },
   {
@@ -84,6 +92,7 @@ const definitions: CheckDefinition[] = [
     description: 'HTTPS, security headers (CSP, HSTS, framing, referrer, permissions, nosniff), cookie flags, mixed content and version disclosure.',
     categories: ['SEC'],
     defaultOn: true,
+    cost: { seconds: [0.02, 0.1], perPage: true },
     create: () => securityModule(),
   },
   {
@@ -92,6 +101,7 @@ const definitions: CheckDefinition[] = [
     description: 'Markup checked against the HTML standard with html-validate.',
     categories: ['TECH'],
     defaultOn: true,
+    cost: { seconds: [0.1, 0.4], perPage: true },
     create: () => markupModule(),
   },
   {
@@ -100,6 +110,7 @@ const definitions: CheckDefinition[] = [
     description: 'Links found while crawling that lead to errors, shown on the pages that contain them.',
     categories: ['UX'],
     defaultOn: true,
+    cost: { seconds: [0, 0.01], perPage: true },
     create: (context) => brokenLinksModule(context.failedPages),
   },
   {
@@ -108,6 +119,7 @@ const definitions: CheckDefinition[] = [
     description: 'IBM Equal Access rules as a second opinion; anything axe already found on the same element is left out.',
     categories: ['A11Y'],
     defaultOn: false,
+    cost: { seconds: [0.5, 1.5] },
     create: () => ibmModule(),
   },
   {
@@ -116,6 +128,7 @@ const definitions: CheckDefinition[] = [
     description: 'Flags large canvas content that automated tools cannot read, for manual review.',
     categories: ['A11Y'],
     defaultOn: true,
+    cost: { seconds: [0.03, 0.1] },
     create: () => canvasModule(),
   },
 ];
@@ -134,6 +147,10 @@ export function checkDefinitions(): readonly CheckDefinition[] {
 /** Checks run when none are chosen: everything on by default except the slow ones. */
 export function defaultChecks(): string[] {
   return definitions.filter((d) => d.defaultOn && !d.slow).map((d) => d.id);
+}
+
+export function checkCosts(ids?: string[]): CheckCost[] {
+  return definitions.filter((d) => !ids || ids.includes(d.id)).map((d) => ({ id: d.id, ...d.cost }));
 }
 
 export function unknownChecks(ids: string[]): string[] {

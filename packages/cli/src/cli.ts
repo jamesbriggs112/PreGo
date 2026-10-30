@@ -4,6 +4,8 @@ import { spawn } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { basename, dirname, join, resolve } from 'node:path';
 import {
+  CHECK_GROUPS,
+  groupChecks,
   CSV_PRESETS,
   DEFAULT_DENY_LABELS,
   checkDefinitions,
@@ -78,6 +80,7 @@ program
   .option('--user <name>', 'basic auth username; the password is read from PREGO_PASSWORD')
   .addOption(new Option('--preset <name>', 'tickets.csv column preset').choices(Object.keys(CSV_PRESETS)).default('prego'))
   .option('--checks <ids>', `comma-separated checks to run (default: the defaults in Settings): ${checkDefinitions().map((d) => d.id).join(', ')}`)
+  .addOption(new Option('--group <id>', 'run a test group instead of choosing checks').choices(CHECK_GROUPS.map((g) => g.id)).conflicts('checks'))
   .option('--no-export', 'store results without writing the export bundle')
   .option('-q, --quiet', 'only print the final summary')
   .action(async (target: string, opts) => {
@@ -107,7 +110,11 @@ program
         dataDir,
         viewports: opts.viewports,
         mode: opts.mode,
-        checks: opts.checks ? String(opts.checks).split(',').map((c: string) => c.trim()) : getSettings(db).defaults.checks,
+        checks: opts.checks
+          ? String(opts.checks).split(',').map((c: string) => c.trim())
+          : opts.group
+            ? groupChecks(CHECK_GROUPS.find((g) => g.id === opts.group)!, checkDefinitions())
+            : getSettings(db).defaults.checks,
         journey,
         loginJourney,
         maxPages: opts.maxPages,

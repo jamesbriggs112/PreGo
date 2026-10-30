@@ -263,6 +263,13 @@ const PREGO: Record<string, RuleGuidance> = {
     recommendation: 'Flatten the menu structure or add a shortcut to this content from a higher level.',
     effort: 'Large',
   },
+  'canvas-content': {
+    title: 'Content drawn in a canvas needs manual review',
+    description: 'A large part of the screen is drawn inside a <canvas> element (2D or WebGL). Automated accessibility checks cannot see anything drawn there.',
+    whyItMatters: 'Screen reader users get nothing from canvas content unless it is described another way, and keyboard users may not be able to operate controls drawn in it. Automated checks can’t tell either way, so this needs a person to test it.',
+    recommendation: 'Test the canvas by hand with a screen reader and a keyboard. Give it an accessible name, provide the same information and controls as real HTML (alongside or as fallback content), and make sure it respects reduced motion.',
+    effort: 'Medium',
+  },
   'journey-step-failed': {
     title: 'Journey could not be completed',
     description: 'A step of a recorded journey could not be replayed: the element it uses was missing, hidden or didn’t respond.',

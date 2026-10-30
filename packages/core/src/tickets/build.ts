@@ -207,5 +207,6 @@ function stepsToReproduce(finding: RawFinding, location: Location): string {
 function labelsFor(finding: RawFinding): string[] {
   const labels = ['prego', CATEGORY_NAMES[finding.category].toLowerCase().replace(/\s+/g, '-')];
   for (const criterion of finding.wcagCriteria) labels.push(`wcag-${criterion}`);
+  if (finding.ruleId === 'canvas-content') labels.push('manual-review');
   return labels;
 }

@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Gallery map</title>
+  <style>html, body { margin: 0; height: 100%; } canvas { display: block; width: 100vw; height: 100vh; }</style>
+</head>
+<body>
+  <!-- Prego test page for canvas detection (T23): an interactive map drawn entirely with WebGL, so
+       no accessibility engine can see its content. It should raise a manual-review ticket. -->
+  <main>
+    <h1 style="position:absolute;left:16px;top:8px;margin:0;color:#fff;font-family:sans-serif">Gallery map</h1>
+    <canvas id="map"></canvas>
+  </main>
+  <script>
+    const canvas = document.getElementById('map');
+    canvas.width = innerWidth;
+    canvas.height = innerHeight;
+    const gl = canvas.getContext('webgl');
+    if (gl) {
+      gl.clearColor(0.1, 0.25, 0.4, 1);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+      gl.enable(gl.SCISSOR_TEST);
+      [[0.2, 0.3], [0.5, 0.6], [0.7, 0.2]].forEach(([x, y], i) => {
+        gl.scissor(x * canvas.width, y * canvas.height, 160, 100);
+        gl.clearColor(0.95, 0.75 - i * 0.2, 0.3, 1);
+        gl.clear(gl.COLOR_BUFFER_BIT);
+      });
+    }
+  </script>
+</body>
+</html>

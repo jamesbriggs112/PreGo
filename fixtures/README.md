@@ -69,3 +69,22 @@ attract ("Touch anywhere to begin")
 | Button that does nothing | `Our collection → Paintings → Zoom in` | Raise a "action changes nothing" UX ticket |
 | Denylisted action | `Share your visit → Send to my email` | Never press it (denylist contains "send"), so `email-sent` stays unvisited |
 | Idle-reset timer | 60 seconds without input returns to the attract screen | Freeze the clock so exploration isn't reset |
+
+## explore-cases
+
+Small single-purpose pages for the explorer and the canvas check. Each one is a deliberate case.
+
+| Page | Used by | What it contains |
+|---|---|---|
+| `actions.html` | Action discovery (T18) | Every kind of interactive element (links, buttons, ARIA buttons, click handlers set as attributes and properties, pointer-cursor cards, focusable divs, form fields), plus elements that must **not** count: disabled, hidden, invisible, inside `aria-hidden`, `tabindex="-1"`, hidden inputs |
+| `form.html` | Explorer safety (T20) | A form that shows back what was submitted; a "Delete account" button (label denylist); a `.danger` button (selector denylist); a `/logout` link; a link to another site. Presses of the dangerous buttons are recorded in `window.dangerousPresses` |
+| `logout.html` | Explorer safety (T20) | Where the log-out link would lead (it must never be visited) |
+| `clock.html` | Mask selectors (T20) | Two screens with a live clock (`#clock`) that changes every second. Unmasked, every visit looks like a new screen |
+| `canvas.html` | Canvas detection (T23) | A WebGL "gallery map" filling the screen, with no accessible name or fallback: must raise a manual-review ticket |
+| `canvas-small.html` | Canvas detection (T23) | A small labelled 2D chart, well under 40% of the screen: must **not** be flagged |
+
+## journeys
+
+| File | What it is |
+|---|---|
+| `bad-site-contact.js` | A journey as Playwright's code generator records it (`--target javascript`): open bad-site, click About, click Contact, type an email. `{{ORIGIN}}` is replaced with the test server's address. It also contains a popup line and a `process.env` line, which Prego must refuse to replay |

@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Small chart</title></head>
+<body>
+  <!-- Prego test page for canvas detection (T23): a small 2D chart well under 40% of the screen. It
+       should not be flagged. -->
+  <main>
+    <h1>Visitor numbers</h1>
+    <canvas id="chart" width="240" height="120" aria-label="Bar chart of visitor numbers"></canvas>
+    <p>Visitors rose from 1,200 in May to 1,800 in June.</p>
+  </main>
+  <script>
+    const ctx = document.getElementById('chart').getContext('2d');
+    ctx.fillStyle = '#1f3a5f';
+    ctx.fillRect(20, 50, 60, 70);
+    ctx.fillRect(110, 20, 60, 100);
+  </script>
+</body>
+</html>

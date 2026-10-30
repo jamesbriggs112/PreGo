@@ -17,6 +17,7 @@ import { describeComponent } from '../tickets/component.js';
 import { buildTickets } from '../tickets/build.js';
 import { serveFolder, type StaticServer } from '../serve/static-server.js';
 import { axeModule } from '../checks/axe/axe.js';
+import { canvasModule } from '../checks/canvas/canvas.js';
 import type { CheckModule } from '../checks/types.js';
 import { defaultDataDir } from '../paths.js';
 import type { Location, Run } from '../types.js';
@@ -66,7 +67,7 @@ export interface AuditOptions {
   basicAuth?: BasicAuth;
   /** URLs on a key user journey; problems there get a higher priority. */
   keyJourneyUrls?: string[];
-  /** Check modules to run. Default: axe. */
+  /** Check modules to run. Default: axe and canvas detection. */
   modules?: CheckModule[];
   /** Maximum outlined crops per location and viewport. Default 100. */
   maxCropsPerLocation?: number;
@@ -130,7 +131,7 @@ export async function runAudit(db: PregoDb, options: AuditOptions): Promise<Audi
   };
   const dataDir = resolve(options.dataDir ?? defaultDataDir());
   const viewports = options.viewports ?? ['desktop'];
-  const modules = options.modules ?? [axeModule()];
+  const modules = options.modules ?? [axeModule(), canvasModule()];
   const delayMs = options.delayMs ?? 500;
   const mode = options.mode ?? 'crawl';
 

@@ -295,16 +295,28 @@ async function auditLocation(
 
     let count = 0;
     const touch = await opened.page.evaluate(() => navigator.maxTouchPoints > 0);
+    // Run every module first, so second engines can drop what another engine already reported.
+    const byModule = new Map<CheckModule, CheckFinding[]>();
     for (const module of modules) {
       if (module.perViewport === false && opened.viewport !== firstViewport) continue;
-      const findings = await module.run({
-        page: opened.page,
-        location,
-        viewport: opened.viewport,
-        touch,
-        firstViewport: opened.viewport === firstViewport,
-        recordMetrics: (metrics) => db.updateLocation(location.id, { metrics: { ...db.getLocation(location.id)!.metrics, ...metrics } }),
-      });
+      byModule.set(
+        module,
+        await module.run({
+          page: opened.page,
+          location,
+          viewport: opened.viewport,
+          touch,
+          firstViewport: opened.viewport === firstViewport,
+          recordMetrics: (metrics) => db.updateLocation(location.id, { metrics: { ...db.getLocation(location.id)!.metrics, ...metrics } }),
+        }),
+      );
+    }
+    for (const [module, own] of byModule) {
+      if (!module.dedupe) continue;
+      const others = [...byModule].filter(([m]) => m !== module).flatMap(([, f]) => f);
+      byModule.set(module, await module.dedupe(opened.page, own, others));
+    }
+    for (const findings of byModule.values()) {
       for (const finding of findings) {
         count++;
         const component = finding.siteWide || finding.component ? findingComponent(finding) : await describeComponent(opened.page, finding.selector).then((c) => ({ component: c.path, componentShared: c.shared }));

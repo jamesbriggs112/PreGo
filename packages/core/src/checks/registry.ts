@@ -11,6 +11,7 @@ import type { BasicAuth } from '../browser/session.js';
 import { securityModule } from './security/security.js';
 import { markupModule } from './markup/markup.js';
 import { brokenLinksModule } from './links/links.js';
+import { ibmModule } from './ibm/ibm.js';
 
 /** Everything a check factory may need from the audit. */
 export interface CheckFactoryContext {
@@ -100,6 +101,14 @@ const definitions: CheckDefinition[] = [
     categories: ['UX'],
     defaultOn: true,
     create: (context) => brokenLinksModule(context.failedPages),
+  },
+  {
+    id: 'ibm',
+    name: 'Accessibility, second engine (IBM)',
+    description: 'IBM Equal Access rules as a second opinion; anything axe already found on the same element is left out.',
+    categories: ['A11Y'],
+    defaultOn: false,
+    create: () => ibmModule(),
   },
   {
     id: 'canvas',

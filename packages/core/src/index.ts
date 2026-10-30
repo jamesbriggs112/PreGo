@@ -43,3 +43,4 @@ export { lighthouseModule, averagePerformance, type LighthouseScores, type Light
 export { securityModule, analyseHeaders, type HeaderReport } from './checks/security/security.js';
 export { markupModule } from './checks/markup/markup.js';
 export { brokenLinksModule } from './checks/links/links.js';
+export { ibmModule, dropDuplicates } from './checks/ibm/ibm.js';

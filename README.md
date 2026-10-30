@@ -56,6 +56,26 @@ making one screen look like many. A recorded journey can also log in before a cr
 Large `<canvas>` or WebGL content, which no automated tool can read, gets a "manual review
 required" ticket rather than being reported as fine.
 
+## Checks
+
+Choose checks per audit on the New audit form (defaults in Settings), or with `--checks` on the CLI.
+
+| Check | What it covers |
+|---|---|
+| `axe` | Accessibility: WCAG 2.2 A and AA rules (axe-core) |
+| `a11y-custom` | Keyboard traps and visible focus, reflow at 320px, 200% zoom, text spacing, touch target size, skip links, headings, landmarks, duplicate page titles |
+| `ibm` | A second accessibility engine (IBM Equal Access, bundled, runs offline). Off by default; anything axe already found is left out |
+| `canvas` | Large canvas or WebGL content, flagged for manual review |
+| `ui` | Visual consistency: near-duplicate colours, too many greys or typefaces, text sizes, line heights and spacing a pixel apart |
+| `content` | Titles, meta descriptions, Open Graph tags, unhelpful alt text |
+| `lighthouse` | Performance, best-practice and SEO scores and failing audits, one page per template. Adds several seconds per template |
+| `security` | HTTPS, security headers, cookie flags, mixed content, version disclosure |
+| `html` | HTML validity (html-validate, standard preset) |
+| `links` | Broken links found while crawling |
+
+Interactive explorations also get state map checks (dead ends, buttons that do nothing), and
+journeys a ticket if a step can no longer be replayed.
+
 ## Running an audit from the command line
 
 ```bash

@@ -64,4 +64,6 @@ export interface CheckModule {
   finish?(): Promise<LocatedFinding[]>;
   /** Release anything the module opened (a browser), whether the audit finished or not. */
   close?(): Promise<void>;
+  /** Given the other modules' findings on the same page, return which of this module's to keep. */
+  dedupe?(page: Page, own: CheckFinding[], others: CheckFinding[]): Promise<CheckFinding[]>;
 }

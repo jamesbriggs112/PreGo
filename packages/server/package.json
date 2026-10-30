@@ -1,0 +1,26 @@
+{
+  "name": "@prego/server",
+  "version": "2.0.0-alpha.0",
+  "private": true,
+  "description": "Prego API server: Fastify, background audit jobs, live progress",
+  "license": "MIT",
+  "type": "module",
+  "main": "dist/app.js",
+  "types": "dist/app.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/app.d.ts",
+      "development": "./src/app.ts",
+      "default": "./dist/app.js"
+    }
+  },
+  "scripts": {
+    "dev": "tsx watch --conditions=development src/main.ts",
+    "start": "node dist/main.js"
+  },
+  "dependencies": {
+    "@fastify/static": "^10.1.8",
+    "@prego/core": "2.0.0-alpha.0",
+    "fastify": "^5.12.7"
+  }
+}

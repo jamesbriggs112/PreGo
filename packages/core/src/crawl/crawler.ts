@@ -32,6 +32,8 @@ export interface CrawlOptions {
   delayMs?: number;
   basicAuth?: BasicAuth;
   storageStatePath?: string;
+  /** Stop the crawl early. Pages already open finish. */
+  signal?: AbortSignal;
   /** Collect extra data from each page while it's open (e.g. its DOM structure). */
   inspectPage?: (context: PlaywrightCrawlingContext) => Promise<Record<string, unknown>>;
   onPage?: (page: CrawledPage) => void;
@@ -179,10 +181,16 @@ export async function crawlSite(options: CrawlOptions): Promise<CrawlResult> {
         crawler.stop('Time budget reached');
       }, options.timeBudgetMs)
     : undefined;
+  const onAbort = () => {
+    stoppedEarly = true;
+    crawler.stop('Stopped');
+  };
+  options.signal?.addEventListener('abort', onAbort, { once: true });
   try {
     await crawler.run(seeds);
   } finally {
     clearTimeout(timer);
+    options.signal?.removeEventListener('abort', onAbort);
   }
 
   if (skipped.some((s) => s.reason === 'limit')) stoppedEarly = true;

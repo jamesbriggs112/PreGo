@@ -19,7 +19,8 @@ import {
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { ExportPlan, PlannedTicket, ReportSectionPlan } from './plan.js';
-import { CATEGORIES, CATEGORY_NAMES, SEVERITIES, type Category, type Severity } from '../types.js';
+import { CATEGORIES, CATEGORY_NAMES, SEVERITIES, type Severity } from '../types.js';
+import { checkedCategories } from '../checks/categories.js';
 
 export interface ReportBranding {
   /** Company shown on the cover and in the footer. */
@@ -40,9 +41,6 @@ export function categoryScore(severities: Severity[]): number {
   const penalty = severities.reduce((sum, s) => sum + SEVERITY_PENALTY[s], 0);
   return Math.round(100 / (1 + penalty / 50));
 }
-
-/** Categories each check module covers, so the summary can say "Not checked" honestly. */
-const MODULE_CATEGORIES: Record<string, Category[]> = { axe: ['A11Y'] };
 
 const MAX_IMAGE_WIDTH = 600;
 const MAX_IMAGE_HEIGHT = 420;
@@ -116,7 +114,7 @@ function cover(plan: ExportPlan, brand: typeof DEFAULT_BRANDING & ReportBranding
 }
 
 function executiveSummary(plan: ExportPlan): (Paragraph | Table)[] {
-  const checked = checkedCategories(plan);
+  const checked = checkedCategories(plan.run.settings);
   const top = [...plan.tickets].sort((a, b) => a.priority.localeCompare(b.priority) || SEVERITIES.indexOf(a.severity) - SEVERITIES.indexOf(b.severity) || b.locationsAffected - a.locationsAffected).slice(0, 5);
   const out: (Paragraph | Table)[] = [
     heading('2. Executive summary', HeadingLevel.HEADING_1),
@@ -324,11 +322,6 @@ function themesOf(tickets: PlannedTicket[]): Theme[] {
 
 function where(t: PlannedTicket): string {
   return /\(([^)]*)\)$/.exec(t.title)?.[1] ?? t.exampleLocation ?? '';
-}
-
-function checkedCategories(plan: ExportPlan): Set<Category> {
-  const modules = ((plan.run.settings as Record<string, unknown>).modules as { id: string }[] | undefined) ?? [];
-  return new Set(modules.flatMap((m) => MODULE_CATEGORIES[m.id] ?? []));
 }
 
 function auditedCount(plan: ExportPlan): number {

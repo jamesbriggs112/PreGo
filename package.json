@@ -10,11 +10,13 @@
   },
   "workspaces": [
     "packages/core",
-    "packages/cli"
+    "packages/cli",
+    "packages/server"
   ],
   "scripts": {
-    "build": "tsc -b packages/core packages/cli",
-    "typecheck": "tsc -b packages/core packages/cli",
+    "build": "tsc -b packages/core packages/cli packages/server",
+    "start": "node packages/server/dist/main.js",
+    "typecheck": "tsc -b packages/core packages/cli packages/server",
     "lint": "eslint .",
     "test": "vitest run",
     "test:watch": "vitest",

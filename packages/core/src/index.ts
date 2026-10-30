@@ -20,3 +20,4 @@ export { ticketsCsv, occurrencesCsv, writeCsvFiles, CSV_PRESETS, TICKET_COLUMNS,
 export { reportDocx, writeReportDocx, categoryScore, type ReportBranding } from './export/docx.js';
 export { exportRun, type ExportOptions, type ExportResult } from './export/bundle.js';
 export { verifyExport, type VerifyResult } from './export/verify.js';
+export { MODULE_CATEGORIES, checkedCategories } from './checks/categories.js';

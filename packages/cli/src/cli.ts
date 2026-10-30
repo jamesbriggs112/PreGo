@@ -171,6 +171,8 @@ function describe(event: AuditEvent): string {
       return `  [${event.done}/${event.total}] ${event.url} @ ${event.viewport}: ${event.findings} findings`;
     case 'warning':
       return `  ! ${event.message}`;
+    case 'started':
+      return `▸ Run ${event.runId} started`;
   }
 }
 

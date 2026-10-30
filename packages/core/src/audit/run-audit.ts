@@ -48,9 +48,19 @@ export interface AuditOptions {
 }
 
 export type AuditEvent =
+  | { type: 'started'; runId: number; projectId: number }
   | { type: 'phase'; phase: 'crawl' | 'group' | 'audit' | 'tickets' | 'done'; message: string }
   | { type: 'page-found'; url: string; count: number }
-  | { type: 'location-audited'; url: string; viewport: string; findings: number; done: number; total: number; screenshot: string }
+  | {
+      type: 'location-audited';
+      url: string;
+      viewport: string;
+      findings: number;
+      done: number;
+      total: number;
+      /** Full-page screenshot, relative to the run folder. */
+      screenshot: string;
+    }
   | { type: 'warning'; message: string };
 
 export interface AuditResult {
@@ -102,6 +112,7 @@ export async function runAudit(db: PregoDb, options: AuditOptions): Promise<Audi
       modules: modules.map((m) => ({ id: m.id, name: m.name })),
     },
   });
+  emit({ type: 'started', runId: run.id, projectId: project.id });
   const runDir = runDirectory(dataDir, run.id);
   const storageStatePath = sessionPath(dataDir, project.slug);
   const session = new BrowserSession({ basicAuth: options.basicAuth, authOrigin: new URL(startUrl).origin, storageStatePath });
@@ -122,6 +133,7 @@ export async function runAudit(db: PregoDb, options: AuditOptions): Promise<Audi
       delayMs,
       basicAuth: options.basicAuth,
       storageStatePath,
+      signal: options.signal,
       inspectPage: async ({ page }) => ({ structure: await extractStructure(page) }),
       onPage: (page) => emit({ type: 'page-found', url: page.url, count: ++pagesFound }),
     });
@@ -170,7 +182,7 @@ export async function runAudit(db: PregoDb, options: AuditOptions): Promise<Audi
       throwIfAborted(options.signal);
       const result = await auditLocation(db, session, run, runDir, location, profile, options.emulation, modules, options.maxCropsPerLocation ?? 100);
       done++;
-      emit({ type: 'location-audited', url: location.url, viewport: result.viewport, findings: result.findings, done, total: jobs.length, screenshot: join(runDir, result.screenshot) });
+      emit({ type: 'location-audited', url: location.url, viewport: result.viewport, findings: result.findings, done, total: jobs.length, screenshot: result.screenshot });
       if (delayMs > 0) await sleep(delayMs);
     });
 

@@ -29,6 +29,7 @@ import {
   type DummyData,
   type ExportRecord,
   type PregoSettings,
+  averagePerformance,
   categoryScore,
   checkedCategories,
   mergeTickets,
@@ -691,7 +692,9 @@ export function scoresFor(db: PregoDb, run: Run): Partial<Record<Category, numbe
   const tickets = db.getTickets(run.id).filter((t) => t.status !== 'Dismissed' && t.status !== 'Needs review');
   const scores: Partial<Record<Category, number>> = {};
   for (const category of CATEGORIES) {
-    if (checked.has(category)) scores[category] = categoryScore(tickets.filter((t) => t.category === category).map((t) => t.severity));
+    if (!checked.has(category)) continue;
+    const lighthouse = category === 'PERF' ? averagePerformance(db.getLocations(run.id)) : null;
+    scores[category] = lighthouse ?? categoryScore(tickets.filter((t) => t.category === category).map((t) => t.severity));
   }
   return scores;
 }

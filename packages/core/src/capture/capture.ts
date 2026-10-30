@@ -32,7 +32,8 @@ export async function captureCrop(page: Page, selector: string, path: string, op
   const minWidth = options.minWidth ?? 360;
   const minHeight = options.minHeight ?? 200;
   const maxHeight = options.maxHeight ?? 900;
-  const pageLevel = PAGE_LEVEL_SELECTORS.has(selector.trim().toLowerCase());
+  // Page-level findings, and anything in the <head> (titles, meta tags), which has no visible box.
+  const pageLevel = PAGE_LEVEL_SELECTORS.has(selector.trim().toLowerCase()) || /^(head|title|meta|link|base)\b/i.test(selector.trim());
 
   const box = await page
     .evaluate(

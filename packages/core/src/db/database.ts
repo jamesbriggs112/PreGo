@@ -201,6 +201,10 @@ const MIGRATIONS: string[] = [
   `
   ALTER TABLE projects ADD COLUMN settings TEXT NOT NULL DEFAULT '{}';
   `,
+  // 7: measurements recorded by checks (Lighthouse scores).
+  `
+  ALTER TABLE locations ADD COLUMN metrics TEXT NOT NULL DEFAULT '{}';
+  `,
 ];
 
 export interface ExportRecord {
@@ -221,7 +225,7 @@ export interface TicketOverride {
 }
 
 type NewRun = Pick<Run, 'projectId' | 'mode' | 'target'> & { settings?: Record<string, unknown> };
-type NewLocation = Omit<Location, 'id' | 'screenshots' | 'audited' | 'notAuditedReason' | 'stateId' | 'steps'> &
+type NewLocation = Omit<Location, 'id' | 'screenshots' | 'audited' | 'notAuditedReason' | 'stateId' | 'steps' | 'metrics'> &
   Partial<Pick<Location, 'screenshots' | 'audited' | 'notAuditedReason' | 'stateId' | 'steps'>>;
 type NewRawFinding = Omit<RawFinding, 'id' | 'crop' | 'fingerprint' | 'ticketId' | 'component' | 'componentShared'> &
   Partial<Pick<RawFinding, 'crop' | 'fingerprint' | 'ticketId' | 'component' | 'componentShared'>>;
@@ -384,7 +388,7 @@ export class PregoDb {
   updateLocation(id: number, changes: Partial<Omit<Location, 'id' | 'runId'>>) {
     const entries = Object.entries(changes).map(([key, value]): [string, unknown] => {
       if (key === 'audited') return [key, value ? 1 : 0];
-      if (key === 'screenshots') return [key, JSON.stringify(value)];
+      if (key === 'screenshots' || key === 'metrics') return [key, JSON.stringify(value)];
       return [key, value];
     });
     if (entries.length === 0) return;
@@ -627,7 +631,7 @@ type RunRow = Omit<Run, 'settings' | 'summary' | 'mode' | 'status'> & {
   settings: string;
   summary: string;
 };
-type LocationRow = Omit<Location, 'audited' | 'screenshots' | 'kind' | 'steps'> & { kind: string; audited: number; screenshots: string; steps: string | null };
+type LocationRow = Omit<Location, 'audited' | 'screenshots' | 'kind' | 'steps' | 'metrics'> & { kind: string; audited: number; screenshots: string; steps: string | null; metrics: string };
 type RawFindingRow = Omit<RawFinding, 'wcagCriteria' | 'componentShared'> & { wcagCriteria: string; componentShared: number };
 type TicketRow = Omit<Ticket, 'labels'> & { labels: string };
 
@@ -644,6 +648,7 @@ const toLocation = (row: LocationRow): Location => ({
   audited: row.audited === 1,
   screenshots: JSON.parse(row.screenshots),
   steps: row.steps ? JSON.parse(row.steps) : null,
+  metrics: JSON.parse(row.metrics ?? '{}'),
 });
 const toRawFinding = (row: RawFindingRow): RawFinding => ({
   ...row,
@@ -654,7 +659,7 @@ const toTicket = (row: TicketRow): Ticket => ({ ...row, labels: JSON.parse(row.l
 
 const LOCATION_COLUMNS = new Set([
   'kind', 'url', 'stateId', 'title', 'statusCode', 'depth', 'templateKey', 'structureHash', 'audited',
-  'notAuditedReason', 'screenshots',
+  'notAuditedReason', 'screenshots', 'metrics',
 ]);
 function assertColumn(key: string): string {
   if (!LOCATION_COLUMNS.has(key)) throw new Error(`Unknown location column: ${key}`);

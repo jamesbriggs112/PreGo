@@ -20,6 +20,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { CATEGORIES, CATEGORY_NAMES, SEVERITIES, type Severity } from '../types.js';
 import { checkedCategories } from '../checks/categories.js';
+import { averagePerformance, type LighthouseScores } from '../checks/lighthouse/lighthouse.js';
 import { stateMapStates, type ExportPlan, type PlannedTicket, type ReportSectionPlan } from './plan.js';
 
 export interface ReportBranding {
@@ -134,7 +135,8 @@ function executiveSummary(plan: ExportPlan): (Paragraph | Table)[] {
       CATEGORIES.map((category) => {
         const tickets = plan.tickets.filter((t) => t.category === category);
         if (!checked.has(category)) return [CATEGORY_NAMES[category], 'Not checked', '–', '–', '–', '–', '–'];
-        const score = categoryScore(tickets.map((t) => t.severity));
+        // Performance uses Lighthouse's own score when it ran; everything else counts issues.
+        const score = (category === 'PERF' ? averagePerformance(plan.locations) : null) ?? categoryScore(tickets.map((t) => t.severity));
         return [CATEGORY_NAMES[category], String(score), String(tickets.length), ...SEVERITIES.map((s) => String(tickets.filter((t) => t.severity === s).length))];
       }),
     ),
@@ -160,7 +162,29 @@ function executiveSummary(plan: ExportPlan): (Paragraph | Table)[] {
   return out;
 }
 
+/** Lighthouse scores per page, when Lighthouse ran. */
+function lighthouseTable(plan: ExportPlan): (Paragraph | Table)[] {
+  const rows = plan.locations
+    .map((l) => ({ l, s: l.metrics.lighthouse as LighthouseScores | undefined }))
+    .filter((r): r is { l: (typeof plan.locations)[number]; s: LighthouseScores } => !!r.s);
+  if (!rows.length) return [];
+  const show = (n: number | null) => (n === null ? '–' : String(n));
+  return [
+    heading('Lighthouse scores', HeadingLevel.HEADING_2),
+    para(`Lighthouse ran on one page per template (${rows[0].s.formFactor} settings). Scores are out of 100 and vary a little between runs.`),
+    table(
+      ['Page', 'Performance', 'Best practices', 'SEO'],
+      rows.map(({ l, s }) => [l.kind === 'state' ? (l.title ?? l.url) : new URL(l.url).pathname, show(s.performance), show(s.bestPractices), show(s.seo)]),
+      { fontSize: 18 },
+    ),
+  ];
+}
+
 function scopeAndMethod(plan: ExportPlan): (Paragraph | Table)[] {
+  return [...scopeAndMethodTable(plan), ...lighthouseTable(plan)];
+}
+
+function scopeAndMethodTable(plan: ExportPlan): (Paragraph | Table)[] {
   const s = plan.run.settings as Record<string, unknown>;
   const pages = plan.locations.filter((l) => l.statusCode !== null && l.statusCode < 400);
   const templates = new Set(pages.map((l) => l.templateKey));

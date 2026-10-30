@@ -1,0 +1,8 @@
+{
+  "name": "@sentry/node",
+  "version": "0.0.0-prego-stub",
+  "description": "Empty stand-in for @sentry/node. Lighthouse only loads Sentry when its error reporting is switched on, which Prego never does: it would send data off the machine, and Sentry's dependencies include FSL-licensed code. See SPEC.md section 4.",
+  "license": "MIT",
+  "type": "module",
+  "main": "index.js"
+}

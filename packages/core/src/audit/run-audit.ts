@@ -186,6 +186,7 @@ export async function runAudit(db: PregoDb, options: AuditOptions): Promise<Audi
   const runDir = runDirectory(dataDir, run.id);
   const storageStatePath = sessionPath(dataDir, project.slug);
   let session: BrowserSession | undefined;
+  let activeModules: CheckModule[] = [];
 
   // Everything after the run row exists is inside this try, so any failure is recorded on the run.
   try {
@@ -200,10 +201,11 @@ export async function runAudit(db: PregoDb, options: AuditOptions): Promise<Audi
       mode === 'explore' ? await discoverByExploring(context) : mode === 'journey' ? await discoverByJourney(context) : await discoverByCrawling(context);
     const { toAudit } = discovery;
     const modules = [
-      ...(options.modules ?? createChecks(checkIds, { startUrl, failedPages: discovery.failedPages ?? [] })),
+      ...(options.modules ?? createChecks(checkIds, { startUrl, failedPages: discovery.failedPages ?? [], basicAuth: options.basicAuth, onRequest: options.onRequest })),
       ...(discovery.modules ?? []),
     ];
     const firstViewport = viewportName(viewports[0], options.emulation);
+    activeModules = modules;
 
     const noun = mode === 'explore' ? 'screens' : mode === 'journey' ? 'steps' : 'pages';
     emit({ type: 'phase', phase: 'audit', message: `Auditing ${toAudit.length} ${noun} at ${viewports.length} viewport(s)` });
@@ -242,7 +244,7 @@ export async function runAudit(db: PregoDb, options: AuditOptions): Promise<Audi
         for (const [i, finding] of findings.entries()) {
           const { locationId: _l, viewport, ...rest } = finding;
           let crop: string | null = null;
-          if (opened && finding.selector !== 'title' && finding.selector !== 'head') {
+          if (opened) {
             const path = join('crops', `${locationId}-late-${i + 1}.png`);
             if (await captureCrop(opened.page, finding.selector, join(runDir, path))) crop = path;
           }
@@ -267,6 +269,7 @@ export async function runAudit(db: PregoDb, options: AuditOptions): Promise<Audi
     db.finishRun(run.id, aborted ? 'stopped' : 'failed', {}, error instanceof Error ? error.message : String(error));
     if (!aborted) throw error;
   } finally {
+    for (const module of activeModules) await module.close?.().catch(() => undefined);
     await session?.close();
     await server?.close();
   }
@@ -294,7 +297,14 @@ async function auditLocation(
     const touch = await opened.page.evaluate(() => navigator.maxTouchPoints > 0);
     for (const module of modules) {
       if (module.perViewport === false && opened.viewport !== firstViewport) continue;
-      const findings = await module.run({ page: opened.page, location, viewport: opened.viewport, touch, firstViewport: opened.viewport === firstViewport });
+      const findings = await module.run({
+        page: opened.page,
+        location,
+        viewport: opened.viewport,
+        touch,
+        firstViewport: opened.viewport === firstViewport,
+        recordMetrics: (metrics) => db.updateLocation(location.id, { metrics: { ...db.getLocation(location.id)!.metrics, ...metrics } }),
+      });
       for (const finding of findings) {
         count++;
         const component = finding.siteWide || finding.component ? findingComponent(finding) : await describeComponent(opened.page, finding.selector).then((c) => ({ component: c.path, componentShared: c.shared }));

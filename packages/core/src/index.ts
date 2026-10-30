@@ -38,3 +38,5 @@ export { parseJourney, describeStatement, runStep, loadJourney, listJourneys, jo
 export { canvasModule, type CanvasModuleOptions } from './checks/canvas/canvas.js';
 export { customA11yModule, type CustomA11yOptions } from './checks/a11y-custom/a11y-custom.js';
 export { uiConsistencyModule, parseColour, lab, deltaE, hex, type UiConsistencyOptions } from './checks/ui/ui.js';
+export { contentModule, unhelpfulAlt } from './checks/content/content.js';
+export { lighthouseModule, averagePerformance, type LighthouseScores, type LighthouseModuleOptions } from './checks/lighthouse/lighthouse.js';

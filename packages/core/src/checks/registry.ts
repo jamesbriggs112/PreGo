@@ -5,12 +5,18 @@ import { axeModule } from './axe/axe.js';
 import { canvasModule } from './canvas/canvas.js';
 import { customA11yModule } from './a11y-custom/a11y-custom.js';
 import { uiConsistencyModule } from './ui/ui.js';
+import { contentModule } from './content/content.js';
+import { lighthouseModule } from './lighthouse/lighthouse.js';
+import type { BasicAuth } from '../browser/session.js';
 
 /** Everything a check factory may need from the audit. */
 export interface CheckFactoryContext {
   startUrl: string;
   /** Crawl only: pages that returned errors, with the page linking to them. */
   failedPages: FailedPage[];
+  basicAuth?: BasicAuth;
+  /** Told about requests made by browsers that Prego doesn't open through BrowserSession. */
+  onRequest?: (url: string) => void;
 }
 
 export interface CheckDefinition {
@@ -50,6 +56,23 @@ const definitions: CheckDefinition[] = [
     categories: ['UI'],
     defaultOn: true,
     create: () => uiConsistencyModule(),
+  },
+  {
+    id: 'content',
+    name: 'Content and SEO',
+    description: 'Page titles, meta descriptions, Open Graph tags, and alt text that names a file or just says “image”.',
+    categories: ['CONT', 'A11Y'],
+    defaultOn: true,
+    create: () => contentModule(),
+  },
+  {
+    id: 'lighthouse',
+    name: 'Performance and best practice (Lighthouse)',
+    description: 'Lighthouse performance, best-practice and SEO scores and failing audits, on one page per template.',
+    categories: ['PERF', 'TECH', 'CONT'],
+    defaultOn: true,
+    slow: true,
+    create: (context) => lighthouseModule({ basicAuth: context.basicAuth, onRequest: context.onRequest }),
   },
   {
     id: 'canvas',

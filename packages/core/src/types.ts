@@ -101,6 +101,8 @@ export interface Location {
   screenshots: Record<string, string>;
   /** For interactive states: the actions from the start screen that reach it. */
   steps: PathStep[] | null;
+  /** Measurements recorded by checks, e.g. `{ lighthouse: { performance: 87, ... } }`. */
+  metrics: Record<string, unknown>;
 }
 
 /** A single result from a check module, before grouping into tickets. */

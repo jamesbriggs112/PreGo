@@ -11,6 +11,8 @@ export interface CheckContext {
   touch: boolean;
   /** True at the run's first viewport: for checks that should report once per location. */
   firstViewport: boolean;
+  /** Keep measurements (such as Lighthouse scores) on the location, for the report. */
+  recordMetrics?: (metrics: Record<string, unknown>) => void;
 }
 
 /**
@@ -60,4 +62,6 @@ export interface CheckModule {
   run(context: CheckContext): Promise<CheckFinding[]>;
   /** Cross-location findings once everything is checked (duplicate titles, colour drift). */
   finish?(): Promise<LocatedFinding[]>;
+  /** Release anything the module opened (a browser), whether the audit finished or not. */
+  close?(): Promise<void>;
 }

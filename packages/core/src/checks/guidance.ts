@@ -389,6 +389,41 @@ const PREGO: Record<string, RuleGuidance> = {
     recommendation: 'Use a spacing scale (for example multiples of 4px) and replace odd values with the nearest step.',
     effort: 'Small',
   },
+  'meta-description-missing': {
+    title: 'Page has no meta description',
+    description: 'The page has no meta description: the short summary search engines and link previews show.',
+    whyItMatters: 'Without one, search results and shared links show whatever text the search engine picks, which is often unhelpful.',
+    recommendation: 'Write a unique, plain-English summary of 50 to 160 characters for each page.',
+    effort: 'Small',
+  },
+  'meta-description-length': {
+    title: 'Meta description is too short or too long',
+    description: 'The page’s meta description is outside the 50 to 160 characters that show well in search results.',
+    whyItMatters: 'Very short descriptions say little; long ones get cut off mid-sentence in search results.',
+    recommendation: 'Rewrite it to between 50 and 160 characters.',
+    effort: 'Small',
+  },
+  'title-length': {
+    title: 'Page title is too short or too long',
+    description: 'The page title is outside the 10 to 65 characters that show in full in search results and browser tabs.',
+    whyItMatters: 'Long titles are cut off; very short ones don’t say what the page is.',
+    recommendation: 'Start the title with what is specific to the page and keep it under 65 characters.',
+    effort: 'Small',
+  },
+  'open-graph-missing': {
+    title: 'Shared links have no preview details',
+    description: 'Open Graph tags (og:title, og:description, og:image) are missing, so social networks and messaging apps can’t build a proper preview.',
+    whyItMatters: 'Links shared on social media and in messages look bare and get fewer clicks.',
+    recommendation: 'Add og:title, og:description and og:image tags to the page template.',
+    effort: 'Small',
+  },
+  'alt-text-unhelpful': {
+    title: 'Alt text doesn’t describe the image',
+    description: 'The image has alt text, but it’s a file name, a camera reference or just a word like “image”.',
+    whyItMatters: 'Screen reader users hear the file name or “image” instead of what the picture shows.',
+    recommendation: 'Replace it with a short description of what the image conveys, or alt="" if it’s purely decorative.',
+    effort: 'Small',
+  },
   'canvas-content': {
     title: 'Content drawn in a canvas needs manual review',
     description: 'A large part of the screen is drawn inside a <canvas> element (2D or WebGL). Automated accessibility checks cannot see anything drawn there.',
@@ -422,6 +457,11 @@ export function guidanceFor(engine: string, ruleId: string): RuleGuidance | unde
 }
 
 /** Guidance with fallbacks for rules that have no plain-English entry yet. */
+/** Why-it-matters text for engines whose rules have no plain-English entry of their own. */
+const GENERIC_WHY_BY_ENGINE: Record<string, string> = {
+  lighthouse: 'Slow, fragile or badly indexed pages lose visitors, cost more to run on mobile data and rank lower in search results.',
+};
+
 export function guidanceWithFallback(
   engine: string,
   ruleId: string,
@@ -431,7 +471,7 @@ export function guidanceWithFallback(
     guidanceFor(engine, ruleId) ?? {
       title: fallback.title,
       description: fallback.description,
-      whyItMatters: GENERIC_WHY,
+      whyItMatters: GENERIC_WHY_BY_ENGINE[engine] ?? GENERIC_WHY,
       recommendation: fallback.helpUrl ? `Follow the guidance at ${fallback.helpUrl}.` : 'Review and fix the affected elements.',
       effort: 'Medium',
     }

@@ -24,7 +24,7 @@
     "test:watch": "vitest",
     "prego": "tsx --conditions=development packages/cli/src/cli.ts",
     "fixtures": "tsx --conditions=development scripts/serve-fixtures.ts",
-    "postinstall": "patch-package && playwright install chromium",
+    "postinstall": "patch-package && playwright install chromium firefox webkit",
     "update:retire-db": "node scripts/update-retire-db.mjs"
   },
   "devDependencies": {

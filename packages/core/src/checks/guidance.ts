@@ -647,6 +647,34 @@ const PREGO: Record<string, RuleGuidance> = {
     recommendation: 'Correct the word if it’s a mistake. If it’s a name or a term you use on purpose, mark this ticket as a false positive and Prego won’t raise it again.',
     effort: 'Small',
   },
+  'browser-script-error': {
+    title: 'A script fails',
+    description: 'A JavaScript error happens when the page loads in this browser.',
+    whyItMatters: 'Features that depend on the script (menus, forms, carousels, booking widgets) may not work for visitors using this browser.',
+    recommendation: 'Reproduce the error in this browser’s developer tools and fix the code, or add a fallback for the feature it relies on.',
+    effort: 'Medium',
+  },
+  'browser-horizontal-scroll': {
+    title: 'The page scrolls sideways',
+    description: 'Something on the page is wider than the window in this browser, though not in Chrome.',
+    whyItMatters: 'Visitors have to scroll sideways to read, and part of the content can be cut off, especially on phones.',
+    recommendation: 'Find the element that’s too wide in this browser (often a fixed width, an unsupported CSS feature or a long word) and let it shrink to fit.',
+    effort: 'Small',
+  },
+  'browser-element-missing': {
+    title: 'Content or controls disappear',
+    description: 'Elements that show in Chrome are missing or hidden in this browser.',
+    whyItMatters: 'Visitors using this browser can’t see or use that content, which can block them completely if it’s a button or form.',
+    recommendation: 'Check the listed elements in this browser and fix the CSS or script that hides them.',
+    effort: 'Medium',
+  },
+  'browser-layout-differs': {
+    title: 'The layout differs',
+    description: 'Elements sit in a different place or at a different width than in Chrome.',
+    whyItMatters: 'Small differences are normal, but large ones usually mean a CSS feature this browser handles differently, which can look broken.',
+    recommendation: 'Compare the page side by side in both browsers and adjust the CSS for the listed elements.',
+    effort: 'Small',
+  },
   'no-analytics': {
     title: 'No analytics found',
     description: 'None of the common analytics scripts were found on the pages audited.',
@@ -679,8 +707,8 @@ export function guidanceWithFallback(
   fallback: { title: string; description: string; helpUrl: string | null },
 ): RuleGuidance {
   const guidance = guidanceFor(engine, ruleId);
-  // Each outdated library and misspelt word gets its own ticket, so the title names it.
-  if (guidance && (engine === 'retire.js' || ruleId === 'spelling')) return { ...guidance, title: fallback.title };
+  // Each outdated library, misspelt word and browser gets its own ticket, so the title names it.
+  if (guidance && (engine === 'retire.js' || ruleId === 'spelling' || ruleId.startsWith('browser-'))) return { ...guidance, title: fallback.title };
   return (
     guidance ?? {
       title: fallback.title,

@@ -17,6 +17,7 @@ import { goLiveModule } from './golive/golive.js';
 import { librariesModule } from './libraries/libraries.js';
 import { privacyModule } from './privacy/privacy.js';
 import { spellingModule } from './spelling/spelling.js';
+import { browsersModule } from './browsers/browsers.js';
 
 /** Everything a check factory may need from the audit. */
 export interface CheckFactoryContext {
@@ -88,6 +89,15 @@ const definitions: CheckDefinition[] = [
     defaultOn: true,
     cost: { seconds: [0.05, 0.3], perPage: true },
     create: () => spellingModule(),
+  },
+  {
+    id: 'browsers',
+    name: 'Firefox and Safari',
+    description: 'A page of each template opened again in Firefox and in WebKit (Safari’s engine) at the same window size, and compared with Chrome: script errors, sideways scrolling, content that disappears and layout that shifts.',
+    categories: ['UX'],
+    defaultOn: false,
+    cost: { seconds: [3, 8], perPage: true, setupSeconds: [2, 5] },
+    create: (context) => browsersModule({ basicAuth: context.basicAuth, onRequest: context.onRequest }),
   },
   {
     id: 'lighthouse',

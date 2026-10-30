@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Browser quirks</title>
+    <style>
+      body { margin: 0; font-family: sans-serif; }
+      .banner { width: 100%; }
+      .safari-wide { width: 100%; }
+      .safari .safari-wide { width: 2400px; }
+      .firefox #book { display: none; }
+    </style>
+    <script>
+      // Stand-ins for real engine differences, keyed on the engine so the test is deterministic.
+      const ua = navigator.userAgent;
+      if (/Firefox\//.test(ua)) document.documentElement.classList.add('firefox');
+      if (/AppleWebKit/.test(ua) && !/Chrome\//.test(ua)) document.documentElement.classList.add('safari');
+    </script>
+  </head>
+  <body>
+    <header><nav><a href="/">Home</a></nav></header>
+    <main>
+      <h1>Plan your visit</h1>
+      <div class="safari-wide"><img src="images/hero.svg" alt="The museum" width="400" height="200" /></div>
+      <button id="book" type="button">Book tickets</button>
+    </main>
+    <script>
+      if (document.documentElement.classList.contains('firefox')) window.setTimeout(() => missingFunction(), 0);
+    </script>
+  </body>
+</html>

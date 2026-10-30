@@ -38,8 +38,11 @@ describe('ticket grouping', () => {
     expect(second.every((t) => t.firstSeen === first[0].firstSeen)).toBe(true);
   });
 
-  it('numbers tickets PRG-{CATEGORY}-{NNN} without gaps', () => {
-    expect(first.map((t) => t.ticketId)).toEqual(first.map((_, i) => `PRG-A11Y-${String(i + 1).padStart(3, '0')}`));
+  it('numbers tickets PRG-{CATEGORY}-{NNN} without gaps, per category', () => {
+    for (const category of new Set(first.map((t) => t.category))) {
+      const ids = first.filter((t) => t.category === category).map((t) => t.ticketId);
+      expect(ids).toEqual(ids.map((_, i) => `PRG-${category}-${String(i + 1).padStart(3, '0')}`));
+    }
   });
 
   it('makes one site-wide ticket for the header logo across every template', () => {

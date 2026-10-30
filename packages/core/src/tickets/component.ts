@@ -55,6 +55,8 @@ export async function describeComponent(page: Page, selector: string): Promise<C
 
 /** Human description of where a component is, for ticket titles. */
 export function componentLabel(path: string, shared: boolean, templateKey: string | null): string {
+  // Problems that belong to the whole site (a missing security header, colour drift).
+  if (path.startsWith('site:')) return 'site-wide';
   if (shared) {
     if (/(^|>)header/.test(path)) return 'site header, every page';
     if (/(^|>)footer/.test(path)) return 'site footer, every page';

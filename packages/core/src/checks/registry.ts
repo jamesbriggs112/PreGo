@@ -4,6 +4,7 @@ import type { CheckModule } from './types.js';
 import { axeModule } from './axe/axe.js';
 import { canvasModule } from './canvas/canvas.js';
 import { customA11yModule } from './a11y-custom/a11y-custom.js';
+import { uiConsistencyModule } from './ui/ui.js';
 
 /** Everything a check factory may need from the audit. */
 export interface CheckFactoryContext {
@@ -41,6 +42,14 @@ const definitions: CheckDefinition[] = [
     categories: ['A11Y'],
     defaultOn: true,
     create: () => customA11yModule(),
+  },
+  {
+    id: 'ui',
+    name: 'UI consistency',
+    description: 'Colours, typefaces, text sizes, line heights and spacing used across the site, with near-duplicates flagged.',
+    categories: ['UI'],
+    defaultOn: true,
+    create: () => uiConsistencyModule(),
   },
   {
     id: 'canvas',

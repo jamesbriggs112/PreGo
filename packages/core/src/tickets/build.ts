@@ -84,7 +84,7 @@ export function buildTickets(db: PregoDb, runId: number, options: BuildTicketsOp
       const onKeyJourney = [...affected].some((id) => keyJourney.has(locations.get(id)!.url));
       const guidance = guidanceWithFallback(first.engine, first.ruleId, first);
       const where =
-        location.kind === 'state'
+        location.kind === 'state' && !first.component?.startsWith('site:')
           ? first.componentShared
             ? 'shared header, every screen'
             : affected.size === 1

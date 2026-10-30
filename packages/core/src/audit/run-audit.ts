@@ -7,7 +7,7 @@ import { createSafety, DEFAULT_DENY_LABELS, type DummyData } from '../explore/sa
 import { viewportName, type Emulation, type ProfileName } from '../browser/profiles.js';
 import { stateMapModule } from '../checks/state-map/state-map.js';
 import { guidanceFor } from '../checks/guidance.js';
-import type { CheckFinding } from '../checks/types.js';
+import type { CheckFinding, LocatedFinding } from '../checks/types.js';
 import { identifyScreen } from '../explore/state.js';
 import { runStep, type Journey, type JourneyStep } from '../journeys/journey.js';
 import { crawlSite, type FailedPage } from '../crawl/crawler.js';
@@ -225,12 +225,31 @@ export async function runAudit(db: PregoDb, options: AuditOptions): Promise<Audi
       if (delayMs > 0 && mode === 'crawl') await sleep(delayMs);
     });
 
-    // Checks that compare across locations (duplicate titles, colour drift) report now.
-    for (const module of modules) {
-      if (!module.finish) continue;
-      for (const finding of await module.finish()) {
-        const { locationId, viewport, ...rest } = finding;
-        db.addRawFinding({ ...rest, runId: run.id, locationId, viewport, crop: null, ...findingComponent(finding) });
+    // Checks that compare across locations (duplicate titles, colour drift) report now. Their example
+    // pages are opened again, once each, to crop the element the finding points at.
+    const late = (await Promise.all(modules.map((m) => m.finish?.() ?? []))).flat();
+    const byLocation = new Map<number, LocatedFinding[]>();
+    for (const f of late) byLocation.set(f.locationId, [...(byLocation.get(f.locationId) ?? []), f]);
+    for (const [locationId, findings] of byLocation) {
+      const location = db.getLocation(locationId)!;
+      let opened: OpenedPage | undefined;
+      try {
+        opened = await discovery.open(location, viewports[0]);
+      } catch {
+        // Couldn't reach it again: keep the findings without crops.
+      }
+      try {
+        for (const [i, finding] of findings.entries()) {
+          const { locationId: _l, viewport, ...rest } = finding;
+          let crop: string | null = null;
+          if (opened && finding.selector !== 'title' && finding.selector !== 'head') {
+            const path = join('crops', `${locationId}-late-${i + 1}.png`);
+            if (await captureCrop(opened.page, finding.selector, join(runDir, path))) crop = path;
+          }
+          db.addRawFinding({ ...rest, runId: run.id, locationId, viewport, crop, ...findingComponent(finding) });
+        }
+      } finally {
+        await opened?.close();
       }
     }
 

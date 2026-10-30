@@ -13,5 +13,11 @@
       "development": "./src/index.ts",
       "default": "./dist/index.js"
     }
+  },
+  "dependencies": {
+    "better-sqlite3": "^13.0.3"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^9.6.0"
   }
 }

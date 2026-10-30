@@ -1,0 +1,138 @@
+// Shared data model for the audit engine. Storage (db/), checks, tickets and exports all use these.
+
+export type Category = 'A11Y' | 'UI' | 'UX' | 'CONT' | 'PERF' | 'SEC' | 'TECH';
+
+/** Report order for categories, also used for section numbering (4.1, 4.2, ...). */
+export const CATEGORIES: readonly Category[] = ['A11Y', 'UX', 'UI', 'CONT', 'PERF', 'SEC', 'TECH'];
+
+export const CATEGORY_NAMES: Record<Category, string> = {
+  A11Y: 'Accessibility',
+  UI: 'Visual consistency',
+  UX: 'Usability',
+  CONT: 'Content and SEO',
+  PERF: 'Performance',
+  SEC: 'Security',
+  TECH: 'Markup and technical',
+};
+
+export type Severity = 'Critical' | 'High' | 'Medium' | 'Low';
+export const SEVERITIES: readonly Severity[] = ['Critical', 'High', 'Medium', 'Low'];
+
+export type Priority = 'P1' | 'P2' | 'P3' | 'P4';
+
+export type TicketStatus = 'New' | 'Recurring' | 'Fixed' | 'Regressed' | 'Dismissed' | 'Needs review';
+
+export type RunStatus = 'running' | 'complete' | 'failed' | 'stopped';
+
+export type AuditMode = 'crawl' | 'explore' | 'journey';
+
+export interface Project {
+  id: number;
+  name: string;
+  slug: string;
+  createdAt: string;
+}
+
+export interface Run {
+  id: number;
+  projectId: number;
+  mode: AuditMode;
+  target: string;
+  status: RunStatus;
+  startedAt: string;
+  finishedAt: string | null;
+  /** Audit options as given, for the report's scope section and for re-runs. */
+  settings: Record<string, unknown>;
+  /** Totals filled in when the run finishes. */
+  summary: Record<string, unknown>;
+  error: string | null;
+}
+
+export interface Location {
+  id: number;
+  runId: number;
+  kind: 'page' | 'state';
+  url: string;
+  /** For interactive states: hash of URL plus normalised accessibility tree. Null for pages. */
+  stateId: string | null;
+  title: string | null;
+  statusCode: number | null;
+  depth: number;
+  /** Stable, human-readable key for the page's template, e.g. `/news/*`. */
+  templateKey: string | null;
+  /** Hash of the DOM structure used to group pages into templates. */
+  structureHash: string | null;
+  audited: boolean;
+  /** Why the location wasn't audited, e.g. "Same template as /news/post-1.html". */
+  notAuditedReason: string | null;
+  /** Full-page screenshot path per viewport name, relative to the run folder. */
+  screenshots: Record<string, string>;
+}
+
+/** A single result from a check module, before grouping into tickets. */
+export interface RawFinding {
+  id: number;
+  runId: number;
+  locationId: number;
+  viewport: string;
+  module: string;
+  engine: string;
+  ruleId: string;
+  category: Category;
+  severity: Severity;
+  title: string;
+  description: string;
+  helpUrl: string | null;
+  wcagCriteria: string[];
+  wcagLevel: string | null;
+  selector: string;
+  html: string;
+  failureSummary: string | null;
+  /** Cropped, outlined image of the element, relative to the run folder. */
+  crop: string | null;
+  fingerprint: string | null;
+  ticketId: string | null;
+}
+
+export interface Ticket {
+  runId: number;
+  ticketId: string;
+  fingerprint: string;
+  category: Category;
+  title: string;
+  severity: Severity;
+  priority: Priority;
+  status: TicketStatus;
+  wcagCriterion: string | null;
+  wcagLevel: string | null;
+  ruleId: string;
+  engine: string;
+  templateKey: string | null;
+  occurrences: number;
+  locationsAffected: number;
+  exampleLocation: string | null;
+  exampleSelector: string | null;
+  description: string;
+  whyItMatters: string;
+  stepsToReproduce: string;
+  expected: string;
+  actual: string;
+  recommendation: string;
+  effort: string;
+  labels: string[];
+  auditorNotes: string;
+  firstSeen: string;
+  lastSeen: string;
+}
+
+export interface Occurrence {
+  id: number;
+  runId: number;
+  ticketId: string;
+  locationId: number;
+  rawFindingId: number;
+  viewport: string;
+  selector: string;
+  html: string;
+  crop: string | null;
+}

@@ -167,6 +167,8 @@ function describe(event: AuditEvent): string {
       return `▸ ${event.message}`;
     case 'page-found':
       return `  found ${event.url}`;
+    case 'state-found':
+      return `  screen ${event.count}: ${event.title} (${event.depth} ${event.depth === 1 ? 'tap' : 'taps'} from the start)`;
     case 'location-audited':
       return `  [${event.done}/${event.total}] ${event.url} @ ${event.viewport}: ${event.findings} findings`;
     case 'warning':

@@ -26,3 +26,5 @@ export type { TicketOverride } from './db/database.js';
 export { DEFAULT_SETTINGS, getSettings, saveSettings, logoPath, reportBranding, type PregoSettings } from './settings.js';
 export type { ExportRecord } from './db/database.js';
 export { discoverActions, type Action, type ActionKind } from './explore/actions.js';
+export { exploreApp, openScreen, perform, settle, type ExploreOptions, type ExploreResult, type ExploredState, type ExploreEdge } from './explore/explorer.js';
+export { identifyScreen, type ScreenIdentity } from './explore/state.js';

@@ -1,7 +1,8 @@
 import { existsSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import type { PregoDb } from '../db/database.js';
-import { BrowserSession, sessionPath, type BasicAuth } from '../browser/session.js';
+import { BrowserSession, sessionPath, type BasicAuth, type OpenedPage } from '../browser/session.js';
+import { exploreApp, openScreen } from '../explore/explorer.js';
 import type { Emulation, ProfileName } from '../browser/profiles.js';
 import { crawlSite } from '../crawl/crawler.js';
 import { extractStructure, groupTemplates, samplePages } from '../crawl/templates.js';
@@ -19,10 +20,19 @@ export interface AuditOptions {
   project: string;
   /** URL to audit, or a local folder, which Prego serves itself. */
   target: string;
+  /** Site crawl (default) or interactive exploration of a single-page app or kiosk. */
+  mode?: 'crawl' | 'explore';
   viewports?: ProfileName[];
   emulation?: Emulation;
   maxPages?: number;
+  /** Link depth for crawls (default 10), action depth for explorations (default 8). */
   maxDepth?: number;
+  /** Explore: maximum screens to record. Default 200. */
+  maxStates?: number;
+  /** Explore: elements to ignore when telling screens apart (clocks, carousels, videos). */
+  maskSelectors?: string[];
+  /** Explore: fake time allowed for transitions after each action. Default 1000ms. */
+  settleMs?: number;
   timeBudgetMs?: number;
   include?: string[];
   exclude?: string[];
@@ -49,8 +59,9 @@ export interface AuditOptions {
 
 export type AuditEvent =
   | { type: 'started'; runId: number; projectId: number }
-  | { type: 'phase'; phase: 'crawl' | 'group' | 'audit' | 'tickets' | 'done'; message: string }
+  | { type: 'phase'; phase: 'crawl' | 'group' | 'explore' | 'audit' | 'tickets' | 'done'; message: string }
   | { type: 'page-found'; url: string; count: number }
+  | { type: 'state-found'; stateId: string; title: string; depth: number; count: number }
   | {
       type: 'location-audited';
       url: string;
@@ -74,7 +85,17 @@ export function runDirectory(dataDir: string, runId: number): string {
   return join(dataDir, 'runs', String(runId));
 }
 
-/** Crawl a site, audit a sample of pages per template at each viewport, and store the findings. */
+/** What discovery hands to the checking stage: locations to audit, and how to open each one. */
+interface Discovery {
+  toAudit: Location[];
+  open: (location: Location, profile: ProfileName) => Promise<OpenedPage>;
+  summary: Record<string, unknown>;
+}
+
+/**
+ * Discover locations (crawl a site, or explore an interactive), audit them at each viewport, group the
+ * findings into tickets and store everything.
+ */
 export async function runAudit(db: PregoDb, options: AuditOptions): Promise<AuditResult> {
   // A broken progress listener must never stop the audit or leave its run stuck at "running".
   const emit = (event: AuditEvent) => {
@@ -88,6 +109,7 @@ export async function runAudit(db: PregoDb, options: AuditOptions): Promise<Audi
   const viewports = options.viewports ?? ['desktop'];
   const modules = options.modules ?? [axeModule()];
   const delayMs = options.delayMs ?? 500;
+  const mode = options.mode ?? 'crawl';
 
   let server: StaticServer | undefined;
   let startUrl = options.target;
@@ -99,7 +121,7 @@ export async function runAudit(db: PregoDb, options: AuditOptions): Promise<Audi
   const project = db.ensureProject(options.project);
   const run = db.createRun({
     projectId: project.id,
-    mode: 'crawl',
+    mode,
     target: options.target,
     // Credentials never go in the run record: only whether auth was used.
     settings: {
@@ -107,7 +129,9 @@ export async function runAudit(db: PregoDb, options: AuditOptions): Promise<Audi
       viewports,
       emulation: options.emulation ?? {},
       maxPages: options.maxPages ?? 100,
-      maxDepth: options.maxDepth ?? 10,
+      maxDepth: options.maxDepth ?? (mode === 'explore' ? 8 : 10),
+      maxStates: options.maxStates ?? 200,
+      maskSelectors: options.maskSelectors ?? [],
       include: options.include ?? [],
       exclude: options.exclude ?? [],
       respectRobots: options.respectRobots ?? true,
@@ -124,90 +148,40 @@ export async function runAudit(db: PregoDb, options: AuditOptions): Promise<Audi
   const storageStatePath = sessionPath(dataDir, project.slug);
   let session: BrowserSession | undefined;
 
-  let pagesFound = 0;
   // Everything after the run row exists is inside this try, so any failure is recorded on the run.
   try {
     const browser = new BrowserSession({ basicAuth: options.basicAuth, authOrigin: new URL(startUrl).origin, storageStatePath });
     session = browser;
-    emit({ type: 'phase', phase: 'crawl', message: `Crawling ${startUrl}` });
-    const crawl = await crawlSite({
-      startUrl,
-      maxPages: options.maxPages,
-      maxDepth: options.maxDepth,
-      timeBudgetMs: options.timeBudgetMs,
-      include: options.include,
-      exclude: options.exclude,
-      respectRobots: options.respectRobots,
-      useSitemap: options.useSitemap,
-      concurrency: options.concurrency,
-      delayMs,
-      basicAuth: options.basicAuth,
-      storageStatePath,
-      signal: options.signal,
-      inspectPage: async ({ page }) => ({ structure: await extractStructure(page) }),
-      onPage: (page) => emit({ type: 'page-found', url: page.url, count: ++pagesFound }),
-    });
-    throwIfAborted(options.signal);
+    const context: DiscoveryContext = { db, run, options, startUrl, storageStatePath, browser, viewports, delayMs, emit };
+    const discovery = mode === 'explore' ? await discoverByExploring(context) : await discoverByCrawling(context);
+    const { toAudit } = discovery;
 
-    emit({ type: 'phase', phase: 'group', message: `Grouping ${crawl.pages.length} pages into templates` });
-    const groups = groupTemplates(crawl.pages.map((p) => ({ ...p, structure: p.data.structure as string[] })));
-    const sampled = samplePages(groups, { perTemplate: options.perTemplate, auditAll: options.auditAll });
-    const toAudit: Location[] = [];
-    db.transaction(() => {
-      for (const s of sampled) {
-        const location = db.addLocation({
-          runId: run.id,
-          kind: 'page',
-          url: s.page.url,
-          title: s.page.title,
-          statusCode: s.page.statusCode,
-          depth: s.page.depth,
-          templateKey: s.templateKey,
-          structureHash: s.templateHash,
-          audited: s.audit,
-          notAuditedReason: s.reason ?? null,
-        });
-        if (s.audit) toAudit.push(location);
-      }
-      for (const f of crawl.failed) {
-        db.addLocation({
-          runId: run.id,
-          kind: 'page',
-          url: f.url,
-          title: null,
-          statusCode: f.statusCode,
-          depth: 0,
-          templateKey: null,
-          structureHash: null,
-          audited: false,
-          notAuditedReason: f.referrer ? `${f.error}, linked from ${f.referrer}` : f.error,
-        });
-      }
-    });
-
-    emit({ type: 'phase', phase: 'audit', message: `Auditing ${toAudit.length} pages at ${viewports.length} viewport(s)` });
+    const noun = mode === 'explore' ? 'screens' : 'pages';
+    emit({ type: 'phase', phase: 'audit', message: `Auditing ${toAudit.length} ${noun} at ${viewports.length} viewport(s)` });
     const jobs = toAudit.flatMap((location) => viewports.map((profile) => ({ location, profile })));
     let done = 0;
-    await runPool(jobs, options.concurrency ?? 2, async ({ location, profile }) => {
+    // Explorations replay paths in a stateful app, so they're checked one at a time.
+    await runPool(jobs, mode === 'explore' ? 1 : (options.concurrency ?? 2), async ({ location, profile }) => {
       throwIfAborted(options.signal);
-      const result = await auditLocation(db, browser, run, runDir, location, profile, options.emulation, modules, options.maxCropsPerLocation ?? 100);
-      done++;
-      emit({ type: 'location-audited', url: location.url, viewport: result.viewport, findings: result.findings, done, total: jobs.length, screenshot: result.screenshot });
-      if (delayMs > 0) await sleep(delayMs);
+      try {
+        const result = await auditLocation(db, () => discovery.open(location, profile), run, runDir, location, modules, options.maxCropsPerLocation ?? 100);
+        done++;
+        emit({ type: 'location-audited', url: location.title && mode === 'explore' ? location.title : location.url, viewport: result.viewport, findings: result.findings, done, total: jobs.length, screenshot: result.screenshot });
+      } catch (error) {
+        if (mode !== 'explore') throw error;
+        // A path found at one viewport may not exist at another (responsive layouts differ).
+        done++;
+        emit({ type: 'warning', message: `Couldn't reach "${location.title}" at ${profile}: ${error instanceof Error ? error.message.split('\n')[0] : error}` });
+      }
+      if (delayMs > 0 && mode === 'crawl') await sleep(delayMs);
     });
 
     emit({ type: 'phase', phase: 'tickets', message: 'Grouping findings into tickets' });
     buildTickets(db, run.id, { keyJourneyUrls: options.keyJourneyUrls });
 
-    const findings = db.getRawFindings(run.id).length;
     db.finishRun(run.id, 'complete', {
-      pagesFound: crawl.pages.length,
-      pagesAudited: toAudit.length,
-      templates: groups.length,
-      brokenLinks: crawl.failed.length,
-      skipped: crawl.skipped.length,
-      stoppedEarly: crawl.stoppedEarly,
-      findings,
+      ...discovery.summary,
+      findings: db.getRawFindings(run.id).length,
       tickets: db.getTickets(run.id).length,
     });
     emit({ type: 'phase', phase: 'done', message: 'Audit complete' });
@@ -225,19 +199,15 @@ export async function runAudit(db: PregoDb, options: AuditOptions): Promise<Audi
 
 async function auditLocation(
   db: PregoDb,
-  session: BrowserSession,
+  open: () => Promise<OpenedPage>,
   run: Run,
   runDir: string,
   location: Location,
-  profile: ProfileName,
-  emulation: Emulation | undefined,
   modules: CheckModule[],
   maxCrops: number,
 ): Promise<{ viewport: string; findings: number; screenshot: string }> {
-  const opened = await session.newPage(profile, emulation);
+  const opened = await open();
   try {
-    await opened.page.goto(location.url, { waitUntil: 'load' });
-    await opened.page.waitForLoadState('networkidle', { timeout: 5_000 }).catch(() => undefined);
     const screenshot = join('screenshots', `${location.id}-${safe(opened.viewport)}.png`);
     await captureFullPage(opened.page, join(runDir, screenshot));
     db.updateLocation(location.id, { screenshots: { ...(db.getLocation(location.id)?.screenshots ?? {}), [opened.viewport]: screenshot } });
@@ -268,6 +238,167 @@ async function auditLocation(
   } finally {
     await opened.close();
   }
+}
+
+interface DiscoveryContext {
+  db: PregoDb;
+  run: Run;
+  options: AuditOptions;
+  startUrl: string;
+  storageStatePath: string;
+  browser: BrowserSession;
+  viewports: ProfileName[];
+  delayMs: number;
+  emit: (event: AuditEvent) => void;
+}
+
+/** Crawl the site, group pages into templates and sample them. */
+async function discoverByCrawling({ db, run, options, startUrl, storageStatePath, browser, delayMs, emit }: DiscoveryContext): Promise<Discovery> {
+  let pagesFound = 0;
+  emit({ type: 'phase', phase: 'crawl', message: `Crawling ${startUrl}` });
+  const crawl = await crawlSite({
+    startUrl,
+    maxPages: options.maxPages,
+    maxDepth: options.maxDepth,
+    timeBudgetMs: options.timeBudgetMs,
+    include: options.include,
+    exclude: options.exclude,
+    respectRobots: options.respectRobots,
+    useSitemap: options.useSitemap,
+    concurrency: options.concurrency,
+    delayMs,
+    basicAuth: options.basicAuth,
+    storageStatePath,
+    signal: options.signal,
+    inspectPage: async ({ page }) => ({ structure: await extractStructure(page) }),
+    onPage: (page) => emit({ type: 'page-found', url: page.url, count: ++pagesFound }),
+  });
+  throwIfAborted(options.signal);
+
+  emit({ type: 'phase', phase: 'group', message: `Grouping ${crawl.pages.length} pages into templates` });
+  const groups = groupTemplates(crawl.pages.map((p) => ({ ...p, structure: p.data.structure as string[] })));
+  const sampled = samplePages(groups, { perTemplate: options.perTemplate, auditAll: options.auditAll });
+  const toAudit: Location[] = [];
+  db.transaction(() => {
+    for (const s of sampled) {
+      const location = db.addLocation({
+        runId: run.id,
+        kind: 'page',
+        url: s.page.url,
+        title: s.page.title,
+        statusCode: s.page.statusCode,
+        depth: s.page.depth,
+        templateKey: s.templateKey,
+        structureHash: s.templateHash,
+        audited: s.audit,
+        notAuditedReason: s.reason ?? null,
+      });
+      if (s.audit) toAudit.push(location);
+    }
+    for (const f of crawl.failed) {
+      db.addLocation({
+        runId: run.id,
+        kind: 'page',
+        url: f.url,
+        title: null,
+        statusCode: f.statusCode,
+        depth: 0,
+        templateKey: null,
+        structureHash: null,
+        audited: false,
+        notAuditedReason: f.referrer ? `${f.error}, linked from ${f.referrer}` : f.error,
+      });
+    }
+  });
+
+  return {
+    toAudit,
+    open: async (location, profile) => {
+      const opened = await browser.newPage(profile, options.emulation);
+      try {
+        await opened.page.goto(location.url, { waitUntil: 'load' });
+        await opened.page.waitForLoadState('networkidle', { timeout: 5_000 }).catch(() => undefined);
+        return opened;
+      } catch (error) {
+        await opened.close();
+        throw error;
+      }
+    },
+    summary: {
+      pagesFound: crawl.pages.length,
+      pagesAudited: toAudit.length,
+      templates: groups.length,
+      brokenLinks: crawl.failed.length,
+      skipped: crawl.skipped.length,
+      stoppedEarly: crawl.stoppedEarly,
+    },
+  };
+}
+
+/** Explore an interactive breadth-first and record every screen and what each action did. */
+async function discoverByExploring({ db, run, options, startUrl, browser, viewports, emit }: DiscoveryContext): Promise<Discovery> {
+  emit({ type: 'phase', phase: 'explore', message: `Exploring ${startUrl}` });
+  const explore = {
+    startUrl,
+    session: browser,
+    emulation: options.emulation,
+    settleMs: options.settleMs,
+  };
+  const result = await exploreApp({
+    ...explore,
+    profile: viewports[0],
+    maxStates: options.maxStates,
+    maxDepth: options.maxDepth,
+    timeBudgetMs: options.timeBudgetMs,
+    maskSelectors: options.maskSelectors,
+    signal: options.signal,
+    onState: (state, count) => emit({ type: 'state-found', stateId: state.id, title: state.title, depth: state.depth, count }),
+  });
+  throwIfAborted(options.signal);
+
+  const locationByState = new Map<string, Location>();
+  db.transaction(() => {
+    for (const state of result.states) {
+      locationByState.set(
+        state.id,
+        db.addLocation({
+          runId: run.id,
+          kind: 'state',
+          url: state.url,
+          stateId: state.id,
+          title: state.title,
+          statusCode: null,
+          depth: state.depth,
+          // Each screen is its own "template" for ticket grouping; state IDs are stable across runs.
+          templateKey: `state:${state.id}`,
+          structureHash: null,
+          audited: true,
+          steps: state.steps,
+        }),
+      );
+    }
+    for (const edge of result.edges) {
+      db.addEdge({
+        runId: run.id,
+        fromLocationId: locationByState.get(edge.from)!.id,
+        toLocationId: edge.to ? (locationByState.get(edge.to)?.id ?? null) : null,
+        step: edge.action,
+        outcome: edge.outcome,
+        reason: edge.reason ?? null,
+      });
+    }
+  });
+
+  return {
+    toAudit: [...locationByState.values()],
+    open: async (location, profile) => (await openScreen(explore, location.steps ?? [], profile)).opened,
+    summary: {
+      statesFound: result.states.length,
+      statesAudited: result.states.length,
+      actionsTried: result.edges.length,
+      stoppedEarly: result.stoppedEarly,
+    },
+  };
 }
 
 async function runPool<T>(items: T[], concurrency: number, worker: (item: T) => Promise<void>) {

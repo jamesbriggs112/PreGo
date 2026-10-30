@@ -12,6 +12,7 @@ import type {
   Run,
   RunStatus,
   Severity,
+  StateEdge,
   Ticket,
 } from '../types.js';
 
@@ -180,6 +181,21 @@ const MIGRATIONS: string[] = [
     createdAt TEXT NOT NULL
   );
   `,
+  // 5: interactive exploration: how to reach each screen, and what each action did.
+  `
+  ALTER TABLE locations ADD COLUMN steps TEXT;
+
+  CREATE TABLE state_edges (
+    id INTEGER PRIMARY KEY,
+    runId INTEGER NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+    fromLocationId INTEGER NOT NULL REFERENCES locations(id) ON DELETE CASCADE,
+    toLocationId INTEGER REFERENCES locations(id) ON DELETE CASCADE,
+    step TEXT NOT NULL,
+    outcome TEXT NOT NULL,
+    reason TEXT
+  );
+  CREATE INDEX state_edges_run ON state_edges(runId);
+  `,
 ];
 
 export interface ExportRecord {
@@ -200,8 +216,8 @@ export interface TicketOverride {
 }
 
 type NewRun = Pick<Run, 'projectId' | 'mode' | 'target'> & { settings?: Record<string, unknown> };
-type NewLocation = Omit<Location, 'id' | 'screenshots' | 'audited' | 'notAuditedReason' | 'stateId'> &
-  Partial<Pick<Location, 'screenshots' | 'audited' | 'notAuditedReason' | 'stateId'>>;
+type NewLocation = Omit<Location, 'id' | 'screenshots' | 'audited' | 'notAuditedReason' | 'stateId' | 'steps'> &
+  Partial<Pick<Location, 'screenshots' | 'audited' | 'notAuditedReason' | 'stateId' | 'steps'>>;
 type NewRawFinding = Omit<RawFinding, 'id' | 'crop' | 'fingerprint' | 'ticketId' | 'component' | 'componentShared'> &
   Partial<Pick<RawFinding, 'crop' | 'fingerprint' | 'ticketId' | 'component' | 'componentShared'>>;
 type NewOccurrence = Omit<Occurrence, 'id'>;
@@ -338,9 +354,9 @@ export class PregoDb {
     const { lastInsertRowid } = this.sqlite
       .prepare(
         `INSERT INTO locations (runId, kind, url, stateId, title, statusCode, depth, templateKey,
-           structureHash, audited, notAuditedReason, screenshots)
+           structureHash, audited, notAuditedReason, screenshots, steps)
          VALUES (@runId, @kind, @url, @stateId, @title, @statusCode, @depth, @templateKey,
-           @structureHash, @audited, @notAuditedReason, @screenshots)`,
+           @structureHash, @audited, @notAuditedReason, @screenshots, @steps)`,
       )
       .run({
         stateId: null,
@@ -348,6 +364,7 @@ export class PregoDb {
         ...location,
         audited: location.audited ? 1 : 0,
         screenshots: JSON.stringify(location.screenshots ?? {}),
+        steps: location.steps ? JSON.stringify(location.steps) : null,
       });
     return this.getLocation(Number(lastInsertRowid))!;
   }
@@ -373,6 +390,20 @@ export class PregoDb {
       .prepare('SELECT * FROM locations WHERE runId = ? ORDER BY id')
       .all(runId) as LocationRow[];
     return rows.map(toLocation);
+  }
+
+  // State map edges
+
+  addEdge(edge: Omit<StateEdge, 'id'>): StateEdge {
+    const { lastInsertRowid } = this.sqlite
+      .prepare('INSERT INTO state_edges (runId, fromLocationId, toLocationId, step, outcome, reason) VALUES (?, ?, ?, ?, ?, ?)')
+      .run(edge.runId, edge.fromLocationId, edge.toLocationId, JSON.stringify(edge.step), edge.outcome, edge.reason);
+    return { ...edge, id: Number(lastInsertRowid) };
+  }
+
+  getEdges(runId: number): StateEdge[] {
+    const rows = this.sqlite.prepare('SELECT * FROM state_edges WHERE runId = ? ORDER BY id').all(runId) as (Omit<StateEdge, 'step' | 'outcome'> & { step: string; outcome: string })[];
+    return rows.map((r) => ({ ...r, step: JSON.parse(r.step), outcome: r.outcome as StateEdge['outcome'] }));
   }
 
   // Raw findings
@@ -582,7 +613,7 @@ type RunRow = Omit<Run, 'settings' | 'summary' | 'mode' | 'status'> & {
   settings: string;
   summary: string;
 };
-type LocationRow = Omit<Location, 'audited' | 'screenshots' | 'kind'> & { kind: string; audited: number; screenshots: string };
+type LocationRow = Omit<Location, 'audited' | 'screenshots' | 'kind' | 'steps'> & { kind: string; audited: number; screenshots: string; steps: string | null };
 type RawFindingRow = Omit<RawFinding, 'wcagCriteria' | 'componentShared'> & { wcagCriteria: string; componentShared: number };
 type TicketRow = Omit<Ticket, 'labels'> & { labels: string };
 
@@ -598,6 +629,7 @@ const toLocation = (row: LocationRow): Location => ({
   kind: row.kind as Location['kind'],
   audited: row.audited === 1,
   screenshots: JSON.parse(row.screenshots),
+  steps: row.steps ? JSON.parse(row.steps) : null,
 });
 const toRawFinding = (row: RawFindingRow): RawFinding => ({
   ...row,

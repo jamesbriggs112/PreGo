@@ -48,6 +48,30 @@ export interface Run {
   error: string | null;
 }
 
+/** One action on the way to an interactive screen, replayed by key. */
+export interface PathStep {
+  /** role|label|n: stable identity of the action on its screen. */
+  key: string;
+  label: string;
+  role: string;
+  kind: 'click' | 'fill' | 'select';
+  selector: string;
+}
+
+export type EdgeOutcome = 'navigated' | 'unchanged' | 'changed' | 'external' | 'skipped' | 'limit' | 'failed';
+
+/** What happened when an action was tried on an explored screen. */
+export interface StateEdge {
+  id: number;
+  runId: number;
+  fromLocationId: number;
+  /** The screen it led to; null when it led nowhere recorded (skipped, external, limit, failed). */
+  toLocationId: number | null;
+  step: PathStep;
+  outcome: EdgeOutcome;
+  reason: string | null;
+}
+
 export interface Location {
   id: number;
   runId: number;
@@ -67,6 +91,8 @@ export interface Location {
   notAuditedReason: string | null;
   /** Full-page screenshot path per viewport name, relative to the run folder. */
   screenshots: Record<string, string>;
+  /** For interactive states: the actions from the start screen that reach it. */
+  steps: PathStep[] | null;
 }
 
 /** A single result from a check module, before grouping into tickets. */

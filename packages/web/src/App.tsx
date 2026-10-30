@@ -3,6 +3,7 @@ import { Navigate, NavLink, Route, Routes, useLocation } from 'react-router';
 import { cn } from '@/lib/utils';
 import { ProjectsPage } from '@/pages/ProjectsPage';
 import { Logo } from '@/components/Logo';
+import { ThemeToggle } from '@/components/ThemeToggle';
 import { NewAuditPage } from '@/pages/NewAuditPage';
 import { RunPage } from '@/pages/RunPage';
 import { TicketPage } from '@/pages/TicketPage';
@@ -50,7 +51,7 @@ export function App() {
                     className={({ isActive }) =>
                       cn(
                         'block rounded-full px-4 py-1.5 text-sm font-medium transition-colors',
-                        isActive ? 'bg-card text-[var(--brand-700)] shadow-sm' : 'text-muted-foreground hover:text-foreground',
+                        isActive ? 'bg-card text-[var(--brand-text)] shadow-sm' : 'text-muted-foreground hover:text-foreground',
                       )
                     }
                   >
@@ -60,6 +61,7 @@ export function App() {
               ))}
             </ul>
           </nav>
+          <ThemeToggle className="ml-auto" />
         </div>
       </header>
       <main id="main" ref={main} tabIndex={-1} className="mx-auto max-w-7xl px-6 py-8 outline-none">

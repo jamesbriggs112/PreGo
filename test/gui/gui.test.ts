@@ -366,3 +366,28 @@ describe('Deleting a project', () => {
     await page.getByRole('cell', { name: 'Acme Widgets', exact: true }).waitFor();
   });
 });
+
+describe('Dark mode', () => {
+  it('switches from the header, is remembered, and every main screen passes axe in it', async () => {
+    const { page } = gui;
+    await page.goto(gui.url);
+    const toggle = page.getByRole('button', { name: 'Dark mode' });
+    if ((await toggle.getAttribute('aria-pressed')) === 'true') await toggle.click();
+    await toggle.click();
+    await expect(toggle.getAttribute('aria-pressed')).resolves.toBe('true');
+    await page.reload();
+    await expect(page.locator('html').getAttribute('data-theme')).resolves.toBe('dark');
+    await page.getByRole('cell', { name: 'Acme Widgets', exact: true }).waitFor();
+    expect(await axeViolations(page)).toEqual([]);
+
+    for (const path of [`runs/${runId}`, 'audits/new', 'settings']) {
+      await page.goto(gui.url + path);
+      await page.getByRole('heading', { level: 1 }).waitFor();
+      await page.waitForLoadState('networkidle');
+      expect(await axeViolations(page), path).toEqual([]);
+    }
+
+    await page.getByRole('button', { name: 'Dark mode' }).click();
+    await expect(page.locator('html').getAttribute('data-theme')).resolves.toBe('light');
+  }, 60_000);
+});

@@ -3,6 +3,7 @@ import { Background, Controls, MarkerType, Position, ReactFlow, type Edge, type 
 import '@xyflow/react/dist/style.css';
 import { layoutStateMap, NODE_HEIGHT, NODE_WIDTH, type MapEdge, type MapState } from '@prego/core/layout';
 import { cn } from '@/lib/utils';
+import { useTheme } from '@/lib/theme';
 
 export interface DiagramState extends MapState {
   /** Open tickets on this screen. */
@@ -25,6 +26,7 @@ interface Props {
 
 /** The explored screens as a diagram: columns are taps from the start screen. */
 export function StateMapDiagram({ states, edges, selected, onSelect, showAll = false, label, height = 520 }: Props) {
+  const theme = useTheme();
   const layout = useMemo(() => layoutStateMap(states, edges), [states, edges]);
   const issues = useMemo(() => new Map(states.map((s) => [s.id, s.issues ?? 0])), [states]);
   const flagged = useMemo(() => new Set(states.filter((s) => s.flagged).map((s) => s.id)), [states]);
@@ -75,6 +77,7 @@ export function StateMapDiagram({ states, edges, selected, onSelect, showAll = f
         edgesFocusable={false}
         onNodeClick={(_event, node) => onSelect?.(Number(node.id))}
         proOptions={{ hideAttribution: false }}
+        colorMode={theme}
       >
         <Background />
         <Controls showInteractive={false} />

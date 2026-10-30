@@ -15,6 +15,8 @@ import {
   checkDefinitions,
   unknownChecks,
   ensureJourneysDir,
+  journeysDir,
+  sessionPath,
   journeyFile,
   listJourneys,
   slugify,
@@ -175,7 +177,7 @@ export async function buildApp(options: AppOptions): Promise<PregoApp> {
       const runs = db.listRuns(project.id);
       const lastRun = runs.at(-1);
       const lastComplete = [...runs].reverse().find((r) => r.status === 'complete');
-      return { ...project, lastRun: lastRun ? runSummary(lastRun) : null, scores: lastComplete ? scoresFor(db, lastComplete) : null };
+      return { ...project, runCount: runs.length, lastRun: lastRun ? runSummary(lastRun) : null, scores: lastComplete ? scoresFor(db, lastComplete) : null };
     }),
   );
 
@@ -188,6 +190,25 @@ export async function buildApp(options: AppOptions): Promise<PregoApp> {
       return reply.code(201).send(db.ensureProject(name));
     },
   );
+
+  // Delete a project with all its audits, screenshots, exports, journeys and saved login session.
+  app.delete<{ Params: { id: string } }>('/api/projects/:id', async (request, reply) => {
+    const project = db.getProject(Number(request.params.id));
+    if (!project) return reply.code(404).send({ error: 'Project not found' });
+    if (jobs.activeJob?.projectId === project.id) return reply.code(409).send({ error: 'Stop the running audit before deleting this project.' });
+    const deleted = db.deleteProject(project.id)!;
+    // Only ever remove files inside the data folder.
+    const root = resolve(dataDir) + sep;
+    const remove = (path: string) => {
+      const full = resolve(path);
+      if (full.startsWith(root)) rmSync(full, { recursive: true, force: true });
+    };
+    for (const runId of deleted.runIds) remove(runDirectory(dataDir, runId));
+    for (const dir of deleted.exportDirs) remove(dir);
+    remove(journeysDir(dataDir, project.slug));
+    remove(sessionPath(dataDir, project.slug));
+    return { deleted: { project: project.name, audits: deleted.runIds.length, exports: deleted.exportDirs.length } };
+  });
 
   app.get<{ Params: { id: string } }>('/api/projects/:id', async (request, reply) => {
     const project = db.getProject(Number(request.params.id));

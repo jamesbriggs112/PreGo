@@ -115,6 +115,38 @@ describe('PregoDb', () => {
     expect(db.getTickets(run.id)).toHaveLength(1);
   });
 
+  it('deletes a project and everything recorded for it, leaving other projects alone', () => {
+    const { project, run, location } = seedRun();
+    const other = db.createProject('Other');
+    db.createRun({ projectId: other.id, mode: 'crawl', target: 'https://other.example/' });
+    const f = db.addRawFinding({
+      runId: run.id, locationId: location.id, viewport: 'desktop', module: 'axe', engine: 'axe-core', ruleId: 'image-alt',
+      category: 'A11Y', severity: 'Critical', title: 't', description: 'd', helpUrl: null, wcagCriteria: [], wcagLevel: null,
+      selector: 'img', html: '<img>', failureSummary: null,
+    });
+    const { ticketId } = db.ticketIdFor(project.id, 'fp1', 'A11Y', run.id);
+    db.saveTicket(ticketFor(run.id, ticketId));
+    db.addOccurrence({ runId: run.id, ticketId, locationId: location.id, rawFindingId: f.id, viewport: 'desktop', selector: 'img', html: '<img>', crop: null });
+    db.saveOverride(project.id, ticketId, { dismissed: true });
+    db.addMerge(project.id, 'PRG-A11Y-002', ticketId);
+    db.addExport(run.id, '/data/exports/make-uk-1', 'prego');
+
+    expect(db.deleteProject(project.id)).toEqual({ runIds: [run.id], exportDirs: ['/data/exports/make-uk-1'] });
+    expect(db.getProject(project.id)).toBeUndefined();
+    expect(db.getRun(run.id)).toBeUndefined();
+    expect(db.getLocations(run.id)).toEqual([]);
+    expect(db.getRawFindings(run.id)).toEqual([]);
+    expect(db.getTickets(run.id)).toEqual([]);
+    expect(db.getOccurrences(run.id)).toEqual([]);
+    expect(db.getOverride(project.id, ticketId)).toBeUndefined();
+    expect(db.listProjects().map((p) => p.name)).toEqual(['Other']);
+    expect(db.listRuns(other.id)).toHaveLength(1);
+    // A new project with the same name starts its ticket numbers again.
+    const again = db.createProject('Make UK');
+    expect(db.ticketIdFor(again.id, 'fp1', 'A11Y', 1).ticketId).toBe('PRG-A11Y-001');
+    expect(db.deleteProject(9999)).toBeUndefined();
+  });
+
   it('persists to a file and re-opens without re-running migrations', () => {
     const dir = mkdtempSync(join(tmpdir(), 'prego-db-'));
     try {

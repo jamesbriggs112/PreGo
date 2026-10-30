@@ -306,6 +306,24 @@ export class PregoDb {
     return (this.sqlite.prepare('SELECT * FROM projects ORDER BY name').all() as ProjectRow[]).map(toProject);
   }
 
+  /**
+   * Delete a project and everything recorded for it: runs (and, through them, locations, findings,
+   * tickets, occurrences, state maps and the exports log), ticket numbering and triage. Returns the
+   * run IDs and export folders, so the caller can remove the files that go with them.
+   */
+  deleteProject(id: number): { runIds: number[]; exportDirs: string[] } | undefined {
+    if (!this.getProject(id)) return undefined;
+    return this.transaction(() => {
+      const runIds = this.listRuns(id).map((r) => r.id);
+      const exportDirs = runIds.flatMap((runId) => this.listExports(runId).map((e) => e.dir));
+      for (const table of ['ticket_merges', 'ticket_overrides', 'ticket_registry', 'runs']) {
+        this.sqlite.prepare(`DELETE FROM ${table} WHERE projectId = ?`).run(id);
+      }
+      this.sqlite.prepare('DELETE FROM projects WHERE id = ?').run(id);
+      return { runIds, exportDirs };
+    });
+  }
+
   saveProjectSettings(id: number, settings: ProjectSettings) {
     const merged = { ...this.getProject(id)?.settings, ...settings };
     this.sqlite.prepare('UPDATE projects SET settings = ? WHERE id = ?').run(JSON.stringify(merged), id);

@@ -1,8 +1,8 @@
 import { useState, type FormEvent } from 'react';
 import { Link } from 'react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus } from 'lucide-react';
-import { api, type RunSummary } from '@/lib/api';
+import { Plus, Trash2 } from 'lucide-react';
+import { api, type ProjectListItem, type RunSummary } from '@/lib/api';
 import { formatDateTime } from '@/lib/utils';
 import { useTitle } from '@/lib/use-title';
 import { Button } from '@/components/ui/button';
@@ -11,6 +11,7 @@ import { Label } from '@/components/ui/label';
 import { Alert } from '@/components/ui/alert';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { RunStatusBadge } from '@/components/RunStatusBadge';
 
 export function ProjectsPage() {
@@ -18,6 +19,7 @@ export function ProjectsPage() {
   const queryClient = useQueryClient();
   const projects = useQuery({ queryKey: ['projects'], queryFn: api.projects });
   const [name, setName] = useState('');
+  const [deleting, setDeleting] = useState<ProjectListItem | null>(null);
   const create = useMutation({
     mutationFn: api.createProject,
     onSuccess: () => {
@@ -86,6 +88,9 @@ export function ProjectsPage() {
                             New audit
                           </Link>
                         </Button>
+                        <Button size="sm" variant="ghost" onClick={() => setDeleting(project)} aria-label={`Delete ${project.name}`}>
+                          <Trash2 aria-hidden="true" />
+                        </Button>
                       </div>
                     </TableCell>
                   </TableRow>
@@ -118,7 +123,46 @@ export function ProjectsPage() {
           )}
         </CardContent>
       </Card>
+
+      {deleting && <DeleteProjectDialog project={deleting} onClose={() => setDeleting(null)} />}
     </div>
+  );
+}
+
+function DeleteProjectDialog({ project, onClose }: { project: ProjectListItem; onClose: () => void }) {
+  const queryClient = useQueryClient();
+  const remove = useMutation({
+    mutationFn: () => api.deleteProject(project.id),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['projects'] });
+      onClose();
+    },
+  });
+  const audits = project.runCount === 1 ? '1 audit' : `${project.runCount} audits`;
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Delete {project.name}?</DialogTitle>
+          <DialogDescription>
+            This permanently deletes the project and its {audits}, with their screenshots, exports, recorded journeys and saved login. It can’t be undone.
+          </DialogDescription>
+        </DialogHeader>
+        {remove.isError && (
+          <Alert variant="destructive" role="alert">
+            {remove.error.message}
+          </Alert>
+        )}
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button variant="destructive" onClick={() => remove.mutate()} disabled={remove.isPending}>
+            {remove.isPending ? 'Deleting…' : 'Delete project'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

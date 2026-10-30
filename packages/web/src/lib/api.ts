@@ -4,6 +4,7 @@ export type RunSummary = Pick<Run, 'id' | 'projectId' | 'mode' | 'target' | 'sta
 export type Scores = Partial<Record<Category, number>>;
 
 export interface ProjectListItem extends Project {
+  runCount: number;
   lastRun: RunSummary | null;
   scores: Scores | null;
 }
@@ -154,6 +155,8 @@ export const api = {
   projects: () => request<ProjectListItem[]>('/api/projects'),
   project: (id: number) => request<ProjectDetail>(`/api/projects/${id}`),
   createProject: (name: string) => post<Project>('/api/projects', { name }),
+  deleteProject: (id: number) =>
+    request<{ deleted: { project: string; audits: number; exports: number } }>(`/api/projects/${id}`, { method: 'DELETE' }),
   startRun: (body: StartRunBody) => post<{ runId: number; projectId: number }>('/api/runs', body),
   activeRun: () => request<{ runId: number; projectId: number } | null>('/api/runs/active'),
   run: (id: number) => request<RunDetail>(`/api/runs/${id}`),

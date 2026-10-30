@@ -342,3 +342,27 @@ describe('Scripted journeys (criterion 4)', () => {
     expect(await axeViolations(page)).toEqual([]);
   });
 });
+
+describe('Deleting a project', () => {
+  it('asks first, and Cancel keeps the project', async () => {
+    const { page } = gui;
+    gui.db.createProject('Throwaway');
+    await page.goto(gui.url);
+    await page.getByRole('button', { name: 'Delete Throwaway' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Delete Throwaway?' });
+    await dialog.getByText('its 0 audits').waitFor();
+    expect(await axeViolations(page)).toEqual([]);
+    await dialog.getByRole('button', { name: 'Cancel' }).click();
+    await dialog.waitFor({ state: 'detached' });
+    expect(gui.db.listProjects().some((p) => p.name === 'Throwaway')).toBe(true);
+  });
+
+  it('deletes the project once confirmed', async () => {
+    const { page } = gui;
+    await page.getByRole('button', { name: 'Delete Throwaway' }).click();
+    await page.getByRole('button', { name: 'Delete project' }).click();
+    await page.getByRole('cell', { name: 'Throwaway', exact: true }).waitFor({ state: 'detached' });
+    expect(gui.db.listProjects().some((p) => p.name === 'Throwaway')).toBe(false);
+    await page.getByRole('cell', { name: 'Acme Widgets', exact: true }).waitFor();
+  });
+});

@@ -15,3 +15,5 @@ export * from './audit/run-audit.js';
 export { captureCrop, captureFullPage, HIGHLIGHT_COLOUR, type CropOptions } from './capture/capture.js';
 export { buildTickets, fingerprint, calculatePriority, type BuildTicketsOptions } from './tickets/build.js';
 export { describeComponent, componentLabel, type ComponentInfo } from './tickets/component.js';
+export { buildExportPlan, FINDINGS_SECTION, type ExportPlan, type PlannedTicket, type PlannedOccurrence, type ReportSectionPlan } from './export/plan.js';
+export { ticketsCsv, occurrencesCsv, writeCsvFiles, CSV_PRESETS, TICKET_COLUMNS, OCCURRENCE_COLUMNS, type CsvPreset } from './export/csv.js';

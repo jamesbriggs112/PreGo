@@ -17,3 +17,4 @@ export { buildTickets, fingerprint, calculatePriority, type BuildTicketsOptions 
 export { describeComponent, componentLabel, type ComponentInfo } from './tickets/component.js';
 export { buildExportPlan, FINDINGS_SECTION, type ExportPlan, type PlannedTicket, type PlannedOccurrence, type ReportSectionPlan } from './export/plan.js';
 export { ticketsCsv, occurrencesCsv, writeCsvFiles, CSV_PRESETS, TICKET_COLUMNS, OCCURRENCE_COLUMNS, type CsvPreset } from './export/csv.js';
+export { reportDocx, writeReportDocx, categoryScore, type ReportBranding } from './export/docx.js';

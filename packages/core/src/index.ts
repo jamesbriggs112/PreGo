@@ -25,3 +25,4 @@ export { updateTicket, mergeTickets, TriageError, type TicketChanges } from './t
 export type { TicketOverride } from './db/database.js';
 export { DEFAULT_SETTINGS, getSettings, saveSettings, logoPath, reportBranding, type PregoSettings } from './settings.js';
 export type { ExportRecord } from './db/database.js';
+export { discoverActions, type Action, type ActionKind } from './explore/actions.js';

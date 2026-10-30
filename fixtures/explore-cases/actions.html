@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Action discovery cases</title>
+  <style>
+    .card { cursor: pointer; padding: 8px; border: 1px solid #ccc; margin: 4px 0; }
+    .hidden { display: none; }
+    .invisible { visibility: hidden; }
+  </style>
+</head>
+<body>
+  <!-- Prego test page: each element below is a deliberate case for action discovery (T18). -->
+  <h1>Action discovery cases</h1>
+  <a href="/elsewhere.html">Plain link</a>
+  <button><span>Button with inner span</span></button>
+  <button aria-label="Close dialog">×</button>
+  <span role="button" tabindex="0">ARIA button</span>
+  <div id="prop-handler">Div with onclick property</div>
+  <div onclick="void 0">Div with onclick attribute</div>
+  <div class="card"><h2>Pointer card</h2><p>Whole card is clickable</p></div>
+  <div tabindex="0">Focusable div</div>
+  <label for="email">Email</label> <input id="email" type="email">
+  <select aria-label="Topic"><option>A</option><option>B</option></select>
+  <input type="checkbox" id="agree"> <label for="agree">I agree</label>
+  <button>Repeat</button> <button>Repeat</button>
+  <!-- Not actions: -->
+  <button disabled>Disabled button</button>
+  <button class="hidden">Hidden button</button>
+  <button class="invisible">Invisible button</button>
+  <div aria-hidden="true"><button>Inside aria-hidden</button></div>
+  <div tabindex="-1">Programmatically focusable only</div>
+  <input type="hidden" name="token" value="x">
+  <script>document.getElementById('prop-handler').onclick = () => {};</script>
+</body>
+</html>

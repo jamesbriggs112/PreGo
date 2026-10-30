@@ -12,6 +12,8 @@ import {
   SEVERITIES,
   TriageError,
   buildExportPlan,
+  checkDefinitions,
+  unknownChecks,
   ensureJourneysDir,
   journeyFile,
   listJourneys,
@@ -67,6 +69,8 @@ interface StartRunBody {
   project: string;
   target: string;
   mode?: 'crawl' | 'explore' | 'journey';
+  /** Checks to run, by ID (GET /api/checks). Default: the defaults in Settings. */
+  checks?: string[];
   /** Journey mode: name of the project's recorded journey to replay. */
   journey?: string;
   /** Replay this recorded journey first to log in. */
@@ -102,6 +106,7 @@ const startRunSchema = {
       project: { type: 'string', minLength: 1, maxLength: 200 },
       target: { type: 'string', minLength: 1 },
       mode: { enum: ['crawl', 'explore', 'journey'] },
+      checks: { type: 'array', items: { type: 'string' }, minItems: 1, uniqueItems: true },
       journey: { type: 'string', minLength: 1 },
       loginJourney: { type: 'string', minLength: 1 },
       maxStates: { type: 'integer', minimum: 1, maximum: 2000 },
@@ -156,6 +161,11 @@ export async function buildApp(options: AppOptions): Promise<PregoApp> {
   });
 
   app.get('/api/health', async () => ({ ok: true }));
+
+  // The checks a run can choose from, for the New audit form.
+  app.get('/api/checks', async () =>
+    checkDefinitions().map(({ id, name, description, categories, defaultOn, slow }) => ({ id, name, description, categories, defaultOn, slow: !!slow })),
+  );
 
   // Projects
 
@@ -258,11 +268,15 @@ export async function buildApp(options: AppOptions): Promise<PregoApp> {
       const journey = body.mode === 'journey' ? findJourney(body.journey ?? '') : undefined;
       const loginJourney = body.loginJourney ? findJourney(body.loginJourney) : undefined;
       if (body.mode === 'journey' && !journey) return reply.code(400).send({ error: 'Choose a recorded journey for this project.' });
+      const checks = body.checks ?? getSettings(db).defaults.checks;
+      const unknownCheckIds = unknownChecks(checks);
+      if (unknownCheckIds.length) return reply.code(400).send({ error: `Unknown check: ${unknownCheckIds.join(', ')}` });
       if (body.loginJourney && !loginJourney) return reply.code(400).send({ error: `No recorded journey called "${body.loginJourney}" for this project.` });
       const job = await jobs.start({
         project: body.project.trim(),
         target,
         mode: body.mode,
+        checks,
         journey,
         loginJourney,
         maxStates: body.maxStates,
@@ -457,6 +471,7 @@ export async function buildApp(options: AppOptions): Promise<PregoApp> {
     const unknown = request.body.defaults.viewports.filter((v) => !isProfileName(v));
     if (unknown.length) return reply.code(400).send({ error: `Unknown viewport: ${unknown.join(', ')}` });
     if (!CSV_PRESETS[request.body.defaults.csvPreset]) return reply.code(400).send({ error: 'Unknown CSV preset' });
+    if (request.body.defaults.checks && unknownChecks(request.body.defaults.checks).length) return reply.code(400).send({ error: 'Unknown check' });
     saveSettings(db, { ...request.body, branding: { ...request.body.branding, accentColour: request.body.branding.accentColour.replace(/^#/, '').toUpperCase() } });
     return { ...getSettings(db), hasLogo: existsSync(logoPath(dataDir)) };
   });
@@ -659,6 +674,7 @@ const settingsSchema = {
           delayMs: { type: 'integer', minimum: 0 },
           respectRobots: { type: 'boolean' },
           csvPreset: { type: 'string' },
+          checks: { type: 'array', items: { type: 'string' }, uniqueItems: true },
         },
       },
     },

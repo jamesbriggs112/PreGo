@@ -20,7 +20,8 @@ export { ticketsCsv, occurrencesCsv, writeCsvFiles, CSV_PRESETS, TICKET_COLUMNS,
 export { reportDocx, writeReportDocx, categoryScore, type ReportBranding } from './export/docx.js';
 export { exportRun, type ExportOptions, type ExportResult } from './export/bundle.js';
 export { verifyExport, type VerifyResult } from './export/verify.js';
-export { MODULE_CATEGORIES, checkedCategories } from './checks/categories.js';
+export { moduleCategories, checkedCategories } from './checks/categories.js';
+export { checkDefinitions, createChecks, defaultChecks, registerCheck, unknownChecks, type CheckDefinition, type CheckFactoryContext } from './checks/registry.js';
 export { updateTicket, mergeTickets, TriageError, type TicketChanges } from './tickets/triage.js';
 export type { TicketOverride } from './db/database.js';
 export { DEFAULT_SETTINGS, getSettings, saveSettings, logoPath, reportBranding, type PregoSettings } from './settings.js';

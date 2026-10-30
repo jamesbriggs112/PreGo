@@ -49,6 +49,8 @@ function SettingsForm({ initial }: { initial: Settings }) {
   const [delay, setDelay] = useState(String(initial.defaults.delayMs));
   const [respectRobots, setRespectRobots] = useState(initial.defaults.respectRobots);
   const [csvPreset, setCsvPreset] = useState(initial.defaults.csvPreset);
+  const [checks, setChecks] = useState<string[]>(initial.defaults.checks);
+  const checkList = useQuery({ queryKey: ['checks'], queryFn: api.checks });
 
   const save = useMutation({
     mutationFn: api.saveSettings,
@@ -59,7 +61,7 @@ function SettingsForm({ initial }: { initial: Settings }) {
     event.preventDefault();
     save.mutate({
       branding: { companyName: companyName.trim(), accentColour: accent.replace('#', '') },
-      defaults: { viewports, perTemplate: Number(perTemplate), concurrency: Number(concurrency), delayMs: Number(delay), respectRobots, csvPreset },
+      defaults: { viewports, perTemplate: Number(perTemplate), concurrency: Number(concurrency), delayMs: Number(delay), respectRobots, csvPreset, checks },
     });
   }
 
@@ -146,6 +148,21 @@ function SettingsForm({ initial }: { initial: Settings }) {
               ))}
             </NativeSelect>
           </div>
+          <fieldset className="grid gap-2 sm:col-span-2">
+            <legend className="mb-1 text-sm font-medium">Checks ticked by default</legend>
+            {checkList.data?.map((check) => (
+              <div key={check.id} className="flex items-center gap-2">
+                <Checkbox
+                  id={`default-check-${check.id}`}
+                  checked={checks.includes(check.id)}
+                  onCheckedChange={(state) => setChecks((current) => (state === true ? [...current, check.id] : current.filter((c) => c !== check.id)))}
+                />
+                <Label htmlFor={`default-check-${check.id}`} className="font-normal">
+                  {check.name}
+                </Label>
+              </div>
+            ))}
+          </fieldset>
           <div className="flex items-center gap-2 sm:col-span-2">
             <Checkbox id="default-robots" checked={respectRobots} onCheckedChange={(state) => setRespectRobots(state === true)} />
             <Label htmlFor="default-robots" className="font-normal">

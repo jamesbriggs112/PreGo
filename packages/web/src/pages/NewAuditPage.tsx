@@ -26,15 +26,6 @@ const MODES = [
   { value: 'journey', label: 'Scripted journey', hint: 'Replays a journey you record once (such as booking a ticket), with checks after every step.', available: true },
 ];
 
-const CHECKS = [
-  { label: 'Accessibility (axe-core, WCAG 2.2 A and AA)', available: true },
-  { label: 'Custom accessibility checks (keyboard, reflow, zoom)', available: false },
-  { label: 'UI consistency', available: false },
-  { label: 'Content and SEO', available: false },
-  { label: 'Performance (Lighthouse)', available: false },
-  { label: 'Security headers', available: false },
-  { label: 'HTML validity', available: false },
-];
 
 const lines = (text: string) =>
   text
@@ -71,6 +62,8 @@ function NewAuditForm({ defaults, defaultDenyLabels }: { defaults?: Settings['de
   const [concurrency, setConcurrency] = useState(String(defaults?.concurrency ?? 2));
   const [delay, setDelay] = useState(String(defaults?.delayMs ?? 500));
   const [mode, setMode] = useState<'crawl' | 'explore' | 'journey'>('crawl');
+  const checkList = useQuery({ queryKey: ['checks'], queryFn: api.checks });
+  const [checks, setChecks] = useState<string[]>(defaults?.checks ?? []);
   const [journey, setJourney] = useState<JourneySummary | null>(null);
   const [loginJourney, setLoginJourney] = useState<JourneySummary | null>(null);
   const [maxStates, setMaxStates] = useState('200');
@@ -104,6 +97,7 @@ function NewAuditForm({ defaults, defaultDenyLabels }: { defaults?: Settings['de
       // A journey starts where it was recorded.
       target: mode === 'journey' ? (journey?.startUrl ?? target.trim()) : target.trim(),
       mode,
+      checks,
       ...(mode === 'journey' && journey && { journey: journey.name }),
       ...(mode !== 'journey' && loginJourney && { loginJourney: loginJourney.name }),
       viewports,
@@ -368,17 +362,35 @@ function NewAuditForm({ defaults, defaultDenyLabels }: { defaults?: Settings['de
       <Card>
         <CardHeader>
           <CardTitle>Checks</CardTitle>
-          <CardDescription>More check modules arrive in Phase 4.</CardDescription>
+          <CardDescription>Starting choices come from Settings.</CardDescription>
         </CardHeader>
         <CardContent>
-          <ul className="grid gap-2">
-            {CHECKS.map((check) => (
-              <li key={check.label} className="flex items-center gap-2 text-sm">
-                <span className={check.available ? 'font-medium' : 'text-muted-foreground'}>{check.label}</span>
-                <span className="text-muted-foreground">{check.available ? '(on)' : '(not yet available)'}</span>
-              </li>
+          <fieldset className="grid gap-3 sm:grid-cols-2">
+            <legend className="sr-only">Checks to run</legend>
+            {checkList.data?.map((check) => (
+              <div key={check.id} className="flex items-start gap-2">
+                <Checkbox
+                  id={`check-${check.id}`}
+                  checked={checks.includes(check.id)}
+                  onCheckedChange={(state) => setChecks((current) => (state === true ? [...current, check.id] : current.filter((c) => c !== check.id)))}
+                  aria-describedby={`check-${check.id}-hint`}
+                  className="mt-0.5"
+                />
+                <div className="grid gap-0.5">
+                  <Label htmlFor={`check-${check.id}`}>{check.name}</Label>
+                  <span id={`check-${check.id}-hint`} className="text-sm text-muted-foreground">
+                    {check.description}
+                    {check.slow && ' Adds several seconds per page.'}
+                  </span>
+                </div>
+              </div>
             ))}
-          </ul>
+          </fieldset>
+          {checks.length === 0 && (
+            <p className="mt-2 text-sm text-destructive" role="alert">
+              Choose at least one check.
+            </p>
+          )}
         </CardContent>
       </Card>
 
@@ -394,7 +406,7 @@ function NewAuditForm({ defaults, defaultDenyLabels }: { defaults?: Settings['de
       )}
 
       <div className="flex gap-3">
-        <Button type="submit" size="lg" disabled={start.isPending || viewports.length === 0 || (mode === 'journey' && !journey)}>
+        <Button type="submit" size="lg" disabled={start.isPending || viewports.length === 0 || checks.length === 0 || (mode === 'journey' && !journey)}>
           {start.isPending ? 'Starting…' : 'Start audit'}
         </Button>
         <Button asChild variant="ghost" size="lg">

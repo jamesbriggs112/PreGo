@@ -7,6 +7,8 @@ export interface CheckContext {
   location: Location;
   /** Viewport name, e.g. `desktop` or `mobile+dark`. */
   viewport: string;
+  /** Whether the screen is touch (mobile, tablet, kiosk profiles). */
+  touch: boolean;
 }
 
 /**
@@ -33,10 +35,27 @@ export interface CheckFinding {
   html: string;
   /** Engine's explanation of why this element failed. */
   failureSummary: string | null;
+  /**
+   * The problem belongs to the whole site, not one page or component (a missing security header,
+   * colour drift): one ticket site-wide. `component` then says what it's about.
+   */
+  siteWide?: boolean;
+  /** Override the component the finding is grouped under (e.g. the broken link's address). */
+  component?: string;
+}
+
+/** A finding from a module's finish step, which runs once every location has been checked. */
+export interface LocatedFinding extends CheckFinding {
+  locationId: number;
+  viewport: string;
 }
 
 export interface CheckModule {
   id: string;
   name: string;
+  /** Run at every viewport (default), or only the first: for checks that don't depend on screen size. */
+  perViewport?: boolean;
   run(context: CheckContext): Promise<CheckFinding[]>;
+  /** Cross-location findings once everything is checked (duplicate titles, colour drift). */
+  finish?(): Promise<LocatedFinding[]>;
 }

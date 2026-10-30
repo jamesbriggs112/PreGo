@@ -6,6 +6,8 @@ import { basename, dirname, join, resolve } from 'node:path';
 import {
   CSV_PRESETS,
   DEFAULT_DENY_LABELS,
+  checkDefinitions,
+  getSettings,
   PROFILES,
   PregoDb,
   VERSION,
@@ -75,6 +77,7 @@ program
   .option('--delay <ms>', 'delay between page loads', int, 500)
   .option('--user <name>', 'basic auth username; the password is read from PREGO_PASSWORD')
   .addOption(new Option('--preset <name>', 'tickets.csv column preset').choices(Object.keys(CSV_PRESETS)).default('prego'))
+  .option('--checks <ids>', `comma-separated checks to run (default: the defaults in Settings): ${checkDefinitions().map((d) => d.id).join(', ')}`)
   .option('--no-export', 'store results without writing the export bundle')
   .option('-q, --quiet', 'only print the final summary')
   .action(async (target: string, opts) => {
@@ -104,6 +107,7 @@ program
         dataDir,
         viewports: opts.viewports,
         mode: opts.mode,
+        checks: opts.checks ? String(opts.checks).split(',').map((c: string) => c.trim()) : getSettings(db).defaults.checks,
         journey,
         loginJourney,
         maxPages: opts.maxPages,

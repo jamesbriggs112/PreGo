@@ -10,14 +10,13 @@ import { guidanceFor } from '../checks/guidance.js';
 import type { CheckFinding } from '../checks/types.js';
 import { identifyScreen } from '../explore/state.js';
 import { runStep, type Journey, type JourneyStep } from '../journeys/journey.js';
-import { crawlSite } from '../crawl/crawler.js';
+import { crawlSite, type FailedPage } from '../crawl/crawler.js';
 import { extractStructure, groupTemplates, samplePages } from '../crawl/templates.js';
 import { captureCrop, captureFullPage } from '../capture/capture.js';
 import { describeComponent } from '../tickets/component.js';
 import { buildTickets } from '../tickets/build.js';
 import { serveFolder, type StaticServer } from '../serve/static-server.js';
-import { axeModule } from '../checks/axe/axe.js';
-import { canvasModule } from '../checks/canvas/canvas.js';
+import { checkDefinitions, createChecks, defaultChecks, unknownChecks } from '../checks/registry.js';
 import type { CheckModule } from '../checks/types.js';
 import { defaultDataDir } from '../paths.js';
 import type { Location, Run } from '../types.js';
@@ -67,7 +66,9 @@ export interface AuditOptions {
   basicAuth?: BasicAuth;
   /** URLs on a key user journey; problems there get a higher priority. */
   keyJourneyUrls?: string[];
-  /** Check modules to run. Default: axe and canvas detection. */
+  /** Checks to run, by ID (see checks/registry.ts). Default: every default check except slow ones. */
+  checks?: string[];
+  /** Check module instances to run instead of `checks` (tests and custom setups). */
   modules?: CheckModule[];
   /** Maximum outlined crops per location and viewport. Default 100. */
   maxCropsPerLocation?: number;
@@ -113,6 +114,8 @@ interface Discovery {
   open: (location: Location, profile: ProfileName) => Promise<OpenedPage>;
   /** Check modules that need what discovery found (e.g. the state map). */
   modules?: CheckModule[];
+  /** Crawl only: pages that returned errors, for the broken links check. */
+  failedPages?: FailedPage[];
   summary: Record<string, unknown>;
 }
 
@@ -131,7 +134,10 @@ export async function runAudit(db: PregoDb, options: AuditOptions): Promise<Audi
   };
   const dataDir = resolve(options.dataDir ?? defaultDataDir());
   const viewports = options.viewports ?? ['desktop'];
-  const modules = options.modules ?? [axeModule(), canvasModule()];
+  const checkIds = options.checks ?? defaultChecks();
+  const unknown = unknownChecks(checkIds);
+  if (unknown.length) throw new Error(`Unknown check: ${unknown.join(', ')}`);
+  const chosen = options.modules?.map((m) => ({ id: m.id, name: m.name })) ?? checkIds.map((id) => ({ id, name: checkDefinitions().find((d) => d.id === id)!.name }));
   const delayMs = options.delayMs ?? 500;
   const mode = options.mode ?? 'crawl';
 
@@ -167,7 +173,7 @@ export async function runAudit(db: PregoDb, options: AuditOptions): Promise<Audi
       basicAuth: options.basicAuth ? { username: options.basicAuth.username } : null,
       keyJourneyUrls: options.keyJourneyUrls ?? [],
       modules: [
-        ...modules.map((m) => ({ id: m.id, name: m.name })),
+        ...chosen,
         ...(mode === 'explore' ? [{ id: 'state-map', name: 'Usability (state map)' }] : []),
         ...(mode === 'journey' ? [{ id: 'journey', name: 'Usability (journey replay)' }] : []),
       ],
@@ -193,6 +199,11 @@ export async function runAudit(db: PregoDb, options: AuditOptions): Promise<Audi
     const discovery =
       mode === 'explore' ? await discoverByExploring(context) : mode === 'journey' ? await discoverByJourney(context) : await discoverByCrawling(context);
     const { toAudit } = discovery;
+    const modules = [
+      ...(options.modules ?? createChecks(checkIds, { startUrl, failedPages: discovery.failedPages ?? [] })),
+      ...(discovery.modules ?? []),
+    ];
+    const firstViewport = viewportName(viewports[0], options.emulation);
 
     const noun = mode === 'explore' ? 'screens' : mode === 'journey' ? 'steps' : 'pages';
     emit({ type: 'phase', phase: 'audit', message: `Auditing ${toAudit.length} ${noun} at ${viewports.length} viewport(s)` });
@@ -202,7 +213,7 @@ export async function runAudit(db: PregoDb, options: AuditOptions): Promise<Audi
     await runPool(jobs, mode === 'crawl' ? (options.concurrency ?? 2) : 1, async ({ location, profile }) => {
       throwIfAborted(options.signal);
       try {
-        const result = await auditLocation(db, () => discovery.open(location, profile), run, runDir, location, [...modules, ...(discovery.modules ?? [])], options.maxCropsPerLocation ?? 100);
+        const result = await auditLocation(db, () => discovery.open(location, profile), run, runDir, location, modules, options.maxCropsPerLocation ?? 100, firstViewport);
         done++;
         emit({ type: 'location-audited', url: location.title && mode !== 'crawl' ? location.title : location.url, viewport: result.viewport, findings: result.findings, done, total: jobs.length, screenshot: result.screenshot });
       } catch (error) {
@@ -213,6 +224,15 @@ export async function runAudit(db: PregoDb, options: AuditOptions): Promise<Audi
       }
       if (delayMs > 0 && mode === 'crawl') await sleep(delayMs);
     });
+
+    // Checks that compare across locations (duplicate titles, colour drift) report now.
+    for (const module of modules) {
+      if (!module.finish) continue;
+      for (const finding of await module.finish()) {
+        const { locationId, viewport, ...rest } = finding;
+        db.addRawFinding({ ...rest, runId: run.id, locationId, viewport, crop: null, ...findingComponent(finding) });
+      }
+    }
 
     emit({ type: 'phase', phase: 'tickets', message: 'Grouping findings into tickets' });
     buildTickets(db, run.id, { keyJourneyUrls: options.keyJourneyUrls });
@@ -243,6 +263,7 @@ async function auditLocation(
   location: Location,
   modules: CheckModule[],
   maxCrops: number,
+  firstViewport: string,
 ): Promise<{ viewport: string; findings: number; screenshot: string }> {
   const opened = await open();
   try {
@@ -251,11 +272,13 @@ async function auditLocation(
     db.updateLocation(location.id, { screenshots: { ...(db.getLocation(location.id)?.screenshots ?? {}), [opened.viewport]: screenshot } });
 
     let count = 0;
+    const touch = await opened.page.evaluate(() => navigator.maxTouchPoints > 0);
     for (const module of modules) {
-      const findings = await module.run({ page: opened.page, location, viewport: opened.viewport });
+      if (module.perViewport === false && opened.viewport !== firstViewport) continue;
+      const findings = await module.run({ page: opened.page, location, viewport: opened.viewport, touch });
       for (const finding of findings) {
         count++;
-        const component = await describeComponent(opened.page, finding.selector);
+        const component = finding.siteWide || finding.component ? findingComponent(finding) : await describeComponent(opened.page, finding.selector).then((c) => ({ component: c.path, componentShared: c.shared }));
         let crop: string | null = null;
         if (count <= maxCrops) {
           const path = join('crops', `${location.id}-${safe(opened.viewport)}-${count}.png`);
@@ -267,8 +290,7 @@ async function auditLocation(
           locationId: location.id,
           viewport: opened.viewport,
           crop,
-          component: component.path,
-          componentShared: component.shared,
+          ...component,
         });
       }
     }
@@ -276,6 +298,12 @@ async function auditLocation(
   } finally {
     await opened.close();
   }
+}
+
+/** Where a finding is grouped when its module says (site-wide problems, or an explicit component). */
+function findingComponent(finding: CheckFinding): { component: string; componentShared: boolean } {
+  if (finding.siteWide) return { component: `site:${finding.component ?? finding.ruleId}`, componentShared: true };
+  return { component: finding.component ?? `selector:${finding.selector}`, componentShared: false };
 }
 
 interface DiscoveryContext {
@@ -352,6 +380,7 @@ async function discoverByCrawling({ db, run, options, startUrl, storageStatePath
 
   return {
     toAudit,
+    failedPages: crawl.failed,
     open: async (location, profile) => {
       const opened = await browser.newPage(profile, options.emulation);
       try {

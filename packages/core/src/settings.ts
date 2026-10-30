@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import type { PregoDb } from './db/database.js';
 import type { ReportBranding } from './export/docx.js';
 import type { ProfileName } from './browser/profiles.js';
+import { checkDefinitions } from './checks/registry.js';
 
 export interface PregoSettings {
   branding: {
@@ -18,12 +19,22 @@ export interface PregoSettings {
     delayMs: number;
     respectRobots: boolean;
     csvPreset: string;
+    /** Checks ticked on the New audit form and run by the CLI. */
+    checks: string[];
   };
 }
 
 export const DEFAULT_SETTINGS: PregoSettings = {
   branding: { companyName: 'Four', accentColour: '1F3A5F' },
-  defaults: { viewports: ['desktop'], perTemplate: 3, concurrency: 2, delayMs: 500, respectRobots: true, csvPreset: 'prego' },
+  defaults: {
+    viewports: ['desktop'],
+    perTemplate: 3,
+    concurrency: 2,
+    delayMs: 500,
+    respectRobots: true,
+    csvPreset: 'prego',
+    checks: checkDefinitions().filter((d) => d.defaultOn).map((d) => d.id),
+  },
 };
 
 export function getSettings(db: PregoDb): PregoSettings {

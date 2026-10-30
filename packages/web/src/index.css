@@ -1,27 +1,44 @@
 @import 'tailwindcss';
 
-/* shadcn/ui-style design tokens. Colours meet WCAG AA contrast against their backgrounds. */
+/*
+ * Prego brand. An indigo ramp for the brand and data, violet and amber accents, a cool off-white page
+ * and soft white cards. Text colours meet WCAG AA against the surfaces they sit on.
+ */
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.2 0.02 255);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.2 0.02 255);
-  --muted: oklch(0.965 0.006 255);
-  --muted-foreground: oklch(0.45 0.02 255);
-  --primary: oklch(0.33 0.07 255);
-  --primary-foreground: oklch(0.99 0 0);
-  --secondary: oklch(0.95 0.01 255);
-  --secondary-foreground: oklch(0.25 0.03 255);
-  --accent: oklch(0.95 0.015 255);
-  --accent-foreground: oklch(0.25 0.03 255);
-  --destructive: oklch(0.5 0.2 27);
-  --destructive-foreground: oklch(0.99 0 0);
-  --success: oklch(0.45 0.12 150);
-  --warning: oklch(0.5 0.13 70);
-  --border: oklch(0.88 0.01 255);
-  --input: oklch(0.7 0.015 255);
-  --ring: oklch(0.45 0.15 255);
-  --radius: 0.5rem;
+  --brand-50: #f0f1ff;
+  --brand-100: #e3e5ff;
+  --brand-200: #c9ccfe;
+  --brand-300: #a7acfb;
+  --brand-400: #8288f6;
+  --brand-500: #5b5bf0;
+  --brand-600: #4a44d8;
+  --brand-700: #3b35b0;
+  --brand-800: #2e2a88;
+  --brand-900: #1f1d57;
+  --violet-500: #8b5cf6;
+  --amber-400: #ffc94d;
+  --critical-500: #d92d4a;
+
+  --background: #f4f5fa;
+  --foreground: #1b1f3b;
+  --card: #ffffff;
+  --card-foreground: #1b1f3b;
+  --muted: #f3f4f9;
+  --muted-foreground: #5b6178;
+  --primary: var(--brand-600);
+  --primary-foreground: #ffffff;
+  --secondary: var(--brand-50);
+  --secondary-foreground: var(--brand-800);
+  --accent: var(--brand-50);
+  --accent-foreground: var(--brand-800);
+  --destructive: #c4233f;
+  --destructive-foreground: #ffffff;
+  --success: #0f7a62;
+  --warning: #8a5a00;
+  --border: #e4e6f0;
+  --input: #c9cddd;
+  --ring: var(--brand-500);
+  --radius: 0.875rem;
 }
 
 @theme inline {
@@ -44,10 +61,11 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: calc(var(--radius) - 6px);
+  --radius-md: calc(var(--radius) - 4px);
   --radius-lg: var(--radius);
-  --font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-sans: 'SF Pro Text', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --shadow-card: 0 1px 2px rgb(27 31 59 / 0.04), 0 4px 16px rgb(27 31 59 / 0.04);
 }
 
 @layer base {
@@ -55,7 +73,12 @@
     @apply border-border;
   }
   body {
-    @apply bg-muted text-foreground antialiased;
+    @apply bg-background text-foreground antialiased;
+  }
+  h1,
+  h2,
+  h3 {
+    letter-spacing: -0.015em;
   }
   :focus-visible {
     @apply outline-2 outline-offset-2 outline-ring;

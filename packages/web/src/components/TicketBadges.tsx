@@ -8,6 +8,6 @@ export function SeverityBadge({ severity }: { severity: Severity }) {
 }
 
 export function StatusBadge({ status }: { status: TicketStatus }) {
-  const variant = status === 'Dismissed' ? 'secondary' : status === 'New' ? 'default' : 'outline';
+  const variant = status === 'Dismissed' ? 'secondary' : status === 'New' ? 'brand' : 'outline';
   return <Badge variant={variant}>{status}</Badge>;
 }

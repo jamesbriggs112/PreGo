@@ -8,7 +8,7 @@ export function NotFoundPage() {
       <h1 className="text-2xl font-bold">Page not found</h1>
       <p>
         <Link to="/" className="text-primary underline">
-          Go to projects
+          Go to the dashboard
         </Link>
       </p>
     </div>

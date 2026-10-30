@@ -32,10 +32,21 @@ afterAll(async () => {
   await journeySite?.close();
 });
 
+describe('Dashboard', () => {
+  it('welcomes a new user with a way to start, and has no axe violations', async () => {
+    const { page } = gui;
+    await page.goto(gui.url);
+    await expect(page.title()).resolves.toBe('Dashboard · Prego');
+    await page.getByRole('heading', { name: 'Run your first audit' }).waitFor();
+    await expect(page.getByRole('link', { name: 'Start an audit' }).getAttribute('href')).resolves.toBe('/audits/new');
+    expect(await axeViolations(page)).toEqual([]);
+  });
+});
+
 describe('Projects screen', () => {
   it('starts empty and lets you add a project', async () => {
     const { page } = gui;
-    await page.goto(gui.url);
+    await page.goto(`${gui.url}projects`);
     await expect(page.title()).resolves.toBe('Projects · Prego');
     await page.getByText('No projects yet').waitFor();
     await page.getByLabel('Project name').fill('Acme Widgets');
@@ -190,6 +201,23 @@ describe('Results and ticket triage', () => {
     expect(csv).not.toContain(`"${ticketsOf('color-contrast').find((t) => t.status === 'Dismissed')!.ticketId}"`);
     expect(csv).not.toContain(`"${drop}"`);
     expect(csv).toContain(`"${keep}"`);
+  });
+});
+
+describe('Dashboard with audits', () => {
+  it('shows the latest audit, totals, issues by category, top issues and history', async () => {
+    const { page } = gui;
+    await page.goto(gui.url);
+    await page.getByText('Latest audit').waitFor();
+    await page.getByRole('img', { name: /^Accessibility score: \d+ out of 100$/ }).waitFor();
+    await page.getByRole('table', { name: 'Open tickets by category and severity' }).waitFor();
+    const top = page.getByRole('heading', { name: 'Fix these first' }).locator('../..').getByRole('link');
+    await expect.poll(() => top.count()).toBeGreaterThan(0);
+    await page.getByRole('list', { name: 'Open tickets per audit' }).waitFor();
+    expect(await axeViolations(page)).toEqual([]);
+    // Top issues open their ticket.
+    await top.first().click();
+    await page.waitForURL(/\/runs\/\d+\/tickets\/PRG-/);
   });
 });
 

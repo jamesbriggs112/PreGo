@@ -13,6 +13,7 @@ import { securityModule } from './security/security.js';
 import { markupModule } from './markup/markup.js';
 import { brokenLinksModule } from './links/links.js';
 import { ibmModule } from './ibm/ibm.js';
+import { goLiveModule } from './golive/golive.js';
 
 /** Everything a check factory may need from the audit. */
 export interface CheckFactoryContext {
@@ -112,6 +113,15 @@ const definitions: CheckDefinition[] = [
     defaultOn: true,
     cost: { seconds: [0, 0.01], perPage: true },
     create: (context) => brokenLinksModule(context.failedPages),
+  },
+  {
+    id: 'golive',
+    name: 'Go-live mistakes',
+    description: 'Staging leftovers (noindex, robots.txt blocking everything, links to staging addresses), placeholder text, missing pages that don’t return 404, and a missing sitemap, favicon or analytics.',
+    categories: ['TECH', 'CONT'],
+    defaultOn: true,
+    cost: { seconds: [0.05, 0.2], perPage: true },
+    create: () => goLiveModule(),
   },
   {
     id: 'ibm',

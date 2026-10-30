@@ -640,6 +640,13 @@ const PREGO: Record<string, RuleGuidance> = {
     recommendation: 'Check each service is needed and covered by the privacy notice. Host fonts and scripts on the site’s own server where you can.',
     effort: 'Small',
   },
+  spelling: {
+    title: 'Possible spelling mistake',
+    description: 'A word isn’t in the British English dictionary. It may be a typo, an American spelling, or a name or term the dictionary doesn’t know.',
+    whyItMatters: 'Spelling mistakes make the site look careless and can undermine trust, especially on key pages.',
+    recommendation: 'Correct the word if it’s a mistake. If it’s a name or a term you use on purpose, mark this ticket as a false positive and Prego won’t raise it again.',
+    effort: 'Small',
+  },
   'no-analytics': {
     title: 'No analytics found',
     description: 'None of the common analytics scripts were found on the pages audited.',
@@ -672,8 +679,8 @@ export function guidanceWithFallback(
   fallback: { title: string; description: string; helpUrl: string | null },
 ): RuleGuidance {
   const guidance = guidanceFor(engine, ruleId);
-  // Each outdated library gets its own ticket, so its title names the library and version.
-  if (guidance && engine === 'retire.js') return { ...guidance, title: fallback.title };
+  // Each outdated library and misspelt word gets its own ticket, so the title names it.
+  if (guidance && (engine === 'retire.js' || ruleId === 'spelling')) return { ...guidance, title: fallback.title };
   return (
     guidance ?? {
       title: fallback.title,

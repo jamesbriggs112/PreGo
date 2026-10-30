@@ -16,6 +16,7 @@ import { ibmModule } from './ibm/ibm.js';
 import { goLiveModule } from './golive/golive.js';
 import { librariesModule } from './libraries/libraries.js';
 import { privacyModule } from './privacy/privacy.js';
+import { spellingModule } from './spelling/spelling.js';
 
 /** Everything a check factory may need from the audit. */
 export interface CheckFactoryContext {
@@ -78,6 +79,15 @@ const definitions: CheckDefinition[] = [
     defaultOn: true,
     cost: { seconds: [0.05, 0.15], perPage: true },
     create: () => contentModule(),
+  },
+  {
+    id: 'spelling',
+    name: 'Spelling (British English)',
+    description: 'Words in the main content that aren’t in the British English dictionary, with suggestions. Names, acronyms and codes are skipped; dismiss a word once and it stays quiet.',
+    categories: ['CONT'],
+    defaultOn: true,
+    cost: { seconds: [0.05, 0.3], perPage: true },
+    create: () => spellingModule(),
   },
   {
     id: 'lighthouse',

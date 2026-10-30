@@ -18,6 +18,56 @@ npm install
 
 `npm install` also downloads Playwright's Chromium (about 100 MB).
 
+## Running an audit (command line)
+
+The GUI arrives in Phase 2. Until then, use the CLI:
+
+```bash
+npm run prego -- audit https://example.org --project "Example" --viewports desktop,mobile
+```
+
+Prego crawls the site, audits up to 3 pages per template at each viewport, groups findings into
+tickets and writes an export folder to `data/exports/{project}-{date}/`:
+
+| File | What it is |
+|---|---|
+| `report.docx` | Readable audit report for clients and stakeholders |
+| `tickets.csv` | One row per ticket, ready to import into a ticketing tool |
+| `occurrences.csv` | Every individual instance of every ticket |
+| `screenshots/` | Outlined crops, named after their ticket (`PRG-A11Y-003_01.png`) |
+| `run.json` | Raw run data |
+
+Every ticket ID in the report matches a row in `tickets.csv`.
+
+Useful options (see `npm run prego -- audit --help` for all of them):
+
+| Option | Default | |
+|---|---|---|
+| `--viewports` | `desktop` | `mobile`, `tablet`, `desktop`, `kiosk-landscape`, `kiosk-portrait` |
+| `--max-pages`, `--max-depth`, `--time-budget` | 100, 10, none | Crawl limits |
+| `--include`, `--exclude` | | Glob patterns, e.g. `--exclude "/blog/**"` |
+| `--per-template`, `--all` | 3 | Pages audited per template, or every page |
+| `--concurrency`, `--delay` | 2, 500ms | Keep these gentle on live sites |
+| `--ignore-robots` | off | Only for staging sites you own |
+| `--user` | | Basic auth username; the password comes from `PREGO_PASSWORD` |
+| `--preset` | `prego` | `tickets.csv` columns for `jira`, `linear` or `trello` |
+
+A local folder works as a target too: `npm run prego -- audit ./build`.
+
+Other commands:
+
+```bash
+npm run prego -- runs
+```
+
+```bash
+npm run prego -- export 3 --preset jira
+```
+
+```bash
+npm run prego -- verify data/exports/example-2026-10-30-0907
+```
+
 ## Scripts
 
 | Command | What it does |
@@ -27,6 +77,7 @@ npm install
 | `npm run typecheck` | Type-checks every package |
 | `npm run build` | Compiles packages to `dist/` |
 | `npm run prego -- <command>` | Runs the CLI from source |
+| `npm run fixtures` | Serves the test fixtures for a browser |
 
 ## Layout
 

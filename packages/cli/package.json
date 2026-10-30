@@ -9,6 +9,7 @@
     "prego": "dist/cli.js"
   },
   "dependencies": {
-    "@prego/core": "2.0.0-alpha.0"
+    "@prego/core": "2.0.0-alpha.0",
+    "commander": "^15.0.0"
   }
 }

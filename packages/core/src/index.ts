@@ -18,3 +18,5 @@ export { describeComponent, componentLabel, type ComponentInfo } from './tickets
 export { buildExportPlan, FINDINGS_SECTION, type ExportPlan, type PlannedTicket, type PlannedOccurrence, type ReportSectionPlan } from './export/plan.js';
 export { ticketsCsv, occurrencesCsv, writeCsvFiles, CSV_PRESETS, TICKET_COLUMNS, OCCURRENCE_COLUMNS, type CsvPreset } from './export/csv.js';
 export { reportDocx, writeReportDocx, categoryScore, type ReportBranding } from './export/docx.js';
+export { exportRun, type ExportOptions, type ExportResult } from './export/bundle.js';
+export { verifyExport, type VerifyResult } from './export/verify.js';

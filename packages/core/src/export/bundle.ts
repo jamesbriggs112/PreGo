@@ -3,7 +3,8 @@ import { join, resolve } from 'node:path';
 import type { PregoDb } from '../db/database.js';
 import { runDirectory } from '../audit/run-audit.js';
 import { defaultDataDir } from '../paths.js';
-import { buildExportPlan, type ExportPlan } from './plan.js';
+import { buildExportPlan, stateMapStates, type ExportPlan } from './plan.js';
+import { stateMapPng } from './state-map-image.js';
 import { writeCsvFiles } from './csv.js';
 import { writeReportDocx, type ReportBranding } from './docx.js';
 import { getSettings, reportBranding } from '../settings.js';
@@ -47,7 +48,13 @@ export async function exportRun(db: PregoDb, runId: number, options: ExportOptio
   for (const [name, source] of plan.screenshots) copyFileSync(join(runDir, source), join(files.screenshots, name));
   const preset = options.preset ?? getSettings(db).defaults.csvPreset;
   writeCsvFiles(plan, files, preset);
-  await writeReportDocx(plan, runDir, files.report, options.branding ?? reportBranding(db, dataDir));
+  // Interactive audits get a state map diagram, in the report and as its own file.
+  let stateMap: Buffer | undefined;
+  if (plan.run.mode === 'explore') {
+    stateMap = await stateMapPng(stateMapStates(plan), plan.edges.map((e) => ({ from: e.fromLocationId, to: e.toLocationId, label: e.step.label, outcome: e.outcome })));
+    writeFileSync(join(dir, 'state-map.png'), stateMap);
+  }
+  await writeReportDocx(plan, runDir, files.report, options.branding ?? reportBranding(db, dataDir), { stateMap });
   writeFileSync(
     files.runJson,
     JSON.stringify(

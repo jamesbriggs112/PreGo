@@ -22,6 +22,11 @@
       "types": "./dist/browser/profiles.d.ts",
       "development": "./src/browser/profiles.ts",
       "default": "./dist/browser/profiles.js"
+    },
+    "./layout": {
+      "types": "./dist/explore/layout.d.ts",
+      "development": "./src/explore/layout.ts",
+      "default": "./dist/explore/layout.js"
     }
   },
   "dependencies": {

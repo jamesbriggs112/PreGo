@@ -4,7 +4,8 @@ import type { PregoDb } from '../db/database.js';
 import { BrowserSession, sessionPath, type BasicAuth, type OpenedPage } from '../browser/session.js';
 import { exploreApp, openScreen } from '../explore/explorer.js';
 import { createSafety, DEFAULT_DENY_LABELS, type DummyData } from '../explore/safety.js';
-import type { Emulation, ProfileName } from '../browser/profiles.js';
+import { viewportName, type Emulation, type ProfileName } from '../browser/profiles.js';
+import { stateMapModule } from '../checks/state-map/state-map.js';
 import { crawlSite } from '../crawl/crawler.js';
 import { extractStructure, groupTemplates, samplePages } from '../crawl/templates.js';
 import { captureCrop, captureFullPage } from '../capture/capture.js';
@@ -38,6 +39,8 @@ export interface AuditOptions {
   denyLabels?: string[];
   /** Explore: CSS selectors never pressed. */
   denySelectors?: string[];
+  /** Explore: screens more than this many taps from the start are flagged. Default 4. */
+  maxTaps?: number;
   /** Explore: values typed into form fields. Default: config/dummy-data.json values. */
   dummyData?: DummyData;
   timeBudgetMs?: number;
@@ -70,7 +73,7 @@ export type AuditEvent =
   | { type: 'started'; runId: number; projectId: number }
   | { type: 'phase'; phase: 'crawl' | 'group' | 'explore' | 'audit' | 'tickets' | 'done'; message: string }
   | { type: 'page-found'; url: string; count: number }
-  | { type: 'state-found'; stateId: string; title: string; depth: number; count: number }
+  | { type: 'state-found'; stateId: string; title: string; depth: number; count: number; fromStateId: string | null; action: string | null }
   | {
       type: 'location-audited';
       url: string;
@@ -98,6 +101,8 @@ export function runDirectory(dataDir: string, runId: number): string {
 interface Discovery {
   toAudit: Location[];
   open: (location: Location, profile: ProfileName) => Promise<OpenedPage>;
+  /** Check modules that need what discovery found (e.g. the state map). */
+  modules?: CheckModule[];
   summary: Record<string, unknown>;
 }
 
@@ -151,7 +156,8 @@ export async function runAudit(db: PregoDb, options: AuditOptions): Promise<Audi
       auditAll: options.auditAll ?? false,
       basicAuth: options.basicAuth ? { username: options.basicAuth.username } : null,
       keyJourneyUrls: options.keyJourneyUrls ?? [],
-      modules: modules.map((m) => ({ id: m.id, name: m.name })),
+      modules: [...modules.map((m) => ({ id: m.id, name: m.name })), ...(mode === 'explore' ? [{ id: 'state-map', name: 'Usability (state map)' }] : [])],
+      maxTaps: options.maxTaps ?? 4,
     },
   });
   emit({ type: 'started', runId: run.id, projectId: project.id });
@@ -175,7 +181,7 @@ export async function runAudit(db: PregoDb, options: AuditOptions): Promise<Audi
     await runPool(jobs, mode === 'explore' ? 1 : (options.concurrency ?? 2), async ({ location, profile }) => {
       throwIfAborted(options.signal);
       try {
-        const result = await auditLocation(db, () => discovery.open(location, profile), run, runDir, location, modules, options.maxCropsPerLocation ?? 100);
+        const result = await auditLocation(db, () => discovery.open(location, profile), run, runDir, location, [...modules, ...(discovery.modules ?? [])], options.maxCropsPerLocation ?? 100);
         done++;
         emit({ type: 'location-audited', url: location.title && mode === 'explore' ? location.title : location.url, viewport: result.viewport, findings: result.findings, done, total: jobs.length, screenshot: result.screenshot });
       } catch (error) {
@@ -367,7 +373,8 @@ async function discoverByExploring({ db, run, options, startUrl, browser, viewpo
     timeBudgetMs: options.timeBudgetMs,
     maskSelectors: options.maskSelectors,
     signal: options.signal,
-    onState: (state, count) => emit({ type: 'state-found', stateId: state.id, title: state.title, depth: state.depth, count }),
+    onState: (state, count, from) =>
+      emit({ type: 'state-found', stateId: state.id, title: state.title, depth: state.depth, count, fromStateId: from?.id ?? null, action: state.steps.at(-1)?.label ?? null }),
   });
   throwIfAborted(options.signal);
 
@@ -404,9 +411,14 @@ async function discoverByExploring({ db, run, options, startUrl, browser, viewpo
     }
   });
 
+  const map = stateMapModule(
+    { locations: db.getLocations(run.id), edges: db.getEdges(run.id) },
+    { maxTaps: options.maxTaps, viewport: viewportName(viewports[0], options.emulation) },
+  );
   return {
     toAudit: [...locationByState.values()],
     open: async (location, profile) => (await openScreen(explore, location.steps ?? [], profile)).opened,
+    modules: [map],
     summary: {
       statesFound: result.states.length,
       statesAudited: result.states.length,

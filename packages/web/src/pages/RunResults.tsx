@@ -75,9 +75,16 @@ export function RunResults({ run }: { run: RunDetail }) {
             <span className="break-all">{run.target}</span> · {formatDateTime(run.startedAt)} <RunStatusBadge status={run.status} />
           </p>
         </div>
-        <Button asChild>
-          <Link to={`/runs/${run.id}/export`}>Export report and tickets</Link>
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          {run.mode === 'explore' && (
+            <Button asChild variant="outline">
+              <Link to={`/runs/${run.id}/map`}>State map</Link>
+            </Button>
+          )}
+          <Button asChild>
+            <Link to={`/runs/${run.id}/export`}>Export report and tickets</Link>
+          </Button>
+        </div>
       </div>
 
       <section aria-labelledby="summary-heading" className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -96,8 +103,14 @@ export function RunResults({ run }: { run: RunDetail }) {
           </Card>
         ))}
         <Stat label="Open tickets" value={all.filter((t) => t.status !== 'Dismissed').length} />
-        <Stat label="Pages audited" value={`${s.pagesAudited} of ${s.pagesFound}`} />
-        <Stat label="Broken links" value={s.brokenLinks ?? 0} />
+        {run.mode === 'explore' ? (
+          <Stat label="Screens audited" value={s.statesAudited ?? 0} />
+        ) : (
+          <>
+            <Stat label="Pages audited" value={`${s.pagesAudited} of ${s.pagesFound}`} />
+            <Stat label="Broken links" value={s.brokenLinks ?? 0} />
+          </>
+        )}
       </section>
 
       <Card>
@@ -130,8 +143,8 @@ export function RunResults({ run }: { run: RunDetail }) {
                 </option>
               ))}
             </FilterSelect>
-            <FilterSelect id="filter-page" label="Page" value={filters.page} onChange={(v) => setFilter('page', v)}>
-              <option value="">All pages</option>
+            <FilterSelect id="filter-page" label={run.mode === 'explore' ? 'Screen' : 'Page'} value={filters.page} onChange={(v) => setFilter('page', v)}>
+              <option value="">{run.mode === 'explore' ? 'All screens' : 'All pages'}</option>
               {pages.map((p) => (
                 <option key={p} value={p}>
                   {p}
@@ -187,7 +200,7 @@ export function RunResults({ run }: { run: RunDetail }) {
                     Occurrences
                   </TableHead>
                   <TableHead scope="col" className="text-right">
-                    Pages
+                    {run.mode === 'explore' ? 'Screens' : 'Pages'}
                   </TableHead>
                 </TableRow>
               </TableHeader>

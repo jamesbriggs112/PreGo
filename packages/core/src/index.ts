@@ -29,3 +29,7 @@ export { discoverActions, type Action, type ActionKind } from './explore/actions
 export { exploreApp, openScreen, perform, settle, type ExploreOptions, type ExploreResult, type ExploredState, type ExploreEdge } from './explore/explorer.js';
 export { identifyScreen, type ScreenIdentity } from './explore/state.js';
 export { createSafety, loadDummyData, valueFor, DEFAULT_DENY_LABELS, DEFAULT_DUMMY_DATA, type Safety, type SafetyOptions, type DummyData } from './explore/safety.js';
+export { stateMapModule, analyseStateMap, type StateMapGraph, type StateMapOptions } from './checks/state-map/state-map.js';
+export * from './explore/layout.js';
+export { stateMapPng, stateMapSvg, type ImageState } from './export/state-map-image.js';
+export { stateMapStates } from './export/plan.js';

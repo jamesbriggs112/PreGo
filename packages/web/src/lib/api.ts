@@ -20,13 +20,16 @@ export interface RunDetail extends RunSummary {
 }
 
 export interface ApiTicket extends Ticket {
-  /** Pages (URLs) the ticket's occurrences are on. */
+  /** Pages (URLs, or "Screen: title" for interactives) the ticket's occurrences are on. */
   pages: string[];
+  locationIds: number[];
 }
 
 export interface TicketOccurrence {
   id: number;
   url: string;
+  /** Screen title, for interactive audits. */
+  screen: string | null;
   viewport: string;
   selector: string;
   html: string;
@@ -45,6 +48,19 @@ export interface TicketChanges {
   priority?: Priority | null;
   auditorNotes?: string | null;
   dismissed?: boolean;
+}
+
+export interface StateMapData {
+  states: {
+    id: number;
+    stateId: string;
+    title: string;
+    depth: number;
+    steps: { key: string; label: string }[];
+    screenshot: string | null;
+    tickets: { ticketId: string; title: string; severity: Severity; category: string }[];
+  }[];
+  edges: { from: number; to: number | null; label: string; outcome: string; reason: string | null }[];
 }
 
 export interface ExportSummary {
@@ -66,6 +82,11 @@ export interface Settings {
 export interface StartRunBody {
   project: string;
   target: string;
+  mode?: 'crawl' | 'explore';
+  maxStates?: number;
+  maskSelectors?: string[];
+  denyLabels?: string[];
+  denySelectors?: string[];
   viewports?: string[];
   emulation?: { reducedMotion?: boolean; forcedColors?: boolean; darkMode?: boolean; zoom200?: boolean };
   maxPages?: number;
@@ -117,10 +138,11 @@ export const api = {
   updateTicket: (runId: number, ticketId: string, changes: TicketChanges) =>
     request<Ticket>(`/api/runs/${runId}/tickets/${encodeURIComponent(ticketId)}`, { method: 'PATCH', body: JSON.stringify(changes) }),
   mergeTickets: (runId: number, into: string, from: string[]) => post<Ticket>(`/api/runs/${runId}/tickets/merge`, { into, from }),
+  stateMap: (runId: number) => request<StateMapData>(`/api/runs/${runId}/state-map`),
   exports: (runId: number) => request<ExportSummary[]>(`/api/runs/${runId}/exports`),
   createExport: (runId: number, preset: string) => post<ExportSummary>(`/api/runs/${runId}/exports`, { preset }),
   reportPreview: (runId: number) => request<{ html: string }>(`/api/runs/${runId}/report-preview`),
-  settings: () => request<Settings & { hasLogo: boolean }>('/api/settings'),
+  settings: () => request<Settings & { hasLogo: boolean; exploreDefaults: { denyLabels: string[] } }>('/api/settings'),
   saveSettings: (settings: Settings) => request<Settings & { hasLogo: boolean }>('/api/settings', { method: 'PUT', body: JSON.stringify(settings) }),
   uploadLogo: (png: string) => request<{ hasLogo: boolean }>('/api/settings/logo', { method: 'PUT', body: JSON.stringify({ png }) }),
   removeLogo: () => request<{ hasLogo: boolean }>('/api/settings/logo', { method: 'DELETE' }),

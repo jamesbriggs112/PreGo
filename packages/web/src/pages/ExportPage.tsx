@@ -16,6 +16,7 @@ const FILE_LABELS: Record<string, string> = {
   'tickets.csv': 'Tickets (CSV)',
   'occurrences.csv': 'Occurrences (CSV)',
   'run.json': 'Raw data (JSON)',
+  'state-map.png': 'State map (PNG)',
 };
 
 export function ExportPage() {

@@ -18,9 +18,9 @@ import {
 } from 'docx';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { ExportPlan, PlannedTicket, ReportSectionPlan } from './plan.js';
 import { CATEGORIES, CATEGORY_NAMES, SEVERITIES, type Severity } from '../types.js';
 import { checkedCategories } from '../checks/categories.js';
+import { stateMapStates, type ExportPlan, type PlannedTicket, type ReportSectionPlan } from './plan.js';
 
 export interface ReportBranding {
   /** Company shown on the cover and in the footer. */
@@ -45,14 +45,19 @@ export function categoryScore(severities: Severity[]): number {
 const MAX_IMAGE_WIDTH = 600;
 const MAX_IMAGE_HEIGHT = 420;
 
-export async function reportDocx(plan: ExportPlan, runDir: string, branding: ReportBranding = {}): Promise<Buffer> {
+export interface ReportExtras {
+  /** State map diagram (PNG) for interactive audits. */
+  stateMap?: Buffer;
+}
+
+export async function reportDocx(plan: ExportPlan, runDir: string, branding: ReportBranding = {}, extras: ReportExtras = {}): Promise<Buffer> {
   const brand = { ...DEFAULT_BRANDING, ...branding };
   const children = [
     ...cover(plan, brand),
     ...executiveSummary(plan),
     ...scopeAndMethod(plan),
     ...findings(plan, runDir),
-    ...siteMap(plan),
+    ...(plan.run.mode === 'explore' ? stateMapSection(plan, extras.stateMap) : siteMap(plan)),
     ...comparison(plan),
     ...limitations(plan),
     ...appendix(plan),
@@ -89,8 +94,8 @@ export async function reportDocx(plan: ExportPlan, runDir: string, branding: Rep
   return Packer.toBuffer(doc);
 }
 
-export async function writeReportDocx(plan: ExportPlan, runDir: string, path: string, branding: ReportBranding = {}) {
-  writeFileSync(path, await reportDocx(plan, runDir, branding));
+export async function writeReportDocx(plan: ExportPlan, runDir: string, path: string, branding: ReportBranding = {}, extras: ReportExtras = {}) {
+  writeFileSync(path, await reportDocx(plan, runDir, branding, extras));
 }
 
 // Sections
@@ -119,7 +124,7 @@ function executiveSummary(plan: ExportPlan): (Paragraph | Table)[] {
   const out: (Paragraph | Table)[] = [
     heading('2. Executive summary', HeadingLevel.HEADING_1),
     para(
-      `Automated checks found ${plan.tickets.length} distinct ${plural(plan.tickets.length, 'issue')} across ${auditedCount(plan)} audited ${plural(auditedCount(plan), 'page')}. ` +
+      `Automated checks found ${plan.tickets.length} distinct ${plural(plan.tickets.length, 'issue')} across ${auditedCount(plan)} audited ${plural(auditedCount(plan), plan.run.mode === 'explore' ? 'screen' : 'page')}. ` +
         'Each issue has a ticket ID (for example PRG-A11Y-001) that matches a row in tickets.csv, so the development team can pick it up directly.',
     ),
     heading('Scores by category', HeadingLevel.HEADING_2),
@@ -161,6 +166,33 @@ function scopeAndMethod(plan: ExportPlan): (Paragraph | Table)[] {
   const templates = new Set(pages.map((l) => l.templateKey));
   const notAudited = pages.filter((l) => !l.audited);
   const modules = (s.modules as { name: string }[] | undefined)?.map((m) => m.name) ?? [];
+  if (plan.run.mode === 'explore') {
+    const states = plan.locations.filter((l) => l.kind === 'state');
+    const skipped = plan.edges.filter((e) => e.outcome === 'skipped' || e.outcome === 'external');
+    return [
+      heading('3. Scope and method', HeadingLevel.HEADING_1),
+      para(scopeSentence(plan) + '.'),
+      para(
+        'Prego opened the interactive and pressed every control on every screen it found, breadth-first from the start screen, recording where each one led. ' +
+          'Timers were frozen so idle resets and attract loops could not interrupt it, form fields received dummy data only, and controls that could cause real effects (such as sending, buying or deleting) were never pressed.',
+      ),
+      table(
+        ['', ''],
+        [
+          ['Start address', productName(plan)],
+          ['Exploration mode', 'Interactive exploration (every control, breadth-first)'],
+          ['Viewports', ((s.viewports as string[]) ?? []).join(', ')],
+          ['Screens found and audited', String(states.length)],
+          ['Deepest screen', `${Math.max(0, ...states.map((l) => l.depth))} taps from the start`],
+          ['Actions tried', String(plan.edges.length)],
+          ['Not pressed, for safety', skipped.length ? skipped.map((e) => `“${e.step.label}”`).join(', ') : 'None'],
+          ['Checks run', modules.join('; ') || 'None'],
+          ['Tools', 'Prego with Playwright (Chromium) and axe-core. All open source; nothing left this machine.'],
+        ],
+        { headerRow: false },
+      ),
+    ];
+  }
   return [
     heading('3. Scope and method', HeadingLevel.HEADING_1),
     para(scopeSentence(plan) + '.'),
@@ -230,6 +262,24 @@ function findingsSection(section: ReportSectionPlan, runDir: string): (Paragraph
   return out;
 }
 
+function stateMapSection(plan: ExportPlan, image: Buffer | undefined): (Paragraph | Table)[] {
+  const states = stateMapStates(plan);
+  const out: (Paragraph | Table)[] = [
+    heading('5. State map summary', HeadingLevel.HEADING_1),
+    para('Every screen Prego reached, arranged by how many taps it is from the start screen. Screens with a thick red border are dead ends or have a control that does nothing. The full diagram is also in state-map.png.'),
+  ];
+  const picture = image && pngImage(image, MAX_IMAGE_WIDTH, 600, `State map of ${states.length} screens`);
+  if (picture) out.push(new Paragraph({ spacing: { after: 200 }, children: [picture] }));
+  out.push(
+    table(
+      ['Screen', 'Taps from start', 'Issues'],
+      [...states].sort((a, b) => a.depth - b.depth || a.id - b.id).map((s) => [s.title, String(s.depth), String(s.issues)]),
+      { fontSize: 18 },
+    ),
+  );
+  return out;
+}
+
 function siteMap(plan: ExportPlan): (Paragraph | Table)[] {
   const rows = plan.locations.map((l) => [
     l.url,
@@ -264,7 +314,9 @@ function limitations(plan: ExportPlan): Paragraph[] {
   const items = [
     'Automated tools find only a portion of accessibility problems. Many WCAG criteria need human judgement, such as whether alt text is meaningful, whether instructions make sense, or whether the reading order is logical.',
     'This report records what automated checks found. It does not show that the product meets WCAG or any other standard, and should support manual testing, not replace it.',
-    'Only pages Prego could reach by following links and the sitemap were checked. Pages behind forms, searches or logins that were not configured were not visited.',
+    plan.run.mode === 'explore'
+      ? 'Only screens Prego could reach by pressing controls were checked. Screens that need specific input (a correct quiz answer, a search term), gestures such as swiping or pinching, or one of the controls Prego never presses (see section 3) were not explored.'
+      : 'Only pages Prego could reach by following links and the sitemap were checked. Pages behind forms, searches or logins that were not configured were not visited.',
     notAudited > 0
       ? `${notAudited} ${plural(notAudited, 'page')} shared a template with pages already audited and were not checked individually. Content-specific problems on those pages may be missed.`
       : '',
@@ -330,6 +382,11 @@ function auditedCount(plan: ExportPlan): number {
 
 function scopeSentence(plan: ExportPlan): string {
   const s = plan.run.settings as Record<string, unknown>;
+  const viewports = `${((s.viewports as string[]) ?? []).join(', ')} ${plural(((s.viewports as string[]) ?? []).length, 'viewport')}`;
+  if (plan.run.mode === 'explore') {
+    const screens = plan.locations.filter((l) => l.kind === 'state').length;
+    return `Interactive exploration of ${productName(plan)}: ${screens} ${plural(screens, 'screen')} found and audited at ${viewports}`;
+  }
   const found = plan.locations.filter((l) => l.statusCode !== null && l.statusCode < 400).length;
   return `Site crawl of ${productName(plan)}: ${found} ${plural(found, 'page')} found, ${auditedCount(plan)} audited at ${((s.viewports as string[]) ?? []).join(', ')} ${plural(((s.viewports as string[]) ?? []).length, 'viewport')}`;
 }

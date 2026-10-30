@@ -240,11 +240,44 @@ const AXE: Record<string, RuleGuidance> = {
   },
 };
 
+/** Prego's own rules (state map, canvas detection). */
+const PREGO: Record<string, RuleGuidance> = {
+  'dead-end': {
+    title: 'Screen has no way back or home',
+    description: 'Once a visitor reaches this screen, nothing on it takes them anywhere else.',
+    whyItMatters: 'Visitors get stuck. On a kiosk they have to wait for the idle timer or walk away, and the next visitor finds the interactive on the wrong screen.',
+    recommendation: 'Add Back and Home buttons in the same place as on other screens.',
+    effort: 'Small',
+  },
+  'no-op-action': {
+    title: 'Button does nothing',
+    description: 'Pressing this control doesn’t change anything on the screen.',
+    whyItMatters: 'Visitors assume the interactive is broken and lose trust in it. Screen reader users get no feedback at all.',
+    recommendation: 'Make the control do what its label says, or remove it. If it’s meant to be disabled, show that visually and mark it as disabled.',
+    effort: 'Medium',
+  },
+  'deep-content': {
+    title: 'Content is buried too deep',
+    description: 'This screen takes more taps from the start than recommended to reach.',
+    whyItMatters: 'Each extra step loses visitors, especially in a busy gallery where people give an interactive only a minute or two.',
+    recommendation: 'Flatten the menu structure or add a shortcut to this content from a higher level.',
+    effort: 'Large',
+  },
+  'inconsistent-navigation': {
+    title: 'Navigation behaves inconsistently',
+    description: 'A Home or Back button goes somewhere different here than it does on other screens.',
+    whyItMatters: 'Visitors learn how navigation works from the first few screens. When it changes, they get lost and can’t predict where a button will take them.',
+    recommendation: 'Make Home always go to the same screen, and Back always return to the screen the visitor came from.',
+    effort: 'Small',
+  },
+};
+
 const GENERIC_WHY =
   'This makes the interface harder or impossible to use for some people, including those using screen readers, keyboards or magnification.';
 
 export function guidanceFor(engine: string, ruleId: string): RuleGuidance | undefined {
   if (engine === 'axe-core') return AXE[ruleId];
+  if (engine === 'prego') return PREGO[ruleId];
   return undefined;
 }
 

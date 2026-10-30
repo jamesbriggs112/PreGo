@@ -62,7 +62,7 @@ export function buildTickets(db: PregoDb, runId: number, options: BuildTicketsOp
     const groups = new Map<string, { fp: string; findings: RawFinding[]; primary?: RawFinding }>();
     const fingerprints = new Map<number, string>();
     for (const finding of findings) {
-      const fp = fingerprint(finding, locations.get(finding.locationId)?.templateKey ?? null);
+      const fp = fingerprint(finding, groupingScope(locations.get(finding.locationId)));
       fingerprints.set(finding.id, fp);
       const own = db.ticketIdFor(run.projectId, fp, finding.category, runId).ticketId;
       const ticketId = db.resolveMerge(run.projectId, own);
@@ -83,7 +83,14 @@ export function buildTickets(db: PregoDb, runId: number, options: BuildTicketsOp
       const severity = SEVERITIES.find((s) => findings.some((f) => f.severity === s))!;
       const onKeyJourney = [...affected].some((id) => keyJourney.has(locations.get(id)!.url));
       const guidance = guidanceWithFallback(first.engine, first.ruleId, first);
-      const where = componentLabel(first.component ?? '', first.componentShared, location.templateKey);
+      const where =
+        location.kind === 'state'
+          ? first.componentShared
+            ? 'shared header, every screen'
+            : affected.size === 1
+              ? `“${location.title}” screen`
+              : `${affected.size} screens`
+          : componentLabel(first.component ?? '', first.componentShared, location.templateKey);
       const criterion = first.wcagCriteria.join(', ') || null;
 
       const override = db.getOverride(run.projectId, ticketId);
@@ -101,7 +108,7 @@ export function buildTickets(db: PregoDb, runId: number, options: BuildTicketsOp
         wcagLevel: first.wcagLevel,
         ruleId: first.ruleId,
         engine: first.engine,
-        templateKey: first.componentShared ? null : location.templateKey,
+        templateKey: first.componentShared ? null : location.kind === 'state' ? groupingScope(location) : location.templateKey,
         occurrences: findings.length,
         locationsAffected: affected.size,
         exampleLocation: location.url,
@@ -151,6 +158,17 @@ export function applyOverride(ticket: Ticket, override: TicketOverride, reach: n
   if (override.dismissed) ticket.status = 'Dismissed';
 }
 
+/**
+ * What a problem is grouped within. Pages group by template. Screens of an interactive all share one
+ * app shell, so they group across the whole app (by address path): the same problem in the same
+ * component is one ticket, with each screen as an occurrence.
+ */
+function groupingScope(location: Location | undefined): string | null {
+  if (!location) return null;
+  if (location.kind === 'state') return `app:${new URL(location.url).pathname}`;
+  return location.templateKey;
+}
+
 function orderKey(finding: RawFinding, locations: Map<number, Location>): string[] {
   const location = locations.get(finding.locationId);
   return [
@@ -171,11 +189,16 @@ function compare(a: string[], b: string[]): number {
 }
 
 function stepsToReproduce(finding: RawFinding, location: Location): string {
+  const taps = location.steps?.map((s) => `Press “${s.label}”.`) ?? [];
   const lines = [
     `Open ${location.url} at the ${finding.viewport} viewport.`,
-    finding.selector === 'html' ? 'Inspect the page as a whole.' : `Find the element matching the CSS selector: ${finding.selector}`,
-    `Run ${finding.engine} (or a browser extension using it) and look for the "${finding.ruleId}" rule.`,
-  ];
+    ...taps,
+    ...(location.kind === 'state' ? [`You should now see the “${location.title}” screen.`] : []),
+    finding.selector === 'html' ? 'Look at the screen as a whole.' : `Find the element matching the CSS selector: ${finding.selector}`,
+    finding.engine === 'prego'
+      ? (finding.failureSummary ?? '')
+      : `Run ${finding.engine} (or a browser extension using it) and look for the "${finding.ruleId}" rule.`,
+  ].filter(Boolean);
   return lines.map((line, i) => `${i + 1}. ${line}`).join('\n');
 }
 

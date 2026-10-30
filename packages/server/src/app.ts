@@ -8,9 +8,12 @@ import {
   CATEGORIES,
   PregoDb,
   CSV_PRESETS,
+  DEFAULT_DENY_LABELS,
   SEVERITIES,
   TriageError,
   buildExportPlan,
+  stateMapPng,
+  stateMapStates,
   exportRun,
   getSettings,
   logoPath,
@@ -280,14 +283,20 @@ export async function buildApp(options: AppOptions): Promise<PregoApp> {
   app.get<{ Params: { id: string } }>('/api/runs/:id/tickets', async (request, reply) => {
     const runId = Number(request.params.id);
     if (!db.getRun(runId)) return reply.code(404).send({ error: 'Run not found' });
-    const locations = new Map(db.getLocations(runId).map((l) => [l.id, l.url]));
+    // Pages are named by URL; interactive screens (which share one URL) by title.
+    const locations = new Map(db.getLocations(runId).map((l) => [l.id, l.kind === 'state' ? `Screen: ${l.title}` : l.url]));
     // Each ticket lists the pages it affects, for the page filter.
     const pagesByTicket = new Map<string, Set<string>>();
+    const locationIdsByTicket = new Map<string, Set<number>>();
     for (const o of db.getOccurrences(runId)) {
-      if (!pagesByTicket.has(o.ticketId)) pagesByTicket.set(o.ticketId, new Set());
+      if (!pagesByTicket.has(o.ticketId)) {
+        pagesByTicket.set(o.ticketId, new Set());
+        locationIdsByTicket.set(o.ticketId, new Set());
+      }
       pagesByTicket.get(o.ticketId)!.add(locations.get(o.locationId) ?? '');
+      locationIdsByTicket.get(o.ticketId)!.add(o.locationId);
     }
-    return db.getTickets(runId).map((t) => ({ ...t, pages: [...(pagesByTicket.get(t.ticketId) ?? [])] }));
+    return db.getTickets(runId).map((t) => ({ ...t, pages: [...(pagesByTicket.get(t.ticketId) ?? [])], locationIds: [...(locationIdsByTicket.get(t.ticketId) ?? [])] }));
   });
 
   app.get<{ Params: { id: string; ticketId: string } }>('/api/runs/:id/tickets/:ticketId', async (request, reply) => {
@@ -299,6 +308,7 @@ export async function buildApp(options: AppOptions): Promise<PregoApp> {
     const occurrences = db.getOccurrences(runId, ticket.ticketId).map((o) => ({
       id: o.id,
       url: locations.get(o.locationId)?.url ?? '',
+      screen: locations.get(o.locationId)?.kind === 'state' ? locations.get(o.locationId)!.title : null,
       viewport: o.viewport,
       selector: o.selector,
       html: o.html,
@@ -365,7 +375,7 @@ export async function buildApp(options: AppOptions): Promise<PregoApp> {
 
   // Settings
 
-  app.get('/api/settings', async () => ({ ...getSettings(db), hasLogo: existsSync(logoPath(dataDir)) }));
+  app.get('/api/settings', async () => ({ ...getSettings(db), hasLogo: existsSync(logoPath(dataDir)), exploreDefaults: { denyLabels: DEFAULT_DENY_LABELS } }));
 
   app.put<{ Body: PregoSettings }>('/api/settings', { schema: settingsSchema }, async (request, reply) => {
     const unknown = request.body.defaults.viewports.filter((v) => !isProfileName(v));
@@ -457,9 +467,45 @@ export async function buildApp(options: AppOptions): Promise<PregoApp> {
     const run = db.getRun(runId);
     if (!run) return reply.code(404).send({ error: 'Run not found' });
     if (run.status !== 'complete') return reply.code(409).send({ error: 'Only finished audits have a report.' });
-    const docx = await reportDocx(buildExportPlan(db, runId), runDirectory(dataDir, runId), reportBranding(db, dataDir));
+    const plan = buildExportPlan(db, runId);
+    const stateMap =
+      run.mode === 'explore'
+        ? await stateMapPng(stateMapStates(plan), plan.edges.map((e) => ({ from: e.fromLocationId, to: e.toLocationId, label: e.step.label, outcome: e.outcome })))
+        : undefined;
+    const docx = await reportDocx(plan, runDirectory(dataDir, runId), reportBranding(db, dataDir), { stateMap });
     const { value } = await mammoth.convertToHtml({ buffer: docx });
     return { html: value };
+  });
+
+  // The explored state map: screens, what each action did, and each screen's open tickets.
+  app.get<{ Params: { id: string } }>('/api/runs/:id/state-map', async (request, reply) => {
+    const runId = Number(request.params.id);
+    const run = db.getRun(runId);
+    if (!run) return reply.code(404).send({ error: 'Run not found' });
+    const tickets = new Map(db.getTickets(runId).filter((t) => t.status !== 'Dismissed').map((t) => [t.ticketId, t]));
+    const ticketsByLocation = new Map<number, Set<string>>();
+    for (const o of db.getOccurrences(runId)) {
+      if (!tickets.has(o.ticketId)) continue;
+      ticketsByLocation.set(o.locationId, (ticketsByLocation.get(o.locationId) ?? new Set()).add(o.ticketId));
+    }
+    const firstViewport = ((run.settings.viewports as string[] | undefined) ?? [])[0];
+    const states = db
+      .getLocations(runId)
+      .filter((l) => l.kind === 'state')
+      .map((l) => ({
+        id: l.id,
+        stateId: l.stateId,
+        title: l.title,
+        depth: l.depth,
+        steps: l.steps ?? [],
+        screenshot: l.screenshots[firstViewport] ?? Object.values(l.screenshots)[0] ?? null,
+        tickets: [...(ticketsByLocation.get(l.id) ?? [])].map((id) => {
+          const t = tickets.get(id)!;
+          return { ticketId: t.ticketId, title: t.title, severity: t.severity, category: t.category };
+        }),
+      }));
+    const edges = db.getEdges(runId).map((e) => ({ from: e.fromLocationId, to: e.toLocationId, label: e.step.label, outcome: e.outcome, reason: e.reason }));
+    return { states, edges };
   });
 
   // Screenshots and crops from a run folder.
@@ -494,6 +540,7 @@ const EXPORT_FILES: Record<string, string> = {
   'tickets.csv': 'text/csv; charset=utf-8',
   'occurrences.csv': 'text/csv; charset=utf-8',
   'run.json': 'application/json',
+  'state-map.png': 'image/png',
 };
 
 function exportSummary(record: ExportRecord) {

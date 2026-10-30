@@ -47,7 +47,7 @@ export interface ExploreOptions {
   prepareScreen?: (page: Page, actions: Action[]) => Promise<void>;
   session: BrowserSession;
   signal?: AbortSignal;
-  onState?: (state: ExploredState, total: number) => void;
+  onState?: (state: ExploredState, total: number, from: ExploredState | null) => void;
 }
 
 export interface ExploreResult {
@@ -106,7 +106,7 @@ export async function exploreApp(options: ExploreOptions): Promise<ExploreResult
     at = start.id;
     states.set(start.id, start);
     queue.push(start);
-    options.onState?.(start, states.size);
+    options.onState?.(start, states.size, null);
 
     explore: while (queue.length) {
       const state = queue.shift()!;
@@ -152,7 +152,7 @@ export async function exploreApp(options: ExploreOptions): Promise<ExploreResult
           states.set(next.id, next);
           queue.push(next);
           edges.push({ from: state.id, to: next.id, action: step, outcome: 'navigated' });
-          options.onState?.(next, states.size);
+          options.onState?.(next, states.size, state);
         } catch (error) {
           at = null;
           edges.push({ from: state.id, to: null, action: step, outcome: 'failed', reason: error instanceof Error ? error.message.split('\n')[0] : String(error) });
@@ -196,9 +196,10 @@ export async function openScreen(
 ): Promise<OpenScreen> {
   const opened = await options.session.newPage(profile ?? 'desktop', options.emulation);
   try {
-    const { page, context } = opened;
-    // Popups and new tabs would leave the screen being explored; close them straight away.
-    context.on('page', (popup) => void popup.close().catch(() => undefined));
+    const { page } = opened;
+    // Popups and new tabs opened by the screen would leave it; close them straight away. Only the
+    // screen's own popups: axe opens a helper page in the same context, which must be left alone.
+    page.on('popup', (popup) => void popup.close().catch(() => undefined));
     page.on('dialog', (dialog) => void dialog.dismiss().catch(() => undefined));
     page.on('download', (download) => void download.cancel().catch(() => undefined));
     await page.clock.install();

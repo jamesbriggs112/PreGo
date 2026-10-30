@@ -231,3 +231,56 @@ describe('Settings and Export screens', () => {
     await expect(frame.getByText('Four Agency').count()).resolves.toBeGreaterThan(0);
   });
 });
+
+describe('Interactive exploration', () => {
+  let exploreRun: number;
+
+  it('starts an exploration from the form, with the default denylist offered', async () => {
+    const { page } = gui;
+    await page.goto(`${gui.url}audits/new`);
+    await page.getByLabel('Project', { exact: true }).fill('Museum of Making');
+    await page.getByLabel('Web address or folder').fill(resolve('fixtures/kiosk-app'));
+    await page.getByLabel('Interactive exploration').check();
+    await expect(page.getByLabel('Never press controls labelled').inputValue()).resolves.toMatch(/^delete\nremove\n.*send/s);
+    await page.getByLabel('Ignore when telling screens apart').fill('.attract-hint');
+    expect(await axeViolations(page)).toEqual([]);
+    await page.getByRole('button', { name: 'Start audit' }).click();
+    await page.waitForURL(/\/runs\/\d+$/);
+    exploreRun = Number(page.url().split('/').pop());
+    expect(gui.db.getRun(exploreRun)).toMatchObject({ mode: 'explore', settings: expect.objectContaining({ maskSelectors: ['.attract-hint'] }) });
+  });
+
+  it('shows the state map growing while it explores', async () => {
+    const { page } = gui;
+    await page.getByRole('heading', { name: 'Auditing Museum of Making' }).waitFor();
+    await page.getByRole('group', { name: /^State map so far: \d+ screens$/ }).waitFor({ timeout: 30_000 });
+    expect(await axeViolations(page)).toEqual([]);
+    await gui.prego.jobs.get(exploreRun)!.done;
+  }, 180_000);
+
+  it('opens the state map, lists every screen and shows each screen’s issues', async () => {
+    const { page } = gui;
+    await page.goto(`${gui.url}runs/${exploreRun}`);
+    await page.getByRole('link', { name: 'State map' }).click();
+    await page.getByRole('heading', { name: 'State map: Museum of Making' }).waitFor();
+    await page.getByRole('group', { name: 'State map of 16 screens' }).waitFor();
+    await expect(page.locator('tbody tr').count()).resolves.toBe(16);
+    expect(await axeViolations(page)).toEqual([]);
+
+    await page.getByRole('button', { name: 'Opening Times' }).click();
+    await page.getByRole('heading', { name: 'Opening Times', level: 2 }).waitFor();
+    await page.getByRole('link', { name: /Screen has no way back or home/ }).waitFor();
+    await expect(page.getByText('Nothing on this screen can be pressed.').count()).resolves.toBe(1);
+
+    await page.getByRole('button', { name: 'Paintings' }).click();
+    await page.getByText(/“Zoom in”: Does nothing/).waitFor();
+    await page.getByText(/“Back”: Goes to “Our Collection”/).waitFor();
+  });
+
+  it('remembers the denylist and masks for the project next time', async () => {
+    const { page } = gui;
+    await page.goto(`${gui.url}audits/new?project=${encodeURIComponent('Museum of Making')}`);
+    await page.getByLabel('Interactive exploration').check();
+    await expect(page.getByLabel('Ignore when telling screens apart').inputValue()).resolves.toBe('.attract-hint');
+  });
+});

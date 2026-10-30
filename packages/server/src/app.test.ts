@@ -229,6 +229,7 @@ describe('settings', () => {
     expect(defaults).toMatchObject({ branding: { companyName: 'Four' }, defaults: { viewports: ['desktop'], csvPreset: 'prego' }, hasLogo: false });
     const changed = { ...defaults, branding: { companyName: 'Four Agency', accentColour: '#7a1f5c' }, defaults: { ...defaults.defaults, csvPreset: 'jira' } };
     delete changed.hasLogo;
+    delete changed.exploreDefaults;
     expect(await (await put('/api/settings', changed)).json()).toMatchObject({ branding: { companyName: 'Four Agency', accentColour: '7A1F5C' } });
     expect((await put('/api/settings', { ...changed, branding: { companyName: 'x', accentColour: 'purple' } })).status).toBe(400);
     expect((await put('/api/settings', { ...changed, defaults: { ...changed.defaults, csvPreset: 'asana' } })).status).toBe(400);

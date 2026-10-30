@@ -21,7 +21,7 @@ const EMULATION = [
 
 const MODES = [
   { value: 'crawl', label: 'Site crawl', hint: 'Follows the sitemap and links. For websites and multi-page builds.', available: true },
-  { value: 'explore', label: 'Interactive exploration', hint: 'Taps through single-page apps and kiosk interactives. Coming in Phase 3.', available: false },
+  { value: 'explore', label: 'Interactive exploration', hint: 'Presses through single-page apps and kiosk interactives, mapping every screen it reaches.', available: true },
   { value: 'journey', label: 'Scripted journey', hint: 'Replays a recorded journey. Coming in Phase 3.', available: false },
 ];
 
@@ -46,10 +46,10 @@ export function NewAuditPage() {
   const settings = useQuery({ queryKey: ['settings'], queryFn: api.settings });
   if (settings.isPending) return <p>Loading…</p>;
   // Fall back to built-in defaults if settings can't be loaded; the form still works.
-  return <NewAuditForm defaults={settings.data?.defaults} />;
+  return <NewAuditForm defaults={settings.data?.defaults} defaultDenyLabels={settings.data?.exploreDefaults.denyLabels ?? []} />;
 }
 
-function NewAuditForm({ defaults }: { defaults?: Settings['defaults'] }) {
+function NewAuditForm({ defaults, defaultDenyLabels }: { defaults?: Settings['defaults']; defaultDenyLabels: string[] }) {
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const projects = useQuery({ queryKey: ['projects'], queryFn: api.projects });
@@ -69,6 +69,13 @@ function NewAuditForm({ defaults }: { defaults?: Settings['defaults'] }) {
   const [useSitemap, setUseSitemap] = useState(true);
   const [concurrency, setConcurrency] = useState(String(defaults?.concurrency ?? 2));
   const [delay, setDelay] = useState(String(defaults?.delayMs ?? 500));
+  const [mode, setMode] = useState<'crawl' | 'explore'>('crawl');
+  const [maxStates, setMaxStates] = useState('200');
+  const [exploreDepth, setExploreDepth] = useState('8');
+  const [denyLabels, setDenyLabels] = useState(defaultDenyLabels.join('\n'));
+  const [denySelectors, setDenySelectors] = useState('');
+  const [masks, setMasks] = useState('');
+  const [safetyEdited, setSafetyEdited] = useState(false);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
 
@@ -77,15 +84,27 @@ function NewAuditForm({ defaults }: { defaults?: Settings['defaults'] }) {
     onSuccess: ({ runId }) => navigate(`/runs/${runId}`),
   });
 
+  // Offer the denylist and masks this project used last time, unless they've been edited here.
+  function applyProjectSettings(name: string) {
+    if (safetyEdited) return;
+    const saved = projects.data?.find((p) => p.name.toLowerCase() === name.trim().toLowerCase())?.settings;
+    setDenyLabels((saved?.denyLabels ?? defaultDenyLabels).join('\n'));
+    setDenySelectors((saved?.denySelectors ?? []).join('\n'));
+    setMasks((saved?.maskSelectors ?? []).join('\n'));
+  }
+
   function onSubmit(event: FormEvent) {
     event.preventDefault();
+    const explore = mode === 'explore';
     const body: StartRunBody = {
       project: project.trim(),
       target: target.trim(),
+      mode,
       viewports,
       emulation,
       maxPages: Number(maxPages),
-      maxDepth: Number(maxDepth),
+      maxDepth: Number(explore ? exploreDepth : maxDepth),
+      ...(explore && { maxStates: Number(maxStates), denyLabels: lines(denyLabels), denySelectors: lines(denySelectors), maskSelectors: lines(masks) }),
       timeBudgetMinutes: timeBudget ? Number(timeBudget) : undefined,
       perTemplate: Number(perTemplate),
       auditAll,
@@ -118,7 +137,17 @@ function NewAuditForm({ defaults }: { defaults?: Settings['defaults'] }) {
         </CardHeader>
         <CardContent className="grid gap-5">
           <Field id="project" label="Project" hint="Choose an existing project or type a new name.">
-            <Input id="project" list="project-names" value={project} onChange={(e) => setProject(e.target.value)} required autoComplete="off" />
+            <Input
+              id="project"
+              list="project-names"
+              value={project}
+              onChange={(e) => {
+                setProject(e.target.value);
+                if (mode === 'explore') applyProjectSettings(e.target.value);
+              }}
+              required
+              autoComplete="off"
+            />
             <datalist id="project-names">
               {projects.data?.map((p) => (
                 <option key={p.id} value={p.name} />
@@ -130,22 +159,26 @@ function NewAuditForm({ defaults }: { defaults?: Settings['defaults'] }) {
           </Field>
           <fieldset className="grid gap-3">
             <legend className="mb-1 text-sm font-medium">Exploration mode</legend>
-            {MODES.map((mode) => (
-              <div key={mode.value} className="flex items-start gap-2">
+            {MODES.map((option) => (
+              <div key={option.value} className="flex items-start gap-2">
                 <input
                   type="radio"
-                  id={`mode-${mode.value}`}
+                  id={`mode-${option.value}`}
                   name="mode"
-                  value={mode.value}
-                  defaultChecked={mode.value === 'crawl'}
-                  disabled={!mode.available}
-                  aria-describedby={`mode-${mode.value}-hint`}
+                  value={option.value}
+                  checked={mode === option.value}
+                  onChange={() => {
+                    setMode(option.value as 'crawl' | 'explore');
+                    if (option.value === 'explore') applyProjectSettings(project);
+                  }}
+                  disabled={!option.available}
+                  aria-describedby={`mode-${option.value}-hint`}
                   className="mt-0.5 size-4 accent-primary"
                 />
                 <div className="grid gap-0.5">
-                  <Label htmlFor={`mode-${mode.value}`}>{mode.label}</Label>
-                  <span id={`mode-${mode.value}-hint`} className="text-sm text-muted-foreground">
-                    {mode.hint}
+                  <Label htmlFor={`mode-${option.value}`}>{option.label}</Label>
+                  <span id={`mode-${option.value}-hint`} className="text-sm text-muted-foreground">
+                    {option.hint}
                   </span>
                 </div>
               </div>
@@ -192,6 +225,48 @@ function NewAuditForm({ defaults }: { defaults?: Settings['defaults'] }) {
         </CardContent>
       </Card>
 
+      {mode === 'explore' && (
+        <>
+          <Card>
+            <CardHeader>
+              <CardTitle>Exploration limits</CardTitle>
+              <CardDescription>Prego presses every control on every screen it finds, breadth-first, from the start screen.</CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-5 sm:grid-cols-3">
+              <Field id="max-states" label="Maximum screens">
+                <Input id="max-states" type="number" min={1} max={2000} value={maxStates} onChange={(e) => setMaxStates(e.target.value)} required />
+              </Field>
+              <Field id="explore-depth" label="Maximum taps from the start">
+                <Input id="explore-depth" type="number" min={0} value={exploreDepth} onChange={(e) => setExploreDepth(e.target.value)} required />
+              </Field>
+              <Field id="explore-time-budget" label="Time budget in minutes" hint="Optional.">
+                <Input id="explore-time-budget" type="number" min={1} value={timeBudget} onChange={(e) => setTimeBudget(e.target.value)} />
+              </Field>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle>Safety</CardTitle>
+              <CardDescription>
+                Prego never presses these, never follows links off the site and only types dummy data into forms. Remembered for this project.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-5 sm:grid-cols-3">
+              <Field id="deny-labels" label="Never press controls labelled" hint="One per line, matched as whole words.">
+                <Textarea id="deny-labels" value={denyLabels} onChange={(e) => { setDenyLabels(e.target.value); setSafetyEdited(true); }} rows={6} />
+              </Field>
+              <Field id="deny-selectors" label="Never press elements matching" hint="CSS selectors, one per line, e.g. .admin-only">
+                <Textarea id="deny-selectors" value={denySelectors} onChange={(e) => { setDenySelectors(e.target.value); setSafetyEdited(true); }} rows={6} />
+              </Field>
+              <Field id="mask-selectors" label="Ignore when telling screens apart" hint="CSS selectors for clocks, carousels or videos, one per line.">
+                <Textarea id="mask-selectors" value={masks} onChange={(e) => { setMasks(e.target.value); setSafetyEdited(true); }} rows={6} />
+              </Field>
+            </CardContent>
+          </Card>
+        </>
+      )}
+
+      {mode === 'crawl' && (
       <Card>
         <CardHeader>
           <CardTitle>Scope</CardTitle>
@@ -221,7 +296,9 @@ function NewAuditForm({ defaults }: { defaults?: Settings['defaults'] }) {
           </Field>
         </CardContent>
       </Card>
+      )}
 
+      {mode === 'crawl' && (
       <Card>
         <CardHeader>
           <CardTitle>Crawl politeness</CardTitle>
@@ -238,6 +315,7 @@ function NewAuditForm({ defaults }: { defaults?: Settings['defaults'] }) {
           <CheckboxField id="sitemap" checked={useSitemap} onChange={setUseSitemap} label="Start from sitemap.xml as well as links" />
         </CardContent>
       </Card>
+      )}
 
       <Card>
         <CardHeader>

@@ -1,7 +1,7 @@
 import type { Category } from '../types.js';
 
 /** Categories each check module covers, so summaries can say "Not checked" rather than a perfect score. */
-export const MODULE_CATEGORIES: Record<string, Category[]> = { axe: ['A11Y'] };
+export const MODULE_CATEGORIES: Record<string, Category[]> = { axe: ['A11Y'], 'state-map': ['UX'] };
 
 /** Categories covered by the modules a run used (from its stored settings). */
 export function checkedCategories(settings: Record<string, unknown>): Set<Category> {

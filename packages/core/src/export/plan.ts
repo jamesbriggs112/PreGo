@@ -1,5 +1,6 @@
 import type { PregoDb } from '../db/database.js';
-import { CATEGORIES, CATEGORY_NAMES, type Category, type Location, type Occurrence, type Project, type Run, type Ticket } from '../types.js';
+import { CATEGORIES, CATEGORY_NAMES, type Category, type Location, type Occurrence, type Project, type Run, type StateEdge, type Ticket } from '../types.js';
+import type { ImageState } from './state-map-image.js';
 
 /** Statuses left out of exports: dismissed false positives, and AI suggestions nobody has approved. */
 const NOT_EXPORTED = new Set<Ticket['status']>(['Dismissed', 'Needs review']);
@@ -35,10 +36,30 @@ export interface ExportPlan {
   run: Run;
   previousRun: Run | undefined;
   locations: Location[];
+  /** For interactive audits: what each action did. */
+  edges: StateEdge[];
   sections: ReportSectionPlan[];
   tickets: PlannedTicket[];
   /** Screenshot file name in the export → source path relative to the run folder. */
   screenshots: Map<string, string>;
+}
+
+/** The explored screens, with their exported issues, for drawing the state map. */
+export function stateMapStates(plan: ExportPlan): ImageState[] {
+  const byLocation = new Map<number, PlannedTicket[]>();
+  for (const ticket of plan.tickets) {
+    for (const id of new Set(ticket.occurrenceList.map((o) => o.locationId))) byLocation.set(id, [...(byLocation.get(id) ?? []), ticket]);
+  }
+  return plan.locations
+    .filter((l) => l.kind === 'state')
+    .map((l) => ({
+      id: l.id,
+      title: l.title ?? '',
+      depth: l.depth,
+      stepKeys: (l.steps ?? []).map((s) => s.key),
+      issues: byLocation.get(l.id)?.length ?? 0,
+      flagged: (byLocation.get(l.id) ?? []).some((t) => t.category === 'UX'),
+    }));
 }
 
 /** Section 4 of the report holds findings; each category with tickets gets a subsection. */
@@ -87,6 +108,7 @@ export function buildExportPlan(db: PregoDb, runId: number): ExportPlan {
     run,
     previousRun: db.previousRun(runId),
     locations,
+    edges: db.getEdges(runId),
     sections,
     tickets: sections.flatMap((s) => s.tickets),
     screenshots,

@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import JSZip from 'jszip';
 import { exportRun } from '@prego/core';
 import { axeViolations, startGui, type Gui } from './harness.js';
 
@@ -174,5 +175,59 @@ describe('Results and ticket triage', () => {
     expect(csv).not.toContain(`"${ticketsOf('color-contrast').find((t) => t.status === 'Dismissed')!.ticketId}"`);
     expect(csv).not.toContain(`"${drop}"`);
     expect(csv).toContain(`"${keep}"`);
+  });
+});
+
+describe('Settings and Export screens', () => {
+  it('saves branding and new-audit defaults', async () => {
+    const { page } = gui;
+    await page.getByRole('link', { name: 'Settings' }).click();
+    await page.getByRole('heading', { name: 'Settings', level: 1 }).waitFor();
+    expect(await axeViolations(page)).toEqual([]);
+    await page.getByLabel('Company name').fill('Four Agency');
+    await page.getByLabel('tickets.csv columns').selectOption('jira');
+    await page.getByLabel('Pages audited per template').fill('2');
+    await page.getByRole('button', { name: 'Save settings' }).click();
+    await page.getByRole('status').getByText('Settings saved.').waitFor();
+
+    // The New audit form starts from the saved defaults.
+    await page.getByRole('link', { name: 'New audit' }).click();
+    await expect(page.getByLabel('Pages audited per template').inputValue()).resolves.toBe('2');
+  });
+
+  it('creates an export, downloads each file and the zip, with branding in the report', async () => {
+    const { page } = gui;
+    await page.goto(`${gui.url}runs/${runId}`);
+    await page.getByRole('link', { name: 'Export report and tickets' }).click();
+    await page.getByRole('heading', { name: /^Export/, level: 1 }).waitFor();
+    // The saved preset is preselected.
+    await expect(page.getByLabel('Jira').isChecked()).resolves.toBe(true);
+    await page.getByLabel('Prego standard columns').check();
+    await page.getByRole('button', { name: 'Create export' }).click();
+    await page.getByRole('status').getByText(/Export ready/).waitFor({ timeout: 60_000 });
+    expect(await axeViolations(page)).toEqual([]);
+
+    const [report] = await Promise.all([page.waitForEvent('download'), page.getByRole('link', { name: 'Word report' }).click()]);
+    const docx = await JSZip.loadAsync(readFileSync((await report.path())!));
+    expect(await docx.file('word/document.xml')!.async('string')).toContain('Four Agency');
+
+    const [tickets] = await Promise.all([page.waitForEvent('download'), page.getByRole('link', { name: 'Tickets (CSV)' }).click()]);
+    expect(tickets.suggestedFilename()).toMatch(/tickets\.csv$/);
+    expect(readFileSync((await tickets.path())!, 'utf8')).toMatch(/^\uFEFF"Ticket ID","Title"/);
+
+    const [zip] = await Promise.all([page.waitForEvent('download'), page.getByRole('link', { name: 'Download everything (.zip)' }).click()]);
+    expect(zip.suggestedFilename()).toMatch(/^acme-widgets-.+\.zip$/);
+    const bundle = await JSZip.loadAsync(readFileSync((await zip.path())!));
+    const names = Object.keys(bundle.files);
+    for (const file of ['report.docx', 'tickets.csv', 'occurrences.csv', 'run.json']) expect(names).toContainEqual(expect.stringMatching(new RegExp(`/${file.replace('.', '\\.')}$`)));
+    expect(names.some((n) => /screenshots\/PRG-A11Y-\d{3}_\d{2}\.png$/.test(n))).toBe(true);
+  }, 120_000);
+
+  it('previews the report', async () => {
+    const { page } = gui;
+    await page.getByRole('button', { name: 'Preview the report' }).click();
+    const frame = page.frameLocator('iframe[title="Report preview"]');
+    await frame.getByText('Executive summary').first().waitFor({ timeout: 30_000 });
+    await expect(frame.getByText('Four Agency').count()).resolves.toBeGreaterThan(0);
   });
 });

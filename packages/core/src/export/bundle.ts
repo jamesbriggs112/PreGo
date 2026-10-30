@@ -6,17 +6,21 @@ import { defaultDataDir } from '../paths.js';
 import { buildExportPlan, type ExportPlan } from './plan.js';
 import { writeCsvFiles } from './csv.js';
 import { writeReportDocx, type ReportBranding } from './docx.js';
+import { getSettings, reportBranding } from '../settings.js';
 
 export interface ExportOptions {
   dataDir?: string;
   /** Write here instead of data/exports/{project}-{date}/. */
   outDir?: string;
-  /** CSV column preset: prego (default), jira, linear or trello. */
+  /** CSV column preset: prego, jira, linear or trello. Defaults to the saved setting. */
   preset?: string;
+  /** Defaults to the saved branding settings and logo. */
   branding?: ReportBranding;
 }
 
 export interface ExportResult {
+  /** The export's ID in the exports log. */
+  id: number;
   dir: string;
   files: { report: string; tickets: string; occurrences: string; screenshots: string; runJson: string };
   plan: ExportPlan;
@@ -41,8 +45,9 @@ export async function exportRun(db: PregoDb, runId: number, options: ExportOptio
   mkdirSync(files.screenshots, { recursive: true });
 
   for (const [name, source] of plan.screenshots) copyFileSync(join(runDir, source), join(files.screenshots, name));
-  writeCsvFiles(plan, files, options.preset);
-  await writeReportDocx(plan, runDir, files.report, options.branding);
+  const preset = options.preset ?? getSettings(db).defaults.csvPreset;
+  writeCsvFiles(plan, files, preset);
+  await writeReportDocx(plan, runDir, files.report, options.branding ?? reportBranding(db, dataDir));
   writeFileSync(
     files.runJson,
     JSON.stringify(
@@ -62,7 +67,8 @@ export async function exportRun(db: PregoDb, runId: number, options: ExportOptio
       2,
     ),
   );
-  return { dir, files, plan };
+  const record = db.addExport(runId, dir, preset);
+  return { id: record.id, dir, files, plan };
 }
 
 /** YYYY-MM-DD-HHmm in local time. */

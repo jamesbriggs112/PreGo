@@ -9,7 +9,10 @@ const ALSO_ALLOWED = new Map([
   ['CC-BY-4.0', 'caniuse-lite browser data, attribution only (via Crawlee)'],
 ]);
 /** Packages with no licence field whose licence file we have read. */
-const CHECKED_BY_HAND = new Map([['map-stream', 'MIT (LICENCE file)']]);
+const CHECKED_BY_HAND = new Map([
+  ['map-stream', 'MIT (LICENCE file)'],
+  ['duck', 'BSD-2-Clause (LICENSE file; package.json just says "BSD"), via mammoth'],
+]);
 
 interface LockEntry {
   name?: string;

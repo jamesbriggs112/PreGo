@@ -165,7 +165,30 @@ const MIGRATIONS: string[] = [
     PRIMARY KEY (projectId, fromTicketId)
   );
   `,
+  // 4: app settings and a log of exports.
+  `
+  CREATE TABLE settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+  );
+
+  CREATE TABLE exports (
+    id INTEGER PRIMARY KEY,
+    runId INTEGER NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+    dir TEXT NOT NULL,
+    preset TEXT NOT NULL,
+    createdAt TEXT NOT NULL
+  );
+  `,
 ];
+
+export interface ExportRecord {
+  id: number;
+  runId: number;
+  dir: string;
+  preset: string;
+  createdAt: string;
+}
 
 /** Auditor changes to a ticket. Null fields keep the computed value. */
 export interface TicketOverride {
@@ -415,6 +438,33 @@ export class PregoDb {
       .prepare('SELECT firstSeenRunId FROM ticket_registry WHERE projectId = ? AND ticketId = ?')
       .get(projectId, ticketId) as { firstSeenRunId: number } | undefined;
     return row?.firstSeenRunId;
+  }
+
+  // Settings
+
+  getSetting<T>(key: string): T | undefined {
+    const row = this.sqlite.prepare('SELECT value FROM settings WHERE key = ?').get(key) as { value: string } | undefined;
+    return row ? (JSON.parse(row.value) as T) : undefined;
+  }
+
+  setSetting(key: string, value: unknown) {
+    this.sqlite.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)').run(key, JSON.stringify(value));
+  }
+
+  // Exports
+
+  addExport(runId: number, dir: string, preset: string): ExportRecord {
+    const createdAt = now();
+    const { lastInsertRowid } = this.sqlite.prepare('INSERT INTO exports (runId, dir, preset, createdAt) VALUES (?, ?, ?, ?)').run(runId, dir, preset, createdAt);
+    return { id: Number(lastInsertRowid), runId, dir, preset, createdAt };
+  }
+
+  getExport(id: number): ExportRecord | undefined {
+    return this.sqlite.prepare('SELECT * FROM exports WHERE id = ?').get(id) as ExportRecord | undefined;
+  }
+
+  listExports(runId: number): ExportRecord[] {
+    return this.sqlite.prepare('SELECT * FROM exports WHERE runId = ? ORDER BY id DESC').all(runId) as ExportRecord[];
   }
 
   // Triage

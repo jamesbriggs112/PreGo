@@ -1,12 +1,24 @@
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
 import fastifyStatic from '@fastify/static';
-import { createReadStream, existsSync, statSync } from 'node:fs';
-import { extname, join, resolve, sep } from 'node:path';
+import { createReadStream, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { basename, dirname, extname, join, resolve, sep } from 'node:path';
+import JSZip from 'jszip';
+import mammoth from 'mammoth';
 import {
   CATEGORIES,
   PregoDb,
+  CSV_PRESETS,
   SEVERITIES,
   TriageError,
+  buildExportPlan,
+  exportRun,
+  getSettings,
+  logoPath,
+  reportBranding,
+  reportDocx,
+  saveSettings,
+  type ExportRecord,
+  type PregoSettings,
   categoryScore,
   checkedCategories,
   mergeTickets,
@@ -320,6 +332,105 @@ export async function buildApp(options: AppOptions): Promise<PregoApp> {
     },
   );
 
+  // Settings
+
+  app.get('/api/settings', async () => ({ ...getSettings(db), hasLogo: existsSync(logoPath(dataDir)) }));
+
+  app.put<{ Body: PregoSettings }>('/api/settings', { schema: settingsSchema }, async (request, reply) => {
+    const unknown = request.body.defaults.viewports.filter((v) => !isProfileName(v));
+    if (unknown.length) return reply.code(400).send({ error: `Unknown viewport: ${unknown.join(', ')}` });
+    if (!CSV_PRESETS[request.body.defaults.csvPreset]) return reply.code(400).send({ error: 'Unknown CSV preset' });
+    saveSettings(db, { ...request.body, branding: { ...request.body.branding, accentColour: request.body.branding.accentColour.replace(/^#/, '').toUpperCase() } });
+    return { ...getSettings(db), hasLogo: existsSync(logoPath(dataDir)) };
+  });
+
+  // The report logo, uploaded as a base64 PNG in JSON (so uploads need the same JSON content type
+  // as every other write, which cross-site forms can't send).
+  app.put<{ Body: { png: string } }>(
+    '/api/settings/logo',
+    {
+      bodyLimit: 3 * 1024 * 1024,
+      schema: { body: { type: 'object', required: ['png'], additionalProperties: false, properties: { png: { type: 'string', maxLength: 2_800_000 } } } },
+    },
+    async (request, reply) => {
+      const data = Buffer.from(request.body.png.replace(/^data:image\/png;base64,/, ''), 'base64');
+      if (data.length < 24 || data.toString('ascii', 1, 4) !== 'PNG') return reply.code(400).send({ error: 'The logo must be a PNG image.' });
+      mkdirSync(dirname(logoPath(dataDir)), { recursive: true });
+      writeFileSync(logoPath(dataDir), data);
+      return { hasLogo: true };
+    },
+  );
+
+  app.delete('/api/settings/logo', async () => {
+    rmSync(logoPath(dataDir), { force: true });
+    return { hasLogo: false };
+  });
+
+  app.get('/api/settings/logo', async (_request, reply) => {
+    const path = logoPath(dataDir);
+    if (!existsSync(path)) return reply.code(404).send({ error: 'No logo' });
+    return reply.type('image/png').header('Cache-Control', 'no-cache').send(createReadStream(path));
+  });
+
+  // Exports
+
+  app.get<{ Params: { id: string } }>('/api/runs/:id/exports', async (request, reply) => {
+    const runId = Number(request.params.id);
+    if (!db.getRun(runId)) return reply.code(404).send({ error: 'Run not found' });
+    return db.listExports(runId).filter((e) => existsSync(e.dir)).map(exportSummary);
+  });
+
+  app.post<{ Params: { id: string }; Body: { preset?: string } }>(
+    '/api/runs/:id/exports',
+    { schema: { body: { type: 'object', additionalProperties: false, properties: { preset: { type: 'string' } } } } },
+    async (request, reply) => {
+      const runId = Number(request.params.id);
+      const run = db.getRun(runId);
+      if (!run) return reply.code(404).send({ error: 'Run not found' });
+      if (run.status !== 'complete') return reply.code(409).send({ error: 'Only finished audits can be exported.' });
+      const preset = request.body?.preset;
+      if (preset && !CSV_PRESETS[preset]) return reply.code(400).send({ error: `Unknown CSV preset "${preset}"` });
+      const result = await exportRun(db, runId, { dataDir, preset });
+      return reply.code(201).send(exportSummary(db.getExport(result.id)!));
+    },
+  );
+
+  app.get<{ Params: { exportId: string; file: string } }>('/api/exports/:exportId/files/:file', async (request, reply) => {
+    const record = db.getExport(Number(request.params.exportId));
+    const file = EXPORT_FILES[request.params.file];
+    if (!record || !file || !existsSync(join(record.dir, request.params.file))) return reply.code(404).send({ error: 'File not found' });
+    return reply
+      .type(file)
+      .header('Content-Disposition', `attachment; filename="${basename(record.dir)}-${request.params.file}"`)
+      .send(createReadStream(join(record.dir, request.params.file)));
+  });
+
+  app.get<{ Params: { exportId: string } }>('/api/exports/:exportId/zip', async (request, reply) => {
+    const record = db.getExport(Number(request.params.exportId));
+    if (!record || !existsSync(record.dir)) return reply.code(404).send({ error: 'Export not found' });
+    const name = basename(record.dir);
+    const zip = new JSZip();
+    const folder = zip.folder(name)!;
+    for (const file of Object.keys(EXPORT_FILES)) if (existsSync(join(record.dir, file))) folder.file(file, readFileSync(join(record.dir, file)));
+    const shots = join(record.dir, 'screenshots');
+    if (existsSync(shots)) for (const file of readdirSync(shots)) folder.file(`screenshots/${file}`, readFileSync(join(shots, file)));
+    return reply
+      .type('application/zip')
+      .header('Content-Disposition', `attachment; filename="${name}.zip"`)
+      .send(zip.generateNodeStream({ type: 'nodebuffer', streamFiles: true, compression: 'DEFLATE' }));
+  });
+
+  // The Word report as HTML, for previewing before export.
+  app.get<{ Params: { id: string } }>('/api/runs/:id/report-preview', async (request, reply) => {
+    const runId = Number(request.params.id);
+    const run = db.getRun(runId);
+    if (!run) return reply.code(404).send({ error: 'Run not found' });
+    if (run.status !== 'complete') return reply.code(409).send({ error: 'Only finished audits have a report.' });
+    const docx = await reportDocx(buildExportPlan(db, runId), runDirectory(dataDir, runId), reportBranding(db, dataDir));
+    const { value } = await mammoth.convertToHtml({ buffer: docx });
+    return { html: value };
+  });
+
   // Screenshots and crops from a run folder.
   app.get<{ Params: { id: string; '*': string } }>('/api/runs/:id/files/*', async (request, reply) => {
     const runDir = resolve(runDirectory(dataDir, Number(request.params.id)));
@@ -346,6 +457,59 @@ export async function buildApp(options: AppOptions): Promise<PregoApp> {
 
   return { app, jobs };
 }
+
+const EXPORT_FILES: Record<string, string> = {
+  'report.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'tickets.csv': 'text/csv; charset=utf-8',
+  'occurrences.csv': 'text/csv; charset=utf-8',
+  'run.json': 'application/json',
+};
+
+function exportSummary(record: ExportRecord) {
+  const shots = join(record.dir, 'screenshots');
+  return {
+    id: record.id,
+    runId: record.runId,
+    name: basename(record.dir),
+    folder: record.dir,
+    preset: record.preset,
+    createdAt: record.createdAt,
+    files: Object.keys(EXPORT_FILES).filter((f) => existsSync(join(record.dir, f))),
+    screenshots: existsSync(shots) ? readdirSync(shots).length : 0,
+  };
+}
+
+const settingsSchema = {
+  body: {
+    type: 'object',
+    required: ['branding', 'defaults'],
+    additionalProperties: false,
+    properties: {
+      branding: {
+        type: 'object',
+        required: ['companyName', 'accentColour'],
+        additionalProperties: false,
+        properties: {
+          companyName: { type: 'string', minLength: 1, maxLength: 100 },
+          accentColour: { type: 'string', pattern: '^#?[0-9A-Fa-f]{6}$' },
+        },
+      },
+      defaults: {
+        type: 'object',
+        required: ['viewports', 'perTemplate', 'concurrency', 'delayMs', 'respectRobots', 'csvPreset'],
+        additionalProperties: false,
+        properties: {
+          viewports: { type: 'array', items: { type: 'string' }, minItems: 1 },
+          perTemplate: { type: 'integer', minimum: 1 },
+          concurrency: { type: 'integer', minimum: 1, maximum: 8 },
+          delayMs: { type: 'integer', minimum: 0 },
+          respectRobots: { type: 'boolean' },
+          csvPreset: { type: 'string' },
+        },
+      },
+    },
+  },
+} as const;
 
 function runSummary(run: Run) {
   return { id: run.id, projectId: run.projectId, mode: run.mode, target: run.target, status: run.status, startedAt: run.startedAt, finishedAt: run.finishedAt, summary: run.summary, error: run.error };

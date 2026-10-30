@@ -1,5 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import JSZip from 'jszip';
+import { PNG } from 'pngjs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { PregoDb } from '@prego/core';
@@ -170,6 +172,75 @@ describe('tickets', () => {
     const merged = await (await merge({ into: headings[0].ticketId, from: [headings[1].ticketId] })).json();
     expect(merged.occurrences).toBe(headings[0].occurrences + headings[1].occurrences);
     expect((await list()).filter((t) => t.ruleId === 'heading-order')).toHaveLength(1);
+  });
+});
+
+describe('settings', () => {
+  const put = (path: string, body: unknown) => api(path, { method: 'PUT', body: JSON.stringify(body) });
+
+  it('returns defaults, then saves and validates changes', async () => {
+    const defaults = await (await api('/api/settings')).json();
+    expect(defaults).toMatchObject({ branding: { companyName: 'Four' }, defaults: { viewports: ['desktop'], csvPreset: 'prego' }, hasLogo: false });
+    const changed = { ...defaults, branding: { companyName: 'Four Agency', accentColour: '#7a1f5c' }, defaults: { ...defaults.defaults, csvPreset: 'jira' } };
+    delete changed.hasLogo;
+    expect(await (await put('/api/settings', changed)).json()).toMatchObject({ branding: { companyName: 'Four Agency', accentColour: '7A1F5C' } });
+    expect((await put('/api/settings', { ...changed, branding: { companyName: 'x', accentColour: 'purple' } })).status).toBe(400);
+    expect((await put('/api/settings', { ...changed, defaults: { ...changed.defaults, csvPreset: 'asana' } })).status).toBe(400);
+    expect((await put('/api/settings', { ...changed, defaults: { ...changed.defaults, viewports: ['watch'] } })).status).toBe(400);
+  });
+
+  it('accepts a PNG logo and refuses anything else', async () => {
+    const png = readFileSync('packages/web/public/favicon.svg');
+    expect((await put('/api/settings/logo', { png: png.toString('base64') })).status).toBe(400);
+    const logo = new PNG({ width: 200, height: 60 });
+    logo.data.fill(90);
+    expect((await put('/api/settings/logo', { png: PNG.sync.write(logo).toString('base64') })).status).toBe(200);
+    expect((await api('/api/settings/logo')).headers.get('content-type')).toBe('image/png');
+    await expect((await api('/api/settings')).json()).resolves.toMatchObject({ hasLogo: true });
+  });
+});
+
+describe('exports', () => {
+  it('creates an export with the saved branding and preset, and lists it', async () => {
+    const res = await post(`/api/runs/${completedRunId}/exports`, {});
+    expect(res.status).toBe(201);
+    const created = await res.json();
+    expect(created).toMatchObject({ preset: 'jira', files: ['report.docx', 'tickets.csv', 'occurrences.csv', 'run.json'] });
+    expect(created.screenshots).toBeGreaterThan(0);
+    expect(await (await api(`/api/runs/${completedRunId}/exports`)).json()).toContainEqual(expect.objectContaining({ id: created.id }));
+
+    const csv = await (await api(`/api/exports/${created.id}/files/tickets.csv`)).text();
+    expect(csv).toContain('"Summary"');
+
+    const docx = await (await api(`/api/exports/${created.id}/files/report.docx`)).arrayBuffer();
+    const zip = await JSZip.loadAsync(docx);
+    expect(await zip.file('word/document.xml')!.async('string')).toContain('Four Agency');
+    expect(Object.keys(zip.files).filter((f) => f.startsWith('word/media/')).length).toBeGreaterThan(1);
+  });
+
+  it('downloads the whole bundle as a zip', async () => {
+    const [latest] = await (await api(`/api/runs/${completedRunId}/exports`)).json();
+    const res = await api(`/api/exports/${latest.id}/zip`);
+    expect(res.headers.get('content-disposition')).toMatch(/attachment; filename=".+\.zip"/);
+    const zip = await JSZip.loadAsync(await res.arrayBuffer());
+    const names = Object.keys(zip.files);
+    expect(names).toContainEqual(expect.stringMatching(/\/report\.docx$/));
+    expect(names).toContainEqual(expect.stringMatching(/\/tickets\.csv$/));
+    expect(names.filter((n) => /\/screenshots\/PRG-.+\.png$/.test(n)).length).toBe(latest.screenshots);
+  });
+
+  it('refuses unknown presets, files and runs that are not finished', async () => {
+    expect((await post(`/api/runs/${completedRunId}/exports`, { preset: 'asana' })).status).toBe(400);
+    expect((await api('/api/exports/1/files/..%2F..%2Fprego.sqlite')).status).toBe(404);
+    expect((await api('/api/exports/999/zip')).status).toBe(404);
+    const stopped = db.listRuns(db.getProjectBySlug('acme')!.id).find((r) => r.status === 'stopped')!;
+    expect((await post(`/api/runs/${stopped.id}/exports`, {})).status).toBe(409);
+  });
+
+  it('previews the report as HTML', async () => {
+    const { html } = await (await api(`/api/runs/${completedRunId}/report-preview`)).json();
+    expect(html).toContain('Executive summary');
+    expect(html).toContain('<img');
   });
 });
 

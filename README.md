@@ -34,6 +34,11 @@ npm run build && npm start
 That serves everything from http://localhost:4310/ (set `PREGO_PORT` to change it). Prego only
 listens on this computer and refuses requests from other sites.
 
+In the GUI you can create projects, start an audit, watch it live, triage tickets (edit, merge,
+dismiss false positives, add notes) and export. Triage is saved per project, so it carries into
+later audits. Report branding (company name, accent colour, logo) and New audit defaults are in
+Settings; CLI exports use the same branding.
+
 ## Running an audit from the command line
 
 ```bash

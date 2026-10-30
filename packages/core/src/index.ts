@@ -23,3 +23,5 @@ export { verifyExport, type VerifyResult } from './export/verify.js';
 export { MODULE_CATEGORIES, checkedCategories } from './checks/categories.js';
 export { updateTicket, mergeTickets, TriageError, type TicketChanges } from './tickets/triage.js';
 export type { TicketOverride } from './db/database.js';
+export { DEFAULT_SETTINGS, getSettings, saveSettings, logoPath, reportBranding, type PregoSettings } from './settings.js';
+export type { ExportRecord } from './db/database.js';

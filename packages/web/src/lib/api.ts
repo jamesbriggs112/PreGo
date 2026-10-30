@@ -47,6 +47,22 @@ export interface TicketChanges {
   dismissed?: boolean;
 }
 
+export interface ExportSummary {
+  id: number;
+  runId: number;
+  name: string;
+  folder: string;
+  preset: string;
+  createdAt: string;
+  files: string[];
+  screenshots: number;
+}
+
+export interface Settings {
+  branding: { companyName: string; accentColour: string };
+  defaults: { viewports: string[]; perTemplate: number; concurrency: number; delayMs: number; respectRobots: boolean; csvPreset: string };
+}
+
 export interface StartRunBody {
   project: string;
   target: string;
@@ -101,6 +117,16 @@ export const api = {
   updateTicket: (runId: number, ticketId: string, changes: TicketChanges) =>
     request<Ticket>(`/api/runs/${runId}/tickets/${encodeURIComponent(ticketId)}`, { method: 'PATCH', body: JSON.stringify(changes) }),
   mergeTickets: (runId: number, into: string, from: string[]) => post<Ticket>(`/api/runs/${runId}/tickets/merge`, { into, from }),
+  exports: (runId: number) => request<ExportSummary[]>(`/api/runs/${runId}/exports`),
+  createExport: (runId: number, preset: string) => post<ExportSummary>(`/api/runs/${runId}/exports`, { preset }),
+  reportPreview: (runId: number) => request<{ html: string }>(`/api/runs/${runId}/report-preview`),
+  settings: () => request<Settings & { hasLogo: boolean }>('/api/settings'),
+  saveSettings: (settings: Settings) => request<Settings & { hasLogo: boolean }>('/api/settings', { method: 'PUT', body: JSON.stringify(settings) }),
+  uploadLogo: (png: string) => request<{ hasLogo: boolean }>('/api/settings/logo', { method: 'PUT', body: JSON.stringify({ png }) }),
+  removeLogo: () => request<{ hasLogo: boolean }>('/api/settings/logo', { method: 'DELETE' }),
 };
+
+export const exportFileUrl = (exportId: number, file: string) => `/api/exports/${exportId}/files/${file}`;
+export const exportZipUrl = (exportId: number) => `/api/exports/${exportId}/zip`;
 
 export const fileUrl = (runId: number, path: string) => `/api/runs/${runId}/files/${path.split(/[\\/]/).map(encodeURIComponent).join('/')}`;

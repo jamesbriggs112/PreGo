@@ -21,6 +21,8 @@
   "dependencies": {
     "@fastify/static": "^10.1.8",
     "@prego/core": "2.0.0-alpha.0",
-    "fastify": "^5.12.7"
+    "fastify": "^5.12.7",
+    "jszip": "^3.10.2",
+    "mammoth": "^1.13.0"
   }
 }

@@ -5,11 +5,14 @@ import { ProjectsPage } from '@/pages/ProjectsPage';
 import { NewAuditPage } from '@/pages/NewAuditPage';
 import { RunPage } from '@/pages/RunPage';
 import { TicketPage } from '@/pages/TicketPage';
+import { ExportPage } from '@/pages/ExportPage';
+import { SettingsPage } from '@/pages/SettingsPage';
 import { NotFoundPage } from '@/pages/NotFoundPage';
 
 const NAV = [
   { to: '/', label: 'Projects', end: true },
   { to: '/audits/new', label: 'New audit', end: false },
+  { to: '/settings', label: 'Settings', end: false },
 ];
 
 export function App() {
@@ -61,6 +64,8 @@ export function App() {
           <Route path="/audits/new" element={<NewAuditPage />} />
           <Route path="/runs/:runId" element={<RunPage />} />
           <Route path="/runs/:runId/tickets/:ticketId" element={<TicketPage />} />
+          <Route path="/runs/:runId/export" element={<ExportPage />} />
+          <Route path="/settings" element={<SettingsPage />} />
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </main>

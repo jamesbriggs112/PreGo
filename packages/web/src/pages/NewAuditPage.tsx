@@ -2,7 +2,7 @@ import { Children, cloneElement, isValidElement, useState, type FormEvent, type 
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { PROFILES, type ProfileName } from '@prego/core/profiles';
-import { api, ApiError, type StartRunBody } from '@/lib/api';
+import { api, ApiError, type Settings, type StartRunBody } from '@/lib/api';
 import { useTitle } from '@/lib/use-title';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -43,25 +43,32 @@ const lines = (text: string) =>
 
 export function NewAuditPage() {
   useTitle('New audit');
+  const settings = useQuery({ queryKey: ['settings'], queryFn: api.settings });
+  if (settings.isPending) return <p>Loading…</p>;
+  // Fall back to built-in defaults if settings can't be loaded; the form still works.
+  return <NewAuditForm defaults={settings.data?.defaults} />;
+}
+
+function NewAuditForm({ defaults }: { defaults?: Settings['defaults'] }) {
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const projects = useQuery({ queryKey: ['projects'], queryFn: api.projects });
 
   const [project, setProject] = useState(params.get('project') ?? '');
   const [target, setTarget] = useState('');
-  const [viewports, setViewports] = useState<ProfileName[]>(['desktop']);
+  const [viewports, setViewports] = useState<ProfileName[]>((defaults?.viewports as ProfileName[] | undefined) ?? ['desktop']);
   const [emulation, setEmulation] = useState<Record<string, boolean>>({});
   const [maxPages, setMaxPages] = useState('100');
   const [maxDepth, setMaxDepth] = useState('10');
   const [timeBudget, setTimeBudget] = useState('');
-  const [perTemplate, setPerTemplate] = useState('3');
+  const [perTemplate, setPerTemplate] = useState(String(defaults?.perTemplate ?? 3));
   const [auditAll, setAuditAll] = useState(false);
   const [include, setInclude] = useState('');
   const [exclude, setExclude] = useState('');
-  const [respectRobots, setRespectRobots] = useState(true);
+  const [respectRobots, setRespectRobots] = useState(defaults?.respectRobots ?? true);
   const [useSitemap, setUseSitemap] = useState(true);
-  const [concurrency, setConcurrency] = useState('2');
-  const [delay, setDelay] = useState('500');
+  const [concurrency, setConcurrency] = useState(String(defaults?.concurrency ?? 2));
+  const [delay, setDelay] = useState(String(defaults?.delayMs ?? 500));
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
 

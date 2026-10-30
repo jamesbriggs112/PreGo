@@ -28,3 +28,4 @@ export type { ExportRecord } from './db/database.js';
 export { discoverActions, type Action, type ActionKind } from './explore/actions.js';
 export { exploreApp, openScreen, perform, settle, type ExploreOptions, type ExploreResult, type ExploredState, type ExploreEdge } from './explore/explorer.js';
 export { identifyScreen, type ScreenIdentity } from './explore/state.js';
+export { createSafety, loadDummyData, valueFor, DEFAULT_DENY_LABELS, DEFAULT_DUMMY_DATA, type Safety, type SafetyOptions, type DummyData } from './explore/safety.js';

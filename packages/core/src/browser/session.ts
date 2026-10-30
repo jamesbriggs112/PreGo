@@ -17,6 +17,8 @@ export interface BrowserSessionOptions {
   authOrigin?: string;
   /** Saved browser session (cookies, local storage) to load into every context, if the file exists. */
   storageStatePath?: string;
+  /** Called with the URL of every request any page makes (for the outbound-network test). */
+  onRequest?: (url: string) => void;
 }
 
 export interface OpenedPage {
@@ -70,6 +72,8 @@ export class BrowserSession {
     await this.start();
     const context = await (await this.browser!).newContext(this.contextOptions(profileName, emulation));
     await context.addInitScript(EVALUATE_SHIM);
+    const { onRequest } = this.options;
+    if (onRequest) context.on('request', (request) => onRequest(request.url()));
     const page = await context.newPage();
     return { context, page, viewport: viewportName(profileName, emulation), close: () => context.close() };
   }

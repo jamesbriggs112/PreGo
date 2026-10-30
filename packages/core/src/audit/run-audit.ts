@@ -3,6 +3,7 @@ import { join, resolve } from 'node:path';
 import type { PregoDb } from '../db/database.js';
 import { BrowserSession, sessionPath, type BasicAuth, type OpenedPage } from '../browser/session.js';
 import { exploreApp, openScreen } from '../explore/explorer.js';
+import { createSafety, DEFAULT_DENY_LABELS, type DummyData } from '../explore/safety.js';
 import type { Emulation, ProfileName } from '../browser/profiles.js';
 import { crawlSite } from '../crawl/crawler.js';
 import { extractStructure, groupTemplates, samplePages } from '../crawl/templates.js';
@@ -33,6 +34,12 @@ export interface AuditOptions {
   maskSelectors?: string[];
   /** Explore: fake time allowed for transitions after each action. Default 1000ms. */
   settleMs?: number;
+  /** Explore: action labels never pressed. Default DEFAULT_DENY_LABELS (delete, buy, send...). */
+  denyLabels?: string[];
+  /** Explore: CSS selectors never pressed. */
+  denySelectors?: string[];
+  /** Explore: values typed into form fields. Default: config/dummy-data.json values. */
+  dummyData?: DummyData;
   timeBudgetMs?: number;
   include?: string[];
   exclude?: string[];
@@ -54,6 +61,8 @@ export interface AuditOptions {
   maxCropsPerLocation?: number;
   dataDir?: string;
   signal?: AbortSignal;
+  /** Called with the URL of every request any browser makes during the audit. */
+  onRequest?: (url: string) => void;
   onEvent?: (event: AuditEvent) => void;
 }
 
@@ -132,6 +141,8 @@ export async function runAudit(db: PregoDb, options: AuditOptions): Promise<Audi
       maxDepth: options.maxDepth ?? (mode === 'explore' ? 8 : 10),
       maxStates: options.maxStates ?? 200,
       maskSelectors: options.maskSelectors ?? [],
+      denyLabels: options.denyLabels ?? DEFAULT_DENY_LABELS,
+      denySelectors: options.denySelectors ?? [],
       include: options.include ?? [],
       exclude: options.exclude ?? [],
       respectRobots: options.respectRobots ?? true,
@@ -150,7 +161,7 @@ export async function runAudit(db: PregoDb, options: AuditOptions): Promise<Audi
 
   // Everything after the run row exists is inside this try, so any failure is recorded on the run.
   try {
-    const browser = new BrowserSession({ basicAuth: options.basicAuth, authOrigin: new URL(startUrl).origin, storageStatePath });
+    const browser = new BrowserSession({ basicAuth: options.basicAuth, authOrigin: new URL(startUrl).origin, storageStatePath, onRequest: options.onRequest });
     session = browser;
     const context: DiscoveryContext = { db, run, options, startUrl, storageStatePath, browser, viewports, delayMs, emit };
     const discovery = mode === 'explore' ? await discoverByExploring(context) : await discoverByCrawling(context);
@@ -270,6 +281,7 @@ async function discoverByCrawling({ db, run, options, startUrl, storageStatePath
     basicAuth: options.basicAuth,
     storageStatePath,
     signal: options.signal,
+    onRequest: options.onRequest,
     inspectPage: async ({ page }) => ({ structure: await extractStructure(page) }),
     onPage: (page) => emit({ type: 'page-found', url: page.url, count: ++pagesFound }),
   });
@@ -338,14 +350,17 @@ async function discoverByCrawling({ db, run, options, startUrl, storageStatePath
 /** Explore an interactive breadth-first and record every screen and what each action did. */
 async function discoverByExploring({ db, run, options, startUrl, browser, viewports, emit }: DiscoveryContext): Promise<Discovery> {
   emit({ type: 'phase', phase: 'explore', message: `Exploring ${startUrl}` });
+  const safety = createSafety(startUrl, { denyLabels: options.denyLabels, denySelectors: options.denySelectors, dummyData: options.dummyData });
   const explore = {
     startUrl,
     session: browser,
     emulation: options.emulation,
     settleMs: options.settleMs,
+    prepareScreen: safety.prepareScreen,
   };
   const result = await exploreApp({
     ...explore,
+    canPerform: safety.canPerform,
     profile: viewports[0],
     maxStates: options.maxStates,
     maxDepth: options.maxDepth,

@@ -1,0 +1,17 @@
+{
+  "_comment": "Values Prego types into form fields while exploring. Never put real personal data here. The phone number is an Ofcom drama number and the email uses the reserved example.com domain.",
+  "text": "Prego test",
+  "name": "Prego Test",
+  "firstName": "Prego",
+  "lastName": "Test",
+  "email": "prego.test@example.com",
+  "tel": "01632 960000",
+  "postcode": "SW1A 1AA",
+  "address": "1 Test Street",
+  "city": "Testville",
+  "number": "1",
+  "url": "https://example.com",
+  "search": "test",
+  "date": "2026-01-01",
+  "message": "This is a test message from Prego, an automated audit tool. Please ignore it."
+}

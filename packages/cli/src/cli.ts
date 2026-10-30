@@ -3,12 +3,14 @@ import { Command, InvalidArgumentError, Option } from 'commander';
 import { basename, join, resolve } from 'node:path';
 import {
   CSV_PRESETS,
+  DEFAULT_DENY_LABELS,
   PROFILES,
   PregoDb,
   VERSION,
   defaultDataDir,
   exportRun,
   isProfileName,
+  loadDummyData,
   runAudit,
   verifyExport,
   type AuditEvent,
@@ -47,8 +49,13 @@ program
   .argument('<target>', 'URL to audit, or a local folder to serve and audit')
   .option('-p, --project <name>', 'project (client or site) name; defaults to the hostname or folder name')
   .option('--viewports <list>', `comma-separated: ${Object.keys(PROFILES).join(', ')}`, viewportList, ['desktop'] as ProfileName[])
+  .addOption(new Option('--mode <mode>', 'crawl a site, or explore an interactive (single-page app or kiosk)').choices(['crawl', 'explore']).default('crawl'))
   .option('--max-pages <n>', 'maximum pages to crawl', int, 100)
-  .option('--max-depth <n>', 'maximum link depth', int, 10)
+  .option('--max-depth <n>', 'maximum link depth (crawl, default 10) or taps from the start (explore, default 8)', int)
+  .option('--max-states <n>', 'explore: maximum screens to record', int, 200)
+  .option('--mask <selector>', 'explore: ignore this element when telling screens apart, e.g. a clock (repeatable)', collect)
+  .option('--deny <label>', `explore: never press actions with this label, as well as: ${DEFAULT_DENY_LABELS.join(', ')} (repeatable)`, collect)
+  .option('--deny-selector <selector>', 'explore: never press elements matching this selector (repeatable)', collect)
   .option('--time-budget <minutes>', 'stop discovering pages after this many minutes', int)
   .option('--include <glob>', 'only crawl URLs matching this pattern (repeatable), e.g. /blog/**', collect)
   .option('--exclude <glob>', 'skip URLs matching this pattern (repeatable)', collect)
@@ -80,8 +87,14 @@ program
         target,
         dataDir,
         viewports: opts.viewports,
+        mode: opts.mode,
         maxPages: opts.maxPages,
         maxDepth: opts.maxDepth,
+        maxStates: opts.maxStates,
+        maskSelectors: opts.mask,
+        denyLabels: [...DEFAULT_DENY_LABELS, ...(opts.deny ?? [])],
+        denySelectors: opts.denySelector,
+        dummyData: loadDummyData(resolve('config/dummy-data.json')),
         timeBudgetMs: opts.timeBudget ? opts.timeBudget * 60_000 : undefined,
         include: opts.include,
         exclude: opts.exclude,
@@ -102,7 +115,8 @@ program
         return;
       }
       const s = run.summary as Record<string, number>;
-      console.log(`Run ${run.id} complete: ${s.pagesFound} pages found, ${s.pagesAudited} audited, ${s.tickets} tickets from ${s.findings} findings.`);
+      const found = run.mode === 'explore' ? `${s.statesFound} screens found and audited` : `${s.pagesFound} pages found, ${s.pagesAudited} audited`;
+      console.log(`Run ${run.id} complete: ${found}, ${s.tickets} tickets from ${s.findings} findings.`);
       if (opts.export) {
         const exported = await exportRun(db, run.id, { dataDir, preset: opts.preset });
         console.log(`Export: ${exported.dir}`);

@@ -146,6 +146,29 @@ describe('starting an audit', () => {
     }
   }, 120_000);
 
+  it('explores an interactive and remembers its denylist and masks for the project', async () => {
+    const kioskDir = resolve('fixtures/kiosk-app');
+    const res = await post('/api/runs', {
+      project: 'Museum',
+      target: kioskDir,
+      mode: 'explore',
+      viewports: ['kiosk-landscape'],
+      maxStates: 4,
+      denyLabels: ['send', ' delete ', ''],
+      maskSelectors: ['.attract-hint'],
+    });
+    expect(res.status).toBe(202);
+    const { runId, projectId } = await res.json();
+    const events = await readEvents(runId);
+    expect(events.filter((e) => e.type === 'state-found')).toHaveLength(4);
+    expect(events.at(-1)).toEqual({ type: 'end', status: 'complete' });
+    expect(await (await api(`/api/runs/${runId}`)).json()).toMatchObject({ mode: 'explore', summary: { statesFound: 4 } });
+    expect(await (await api(`/api/projects/${projectId}`)).json()).toMatchObject({
+      settings: { denyLabels: ['send', 'delete'], maskSelectors: ['.attract-hint'] },
+    });
+    expect((await post('/api/runs', { project: 'Museum', target: kioskDir, mode: 'teleport' })).status).toBe(400);
+  }, 120_000);
+
   it('stops a running audit', async () => {
     const { runId } = await (await post('/api/runs', { project: 'Acme', target: fixture, delayMs: 2000 })).json();
     expect((await post(`/api/runs/${runId}/stop`, {})).status).toBe(200);

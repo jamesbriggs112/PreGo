@@ -17,6 +17,7 @@ import {
   reportBranding,
   reportDocx,
   saveSettings,
+  type DummyData,
   type ExportRecord,
   type PregoSettings,
   categoryScore,
@@ -38,6 +39,8 @@ export interface AppOptions {
   /** Built web app to serve (packages/web/dist). Omit in development, where Vite serves it. */
   webDist?: string;
   logger?: boolean;
+  /** Values the explorer types into forms. Default: built-in dummy data. */
+  dummyData?: DummyData;
 }
 
 export interface PregoApp {
@@ -53,6 +56,11 @@ const IMAGE_TYPES: Record<string, string> = { '.png': 'image/png', '.jpg': 'imag
 interface StartRunBody {
   project: string;
   target: string;
+  mode?: 'crawl' | 'explore';
+  maxStates?: number;
+  maskSelectors?: string[];
+  denyLabels?: string[];
+  denySelectors?: string[];
   viewports?: string[];
   emulation?: { reducedMotion?: boolean; forcedColors?: boolean; darkMode?: boolean; zoom200?: boolean };
   maxPages?: number;
@@ -79,6 +87,11 @@ const startRunSchema = {
     properties: {
       project: { type: 'string', minLength: 1, maxLength: 200 },
       target: { type: 'string', minLength: 1 },
+      mode: { enum: ['crawl', 'explore'] },
+      maxStates: { type: 'integer', minimum: 1, maximum: 2000 },
+      maskSelectors: { type: 'array', items: { type: 'string' } },
+      denyLabels: { type: 'array', items: { type: 'string' } },
+      denySelectors: { type: 'array', items: { type: 'string' } },
       viewports: { type: 'array', items: { type: 'string' }, minItems: 1 },
       emulation: {
         type: 'object',
@@ -168,9 +181,17 @@ export async function buildApp(options: AppOptions): Promise<PregoApp> {
     const unknown = viewports.filter((v) => !isProfileName(v));
     if (unknown.length) return reply.code(400).send({ error: `Unknown viewport: ${unknown.join(', ')}` });
     try {
+      const clean = (list?: string[]) => list?.map((s) => s.trim()).filter(Boolean);
+      const explore = body.mode === 'explore';
       const job = await jobs.start({
         project: body.project.trim(),
         target,
+        mode: body.mode,
+        maxStates: body.maxStates,
+        maskSelectors: clean(body.maskSelectors),
+        denyLabels: clean(body.denyLabels),
+        denySelectors: clean(body.denySelectors),
+        dummyData: options.dummyData,
         viewports: viewports as ProfileName[],
         emulation: body.emulation,
         maxPages: body.maxPages,
@@ -186,6 +207,14 @@ export async function buildApp(options: AppOptions): Promise<PregoApp> {
         delayMs: body.delayMs,
         basicAuth: body.basicAuth?.username ? body.basicAuth : undefined,
       });
+      // Remember the explorer's denylist and masks for this project's next audit.
+      if (explore) {
+        db.saveProjectSettings(job.projectId, {
+          ...(body.denyLabels && { denyLabels: clean(body.denyLabels) }),
+          ...(body.denySelectors && { denySelectors: clean(body.denySelectors) }),
+          ...(body.maskSelectors && { maskSelectors: clean(body.maskSelectors) }),
+        });
+      }
       return reply.code(202).send({ runId: job.runId, projectId: job.projectId });
     } catch (error) {
       if (error instanceof AuditInProgressError) return reply.code(409).send({ error: error.message, runId: error.runId });

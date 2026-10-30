@@ -8,6 +8,7 @@ import type {
   Occurrence,
   Priority,
   Project,
+  ProjectSettings,
   RawFinding,
   Run,
   RunStatus,
@@ -196,6 +197,10 @@ const MIGRATIONS: string[] = [
   );
   CREATE INDEX state_edges_run ON state_edges(runId);
   `,
+  // 6: per-project settings (explorer denylist and masks).
+  `
+  ALTER TABLE projects ADD COLUMN settings TEXT NOT NULL DEFAULT '{}';
+  `,
 ];
 
 export interface ExportRecord {
@@ -275,15 +280,17 @@ export class PregoDb {
     const { lastInsertRowid } = this.sqlite
       .prepare('INSERT INTO projects (name, slug, createdAt) VALUES (?, ?, ?)')
       .run(name, slug, createdAt);
-    return { id: Number(lastInsertRowid), name, slug, createdAt };
+    return { id: Number(lastInsertRowid), name, slug, createdAt, settings: {} };
   }
 
   getProject(id: number): Project | undefined {
-    return this.sqlite.prepare('SELECT * FROM projects WHERE id = ?').get(id) as Project | undefined;
+    const row = this.sqlite.prepare('SELECT * FROM projects WHERE id = ?').get(id) as ProjectRow | undefined;
+    return row && toProject(row);
   }
 
   getProjectBySlug(slug: string): Project | undefined {
-    return this.sqlite.prepare('SELECT * FROM projects WHERE slug = ?').get(slug) as Project | undefined;
+    const row = this.sqlite.prepare('SELECT * FROM projects WHERE slug = ?').get(slug) as ProjectRow | undefined;
+    return row && toProject(row);
   }
 
   /** Find a project by name (via its slug) or create it. */
@@ -292,7 +299,12 @@ export class PregoDb {
   }
 
   listProjects(): Project[] {
-    return this.sqlite.prepare('SELECT * FROM projects ORDER BY name').all() as Project[];
+    return (this.sqlite.prepare('SELECT * FROM projects ORDER BY name').all() as ProjectRow[]).map(toProject);
+  }
+
+  saveProjectSettings(id: number, settings: ProjectSettings) {
+    const merged = { ...this.getProject(id)?.settings, ...settings };
+    this.sqlite.prepare('UPDATE projects SET settings = ? WHERE id = ?').run(JSON.stringify(merged), id);
   }
 
   // Runs
@@ -607,6 +619,8 @@ export class PregoDb {
 }
 
 // Row types are what SQLite returns: JSON as text, booleans as integers.
+type ProjectRow = Omit<Project, 'settings'> & { settings: string };
+const toProject = (row: ProjectRow): Project => ({ ...row, settings: JSON.parse(row.settings) });
 type RunRow = Omit<Run, 'settings' | 'summary' | 'mode' | 'status'> & {
   mode: string;
   status: string;

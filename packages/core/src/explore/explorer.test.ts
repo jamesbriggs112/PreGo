@@ -88,8 +88,10 @@ describe('runAudit in explore mode', () => {
       viewports: ['kiosk-landscape'],
       dataDir,
     });
-    expect(run).toMatchObject({ status: 'complete', mode: 'explore', summary: { statesFound: 17, statesAudited: 17 } });
-    expect(locations).toHaveLength(17);
+    // 16, not 17: the default denylist keeps "Send to my email" (and so "Postcard Sent") out.
+    expect(run).toMatchObject({ status: 'complete', mode: 'explore', summary: { statesFound: 16, statesAudited: 16 } });
+    expect(locations).toHaveLength(16);
+    expect(db.getEdges(run.id).find((e) => e.step.label === 'Send to my email')).toMatchObject({ outcome: 'skipped' });
     const egypt = locations.find((l) => l.title === 'Egypt')!;
     expect(egypt).toMatchObject({ kind: 'state', depth: 4, audited: true, templateKey: `state:${egypt.stateId}` });
     expect(egypt.steps).toHaveLength(4);

@@ -34,6 +34,8 @@ export interface CrawlOptions {
   storageStatePath?: string;
   /** Stop the crawl early. Pages already open finish. */
   signal?: AbortSignal;
+  /** Called with the URL of every request the crawler's browser makes. */
+  onRequest?: (url: string) => void;
   /** Collect extra data from each page while it's open (e.g. its DOM structure). */
   inspectPage?: (context: PlaywrightCrawlingContext) => Promise<Record<string, unknown>>;
   onPage?: (page: CrawledPage) => void;
@@ -116,6 +118,8 @@ export async function crawlSite(options: CrawlOptions): Promise<CrawlResult> {
         postPageCreateHooks: [
           async (page) => {
             await page.addInitScript(EVALUATE_SHIM);
+            const { onRequest } = options;
+            if (onRequest) page.on('request', (request) => onRequest(request.url()));
           },
         ],
       },

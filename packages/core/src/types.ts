@@ -26,11 +26,19 @@ export type RunStatus = 'running' | 'complete' | 'failed' | 'stopped';
 
 export type AuditMode = 'crawl' | 'explore' | 'journey';
 
+/** Per-project settings remembered between audits (the explorer's denylist and masks). */
+export interface ProjectSettings {
+  denyLabels?: string[];
+  denySelectors?: string[];
+  maskSelectors?: string[];
+}
+
 export interface Project {
   id: number;
   name: string;
   slug: string;
   createdAt: string;
+  settings: ProjectSettings;
 }
 
 export interface Run {

@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Account</title></head>
+<body>
+  <!-- Prego test page for explorer safety (T20). Single URL; screens are swapped in JavaScript. -->
+  <main id="app"></main>
+  <script>
+    // Every press of a dangerous control is recorded here, so tests can prove it never happened.
+    window.dangerousPresses = [];
+    const app = document.getElementById('app');
+    function account() {
+      app.innerHTML = `
+        <h1>Your account</h1>
+        <form id="contact">
+          <label for="full-name">Full name</label> <input id="full-name" name="name">
+          <label for="email">Email</label> <input id="email" type="email" name="email">
+          <label for="phone">Phone</label> <input id="phone" type="tel">
+          <label for="password">Password</label> <input id="password" type="password">
+          <label for="msg">Message</label> <textarea id="msg"></textarea>
+          <button type="submit">Save details</button>
+        </form>
+        <button id="delete">Delete account</button>
+        <button class="danger" id="danger">Reset everything</button>
+        <a href="/logout">Log out</a>
+        <a href="https://example.org/help">Help (another site)</a>`;
+      document.getElementById('delete').onclick = () => window.dangerousPresses.push('delete');
+      document.getElementById('danger').onclick = () => window.dangerousPresses.push('danger');
+      document.getElementById('contact').onsubmit = (event) => {
+        event.preventDefault();
+        const data = new FormData(event.target);
+        app.innerHTML = `<h1>Saved</h1><p id="saved">${data.get('name')} / ${data.get('email')} / ${document.getElementById('password').value === '' ? 'no password' : 'PASSWORD TYPED'}</p>`;
+      };
+    }
+    account();
+  </script>
+</body>
+</html>

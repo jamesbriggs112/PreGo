@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Clock</title></head>
+<body>
+  <!-- Prego test page for mask selectors (T20): a live clock that changes every second. Without
+       masking it, every visit to a screen would look like a new screen. -->
+  <header><p id="clock" role="timer"></p></header>
+  <main id="app"></main>
+  <script>
+    const clock = document.getElementById('clock');
+    setInterval(() => { clock.textContent = new Date().toISOString(); }, 1000);
+    clock.textContent = new Date().toISOString();
+    const app = document.getElementById('app');
+    function show(screen) {
+      app.innerHTML = screen === 'one'
+        ? '<h1>Screen one</h1><button id="go">Go to screen two</button>'
+        : '<h1>Screen two</h1><button id="back">Back to screen one</button>';
+      const button = app.querySelector('button');
+      button.onclick = () => show(screen === 'one' ? 'two' : 'one');
+    }
+    show('one');
+  </script>
+</body>
+</html>

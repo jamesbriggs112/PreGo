@@ -1,0 +1,14 @@
+diff --git a/node_modules/@crawlee/browser-pool/proxy-server.js b/node_modules/@crawlee/browser-pool/proxy-server.js
+index b0a7b71..0913aa3 100644
+--- a/node_modules/@crawlee/browser-pool/proxy-server.js
++++ b/node_modules/@crawlee/browser-pool/proxy-server.js
+@@ -4,6 +4,9 @@ exports.getLocalProxyAddress = getLocalProxyAddress;
+ const proxy_chain_1 = require("proxy-chain");
+ const server = new proxy_chain_1.Server({
+     port: 0,
++    // Patched by Prego: bind to loopback only. Unpatched, this proxy listens on every network
++    // interface, so anyone on the network could relay requests through it to this computer.
++    host: '127.0.0.1',
+ });
+ server.server.unref();
+ const listenPromise = server.listen();

@@ -57,7 +57,7 @@ export async function reportDocx(plan: ExportPlan, runDir: string, branding: Rep
     ...executiveSummary(plan),
     ...scopeAndMethod(plan),
     ...findings(plan, runDir),
-    ...(plan.run.mode === 'explore' ? stateMapSection(plan, extras.stateMap) : siteMap(plan)),
+    ...(plan.run.mode === 'explore' ? stateMapSection(plan, extras.stateMap) : plan.run.mode === 'journey' ? journeySection(plan) : siteMap(plan)),
     ...comparison(plan),
     ...limitations(plan),
     ...appendix(plan),
@@ -124,7 +124,7 @@ function executiveSummary(plan: ExportPlan): (Paragraph | Table)[] {
   const out: (Paragraph | Table)[] = [
     heading('2. Executive summary', HeadingLevel.HEADING_1),
     para(
-      `Automated checks found ${plan.tickets.length} distinct ${plural(plan.tickets.length, 'issue')} across ${auditedCount(plan)} audited ${plural(auditedCount(plan), plan.run.mode === 'explore' ? 'screen' : 'page')}. ` +
+      `Automated checks found ${plan.tickets.length} distinct ${plural(plan.tickets.length, 'issue')} across ${auditedCount(plan)} audited ${plural(auditedCount(plan), plan.run.mode === 'explore' ? 'screen' : plan.run.mode === 'journey' ? 'journey step' : 'page')}. ` +
         'Each issue has a ticket ID (for example PRG-A11Y-001) that matches a row in tickets.csv, so the development team can pick it up directly.',
     ),
     heading('Scores by category', HeadingLevel.HEADING_2),
@@ -166,6 +166,26 @@ function scopeAndMethod(plan: ExportPlan): (Paragraph | Table)[] {
   const templates = new Set(pages.map((l) => l.templateKey));
   const notAudited = pages.filter((l) => !l.audited);
   const modules = (s.modules as { name: string }[] | undefined)?.map((m) => m.name) ?? [];
+  if (plan.run.mode === 'journey') {
+    const summary = plan.run.summary as Record<string, unknown>;
+    return [
+      heading('3. Scope and method', HeadingLevel.HEADING_1),
+      para(scopeSentence(plan) + '.'),
+      para('The journey was recorded once by an auditor clicking through it, then replayed by Prego with checks after every step, at each viewport.'),
+      table(
+        ['', ''],
+        [
+          ['Journey', String(summary.journey ?? '')],
+          ['Exploration mode', 'Scripted journey (recorded, then replayed with checks at every step)'],
+          ['Viewports', ((s.viewports as string[]) ?? []).join(', ')],
+          ['Steps replayed', `${summary.stepsReplayed} of ${summary.stepsRecorded}${summary.completed ? '' : ' (the journey could not be completed; see the findings)'}`],
+          ['Checks run', modules.join('; ') || 'None'],
+          ['Tools', 'Prego with Playwright (Chromium) and axe-core. All open source; nothing left this machine.'],
+        ],
+        { headerRow: false },
+      ),
+    ];
+  }
   if (plan.run.mode === 'explore') {
     const states = plan.locations.filter((l) => l.kind === 'state');
     const skipped = plan.edges.filter((e) => e.outcome === 'skipped' || e.outcome === 'external');
@@ -280,6 +300,20 @@ function stateMapSection(plan: ExportPlan, image: Buffer | undefined): (Paragrap
   return out;
 }
 
+function journeySection(plan: ExportPlan): (Paragraph | Table)[] {
+  const issues = new Map<number, number>();
+  for (const t of plan.tickets) for (const id of new Set(t.occurrenceList.map((o) => o.locationId))) issues.set(id, (issues.get(id) ?? 0) + 1);
+  return [
+    heading('5. Journey steps', HeadingLevel.HEADING_1),
+    para('Each step of the recorded journey, the page it ended on and how many issues were found there.'),
+    table(
+      ['Step', 'Page', 'Issues'],
+      plan.locations.map((l) => [l.title ?? '', l.url, String(issues.get(l.id) ?? 0)]),
+      { fontSize: 16 },
+    ),
+  ];
+}
+
 function siteMap(plan: ExportPlan): (Paragraph | Table)[] {
   const rows = plan.locations.map((l) => [
     l.url,
@@ -383,6 +417,10 @@ function auditedCount(plan: ExportPlan): number {
 function scopeSentence(plan: ExportPlan): string {
   const s = plan.run.settings as Record<string, unknown>;
   const viewports = `${((s.viewports as string[]) ?? []).join(', ')} ${plural(((s.viewports as string[]) ?? []).length, 'viewport')}`;
+  if (plan.run.mode === 'journey') {
+    const summary = plan.run.summary as Record<string, unknown>;
+    return `Scripted journey “${summary.journey}” on ${productName(plan)}: ${summary.stepsReplayed} of ${summary.stepsRecorded} steps replayed and audited at ${viewports}`;
+  }
   if (plan.run.mode === 'explore') {
     const screens = plan.locations.filter((l) => l.kind === 'state').length;
     return `Interactive exploration of ${productName(plan)}: ${screens} ${plural(screens, 'screen')} found and audited at ${viewports}`;

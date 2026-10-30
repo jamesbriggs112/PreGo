@@ -263,6 +263,13 @@ const PREGO: Record<string, RuleGuidance> = {
     recommendation: 'Flatten the menu structure or add a shortcut to this content from a higher level.',
     effort: 'Large',
   },
+  'journey-step-failed': {
+    title: 'Journey could not be completed',
+    description: 'A step of a recorded journey could not be replayed: the element it uses was missing, hidden or didn’t respond.',
+    whyItMatters: 'If an automated replay can’t get through the journey, visitors may not be able to either. It can also mean the journey recording is out of date.',
+    recommendation: 'Try the journey by hand. If it works, record it again; if it doesn’t, fix the step that fails.',
+    effort: 'Medium',
+  },
   'inconsistent-navigation': {
     title: 'Navigation behaves inconsistently',
     description: 'A Home or Back button goes somewhere different here than it does on other screens.',

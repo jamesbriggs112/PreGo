@@ -189,11 +189,13 @@ function compare(a: string[], b: string[]): number {
 }
 
 function stepsToReproduce(finding: RawFinding, location: Location): string {
-  const taps = location.steps?.map((s) => `Press “${s.label}”.`) ?? [];
+  const journey = location.steps?.[0]?.role === 'journey';
+  const taps = location.steps?.map((s) => (journey ? `${s.label}.` : `Press “${s.label}”.`)) ?? [];
   const lines = [
-    `Open ${location.url} at the ${finding.viewport} viewport.`,
+    // A journey's first step opens the start page itself.
+    ...(journey ? [`At the ${finding.viewport} viewport:`] : [`Open ${location.url} at the ${finding.viewport} viewport.`]),
     ...taps,
-    ...(location.kind === 'state' ? [`You should now see the “${location.title}” screen.`] : []),
+    ...(location.kind === 'state' && !journey ? [`You should now see the “${location.title}” screen.`] : []),
     finding.selector === 'html' ? 'Look at the screen as a whole.' : `Find the element matching the CSS selector: ${finding.selector}`,
     finding.engine === 'prego'
       ? (finding.failureSummary ?? '')

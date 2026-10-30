@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 import { Command, InvalidArgumentError, Option } from 'commander';
-import { basename, join, resolve } from 'node:path';
+import { spawn } from 'node:child_process';
+import { createRequire } from 'node:module';
+import { basename, dirname, join, resolve } from 'node:path';
 import {
   CSV_PRESETS,
   DEFAULT_DENY_LABELS,
@@ -9,8 +11,12 @@ import {
   VERSION,
   defaultDataDir,
   exportRun,
+  ensureJourneysDir,
   isProfileName,
+  journeyFile,
+  listJourneys,
   loadDummyData,
+  slugify,
   runAudit,
   verifyExport,
   type AuditEvent,
@@ -49,7 +55,9 @@ program
   .argument('<target>', 'URL to audit, or a local folder to serve and audit')
   .option('-p, --project <name>', 'project (client or site) name; defaults to the hostname or folder name')
   .option('--viewports <list>', `comma-separated: ${Object.keys(PROFILES).join(', ')}`, viewportList, ['desktop'] as ProfileName[])
-  .addOption(new Option('--mode <mode>', 'crawl a site, or explore an interactive (single-page app or kiosk)').choices(['crawl', 'explore']).default('crawl'))
+  .addOption(new Option('--mode <mode>', 'crawl a site, explore an interactive (single-page app or kiosk), or replay a recorded journey').choices(['crawl', 'explore', 'journey']).default('crawl'))
+  .option('--journey <name>', 'journey mode: the recorded journey to replay (see `prego journey record`)')
+  .option('--login-journey <name>', 'replay this recorded journey first to log in')
   .option('--max-pages <n>', 'maximum pages to crawl', int, 100)
   .option('--max-depth <n>', 'maximum link depth (crawl, default 10) or taps from the start (explore, default 8)', int)
   .option('--max-states <n>', 'explore: maximum screens to record', int, 200)
@@ -76,6 +84,14 @@ program
       program.error('Set the basic auth password in the PREGO_PASSWORD environment variable (it is never stored or passed on the command line).');
     }
     const log = (line: string) => process.stderr.write(`${line}\n`);
+    const projectSlug = slugify(project);
+    const findJourney = (name: string) => {
+      const found = listJourneys(dataDir, projectSlug).find((j) => j.name === slugify(name));
+      if (!found) program.error(`No recorded journey called "${name}" for ${project}. Record one with: prego journey record "${project}" ${name} <url>`);
+      return found;
+    };
+    const journey = opts.mode === 'journey' ? findJourney(opts.journey ?? program.error('Journey mode needs --journey <name>.')) : undefined;
+    const loginJourney = opts.loginJourney ? findJourney(opts.loginJourney) : undefined;
     const controller = new AbortController();
     process.once('SIGINT', () => {
       log('\nStopping after the current page…');
@@ -88,6 +104,8 @@ program
         dataDir,
         viewports: opts.viewports,
         mode: opts.mode,
+        journey,
+        loginJourney,
         maxPages: opts.maxPages,
         maxDepth: opts.maxDepth,
         maxStates: opts.maxStates,
@@ -115,7 +133,12 @@ program
         return;
       }
       const s = run.summary as Record<string, number>;
-      const found = run.mode === 'explore' ? `${s.statesFound} screens found and audited` : `${s.pagesFound} pages found, ${s.pagesAudited} audited`;
+      const found =
+        run.mode === 'explore'
+          ? `${s.statesFound} screens found and audited`
+          : run.mode === 'journey'
+            ? `${s.stepsReplayed} of ${s.stepsRecorded} journey steps replayed and audited`
+            : `${s.pagesFound} pages found, ${s.pagesAudited} audited`;
       console.log(`Run ${run.id} complete: ${found}, ${s.tickets} tickets from ${s.findings} findings.`);
       if (opts.export) {
         const exported = await exportRun(db, run.id, { dataDir, preset: opts.preset });
@@ -123,6 +146,43 @@ program
       }
     } finally {
       db.close();
+    }
+  });
+
+const journeys = program.command('journey').description('record and list scripted journeys');
+
+journeys
+  .command('record')
+  .description("open Playwright's recorder: click through the journey, then close the window to save it")
+  .argument('<project>', 'project name')
+  .argument('<name>', 'journey name, e.g. book-a-ticket')
+  .argument('<url>', 'where the journey starts')
+  .action(async (project: string, name: string, url: string) => {
+    const { db, dataDir } = openDb();
+    const { slug } = db.ensureProject(project);
+    db.close();
+    ensureJourneysDir(dataDir, slug);
+    const file = journeyFile(dataDir, slug, name);
+    const cli = join(dirname(createRequire(import.meta.url).resolve('playwright/package.json')), 'cli.js');
+    console.log('A browser window is opening. Click through the journey, then close the window to save it.');
+    const code = await new Promise<number | null>((done) => {
+      const child = spawn(process.execPath, [cli, 'codegen', '--target', 'javascript', '--output', file, url], { stdio: 'inherit' });
+      child.on('exit', done);
+    });
+    const saved = listJourneys(dataDir, slug).find((j) => j.name === slugify(name));
+    if (!saved) return program.error(`Nothing was recorded (recorder exited with ${code}).`);
+    console.log(`Saved "${saved.name}" with ${saved.steps.length} steps: ${file}`);
+    for (const u of saved.unsupported) console.log(`  not replayed: ${u.statement} (${u.reason})`);
+  });
+
+journeys
+  .command('list')
+  .argument('<project>', 'project name')
+  .action((project: string) => {
+    const { dataDir } = openDb();
+    for (const j of listJourneys(dataDir, slugify(project))) {
+      console.log(`${j.name}  ${j.steps.length} steps  from ${j.startUrl ?? '?'}  (recorded ${j.recordedAt.slice(0, 16).replace('T', ' ')})`);
+      for (const step of j.steps) console.log(`  ${step.index}. ${step.description}`);
     }
   });
 
@@ -187,6 +247,8 @@ function describe(event: AuditEvent): string {
       return `  [${event.done}/${event.total}] ${event.url} @ ${event.viewport}: ${event.findings} findings`;
     case 'warning':
       return `  ! ${event.message}`;
+    case 'journey-step':
+      return event.ok ? `  step ${event.index}/${event.total}: ${event.description}` : `  ✗ step ${event.index}/${event.total} failed: ${event.description} (${event.error})`;
     case 'started':
       return `▸ Run ${event.runId} started`;
   }

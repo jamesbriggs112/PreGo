@@ -1,20 +1,35 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
+import { EventEmitter } from 'node:events';
+import type { ChildProcess } from 'node:child_process';
 import { join, resolve } from 'node:path';
 import JSZip from 'jszip';
-import { exportRun } from '@prego/core';
+import { exportRun, serveFolder, type StaticServer } from '@prego/core';
 import { axeViolations, startGui, type Gui } from './harness.js';
 
 const fixture = resolve('fixtures/bad-site');
 let gui: Gui;
 let runId: number;
+let journeySite: StaticServer;
+
+/** Stands in for Playwright's code generator, which opens a real browser window for the auditor. */
+function fakeRecorder({ outputFile }: { url: string; outputFile: string }): ChildProcess {
+  const child = new EventEmitter() as ChildProcess;
+  setTimeout(() => {
+    writeFileSync(outputFile, readFileSync('fixtures/journeys/bad-site-contact.js', 'utf8').replace('{{ORIGIN}}', journeySite.origin));
+    child.emit('exit', 0);
+  }, 500);
+  return child;
+}
 
 beforeAll(async () => {
-  gui = await startGui();
+  journeySite = await serveFolder('fixtures/bad-site', { substituteOrigin: true });
+  gui = await startGui({ recorder: fakeRecorder });
 }, 60_000);
 
 afterAll(async () => {
   await gui?.close();
+  await journeySite?.close();
 });
 
 describe('Projects screen', () => {
@@ -282,5 +297,48 @@ describe('Interactive exploration', () => {
     await page.goto(`${gui.url}audits/new?project=${encodeURIComponent('Museum of Making')}`);
     await page.getByLabel('Interactive exploration').check();
     await expect(page.getByLabel('Ignore when telling screens apart').inputValue()).resolves.toBe('.attract-hint');
+  });
+});
+
+describe('Scripted journeys (criterion 4)', () => {
+  let journeyRun: number;
+
+  it('records a journey from the New audit form', async () => {
+    const { page } = gui;
+    await page.goto(`${gui.url}audits/new?project=${encodeURIComponent('Acme Widgets')}`);
+    await page.getByLabel('Scripted journey').check();
+    const journeyCard = page.locator('fieldset', { hasText: 'Journey to replay' }).locator('..');
+    await journeyCard.getByLabel('Journey name').fill('Contact form');
+    await journeyCard.getByLabel('Start address').fill(journeySite.url);
+    await journeyCard.getByRole('button', { name: 'Record journey' }).click();
+    await page.getByText(/Recording “contact-form”: a browser window has opened/).waitFor();
+    // The journey appears once the recorder window "closes".
+    await page.getByRole('radio', { name: 'contact-form' }).waitFor({ timeout: 15_000 });
+    await expect(page.getByText(/4 steps from .*index\.html/).count()).resolves.toBe(1);
+    expect(await axeViolations(page)).toEqual([]);
+  });
+
+  it('replays it with checks at every step', async () => {
+    const { page } = gui;
+    await page.getByRole('radio', { name: 'contact-form' }).check();
+    await page.getByLabel('Delay between pages (milliseconds)').waitFor({ state: 'detached' });
+    await page.getByRole('button', { name: 'Start audit' }).click();
+    await page.waitForURL(/\/runs\/\d+$/);
+    journeyRun = Number(page.url().split('/').pop());
+    await gui.prego.jobs.get(journeyRun)!.done;
+    expect(gui.db.getRun(journeyRun)).toMatchObject({ status: 'complete', mode: 'journey', summary: expect.objectContaining({ stepsReplayed: 4, completed: true }) });
+    const locations = gui.db.getLocations(journeyRun);
+    expect(locations).toHaveLength(4);
+    for (const location of locations) expect(gui.db.getRawFindings(journeyRun).some((f) => f.locationId === location.id)).toBe(true);
+  }, 180_000);
+
+  it('shows the journey results, filterable by step', async () => {
+    const { page } = gui;
+    await page.goto(`${gui.url}runs/${journeyRun}`);
+    await page.getByText('Journey steps audited').waitFor();
+    await expect(page.getByText('4 of 4').count()).resolves.toBe(1);
+    await page.getByLabel('Step', { exact: true }).selectOption({ label: 'Step 3: Click the “Contact” link' });
+    await expect.poll(() => page.locator('tbody tr').filter({ hasText: 'Form fields have no label' }).count()).toBe(1);
+    expect(await axeViolations(page)).toEqual([]);
   });
 });

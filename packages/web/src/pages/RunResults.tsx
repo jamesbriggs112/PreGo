@@ -105,6 +105,8 @@ export function RunResults({ run }: { run: RunDetail }) {
         <Stat label="Open tickets" value={all.filter((t) => t.status !== 'Dismissed').length} />
         {run.mode === 'explore' ? (
           <Stat label="Screens audited" value={s.statesAudited ?? 0} />
+        ) : run.mode === 'journey' ? (
+          <Stat label="Journey steps audited" value={`${s.stepsReplayed} of ${s.stepsRecorded}`} />
         ) : (
           <>
             <Stat label="Pages audited" value={`${s.pagesAudited} of ${s.pagesFound}`} />
@@ -143,8 +145,8 @@ export function RunResults({ run }: { run: RunDetail }) {
                 </option>
               ))}
             </FilterSelect>
-            <FilterSelect id="filter-page" label={run.mode === 'explore' ? 'Screen' : 'Page'} value={filters.page} onChange={(v) => setFilter('page', v)}>
-              <option value="">{run.mode === 'explore' ? 'All screens' : 'All pages'}</option>
+            <FilterSelect id="filter-page" label={run.mode === 'crawl' ? 'Page' : run.mode === 'journey' ? 'Step' : 'Screen'} value={filters.page} onChange={(v) => setFilter('page', v)}>
+              <option value="">{run.mode === 'crawl' ? 'All pages' : run.mode === 'journey' ? 'All steps' : 'All screens'}</option>
               {pages.map((p) => (
                 <option key={p} value={p}>
                   {p}
@@ -200,7 +202,7 @@ export function RunResults({ run }: { run: RunDetail }) {
                     Occurrences
                   </TableHead>
                   <TableHead scope="col" className="text-right">
-                    {run.mode === 'explore' ? 'Screens' : 'Pages'}
+                    {run.mode === 'crawl' ? 'Pages' : run.mode === 'journey' ? 'Steps' : 'Screens'}
                   </TableHead>
                 </TableRow>
               </TableHeader>

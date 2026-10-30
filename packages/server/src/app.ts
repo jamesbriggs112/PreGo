@@ -12,6 +12,10 @@ import {
   SEVERITIES,
   TriageError,
   buildExportPlan,
+  ensureJourneysDir,
+  journeyFile,
+  listJourneys,
+  slugify,
   stateMapPng,
   stateMapStates,
   exportRun,
@@ -35,6 +39,7 @@ import {
   type Run,
 } from '@prego/core';
 import { AuditInProgressError, JobRunner, type JobEvent } from './jobs.js';
+import { playwrightCodegen, type Recorder, type Recording } from './recorder.js';
 
 export interface AppOptions {
   db: PregoDb;
@@ -44,6 +49,8 @@ export interface AppOptions {
   logger?: boolean;
   /** Values the explorer types into forms. Default: built-in dummy data. */
   dummyData?: DummyData;
+  /** How journeys are recorded. Default: Playwright's code generator (tests swap in a fake). */
+  recorder?: Recorder;
 }
 
 export interface PregoApp {
@@ -59,7 +66,11 @@ const IMAGE_TYPES: Record<string, string> = { '.png': 'image/png', '.jpg': 'imag
 interface StartRunBody {
   project: string;
   target: string;
-  mode?: 'crawl' | 'explore';
+  mode?: 'crawl' | 'explore' | 'journey';
+  /** Journey mode: name of the project's recorded journey to replay. */
+  journey?: string;
+  /** Replay this recorded journey first to log in. */
+  loginJourney?: string;
   maxStates?: number;
   maskSelectors?: string[];
   denyLabels?: string[];
@@ -90,7 +101,9 @@ const startRunSchema = {
     properties: {
       project: { type: 'string', minLength: 1, maxLength: 200 },
       target: { type: 'string', minLength: 1 },
-      mode: { enum: ['crawl', 'explore'] },
+      mode: { enum: ['crawl', 'explore', 'journey'] },
+      journey: { type: 'string', minLength: 1 },
+      loginJourney: { type: 'string', minLength: 1 },
       maxStates: { type: 'integer', minimum: 1, maximum: 2000 },
       maskSelectors: { type: 'array', items: { type: 'string' } },
       denyLabels: { type: 'array', items: { type: 'string' } },
@@ -171,6 +184,59 @@ export async function buildApp(options: AppOptions): Promise<PregoApp> {
     return { ...project, runs: db.listRuns(project.id).reverse().map(runSummary) };
   });
 
+  // Journeys
+
+  const recordings = new Map<string, Recording>();
+  const recorder = options.recorder ?? playwrightCodegen;
+
+  app.get<{ Params: { id: string } }>('/api/projects/:id/journeys', async (request, reply) => {
+    const project = db.getProject(Number(request.params.id));
+    if (!project) return reply.code(404).send({ error: 'Project not found' });
+    return {
+      journeys: listJourneys(dataDir, project.slug).map((j) => ({
+        name: j.name,
+        startUrl: j.startUrl,
+        recordedAt: j.recordedAt,
+        steps: j.steps.map((s) => ({ index: s.index, description: s.description })),
+        unsupported: j.unsupported,
+      })),
+      recordings: [...recordings.values()].filter((r) => r.projectId === project.id),
+    };
+  });
+
+  app.post<{ Params: { id: string }; Body: { name: string; url: string } }>(
+    '/api/projects/:id/journeys/record',
+    {
+      schema: {
+        body: {
+          type: 'object',
+          required: ['name', 'url'],
+          additionalProperties: false,
+          properties: { name: { type: 'string', minLength: 1, maxLength: 100 }, url: { type: 'string', pattern: '^https?://' } },
+        },
+      },
+    },
+    async (request, reply) => {
+      const project = db.getProject(Number(request.params.id));
+      if (!project) return reply.code(404).send({ error: 'Project not found' });
+      const name = slugify(request.body.name);
+      const key = `${project.id}:${name}`;
+      if (recordings.get(key)?.status === 'recording') return reply.code(409).send({ error: `"${name}" is already being recorded.` });
+      ensureJourneysDir(dataDir, project.slug);
+      const outputFile = journeyFile(dataDir, project.slug, name);
+      const recording: Recording = { projectId: project.id, name, status: 'recording' };
+      recordings.set(key, recording);
+      const child = recorder({ url: request.body.url, outputFile });
+      child.once('error', (error) => Object.assign(recording, { status: 'failed', error: error.message }));
+      child.once('exit', (code) => {
+        if (recording.status !== 'recording') return;
+        const saved = existsSync(outputFile) && listJourneys(dataDir, project.slug).some((j) => j.name === name);
+        Object.assign(recording, saved ? { status: 'saved' } : { status: 'failed', error: code ? `The recorder exited with code ${code}` : 'Nothing was recorded' });
+      });
+      return reply.code(202).send({ name, status: 'recording' });
+    },
+  );
+
   // Runs
 
   app.post<{ Body: StartRunBody }>('/api/runs', { schema: startRunSchema }, async (request, reply) => {
@@ -186,10 +252,19 @@ export async function buildApp(options: AppOptions): Promise<PregoApp> {
     try {
       const clean = (list?: string[]) => list?.map((s) => s.trim()).filter(Boolean);
       const explore = body.mode === 'explore';
+      // Journeys belong to a project, so look them up by the project's name.
+      const project = db.getProjectBySlug(slugify(body.project));
+      const findJourney = (name: string) => (project ? listJourneys(dataDir, project.slug).find((j) => j.name === slugify(name)) : undefined);
+      const journey = body.mode === 'journey' ? findJourney(body.journey ?? '') : undefined;
+      const loginJourney = body.loginJourney ? findJourney(body.loginJourney) : undefined;
+      if (body.mode === 'journey' && !journey) return reply.code(400).send({ error: 'Choose a recorded journey for this project.' });
+      if (body.loginJourney && !loginJourney) return reply.code(400).send({ error: `No recorded journey called "${body.loginJourney}" for this project.` });
       const job = await jobs.start({
         project: body.project.trim(),
         target,
         mode: body.mode,
+        journey,
+        loginJourney,
         maxStates: body.maxStates,
         maskSelectors: clean(body.maskSelectors),
         denyLabels: clean(body.denyLabels),
@@ -284,7 +359,8 @@ export async function buildApp(options: AppOptions): Promise<PregoApp> {
     const runId = Number(request.params.id);
     if (!db.getRun(runId)) return reply.code(404).send({ error: 'Run not found' });
     // Pages are named by URL; interactive screens (which share one URL) by title.
-    const locations = new Map(db.getLocations(runId).map((l) => [l.id, l.kind === 'state' ? `Screen: ${l.title}` : l.url]));
+    const journey = db.getRun(runId)!.mode === 'journey';
+    const locations = new Map(db.getLocations(runId).map((l) => [l.id, l.kind !== 'state' ? l.url : journey ? (l.title ?? '') : `Screen: ${l.title}`]));
     // Each ticket lists the pages it affects, for the page filter.
     const pagesByTicket = new Map<string, Set<string>>();
     const locationIdsByTicket = new Map<string, Set<number>>();

@@ -4,7 +4,8 @@ import { useQueryClient } from '@tanstack/react-query';
 /** Mirrors the server's JobEvent type (packages/server/src/jobs.ts). */
 export type RunEvent =
   | { type: 'started'; runId: number; projectId: number }
-  | { type: 'phase'; phase: 'crawl' | 'group' | 'explore' | 'audit' | 'tickets' | 'done'; message: string }
+  | { type: 'phase'; phase: 'login' | 'crawl' | 'group' | 'explore' | 'journey' | 'audit' | 'tickets' | 'done'; message: string }
+  | { type: 'journey-step'; index: number; total: number; description: string; ok: boolean; error?: string }
   | { type: 'page-found'; url: string; count: number }
   | { type: 'state-found'; stateId: string; title: string; depth: number; count: number; fromStateId: string | null; action: string | null }
   | { type: 'location-audited'; url: string; viewport: string; findings: number; done: number; total: number; screenshot: string }

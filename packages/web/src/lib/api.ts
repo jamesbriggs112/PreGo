@@ -50,6 +50,19 @@ export interface TicketChanges {
   dismissed?: boolean;
 }
 
+export interface JourneySummary {
+  name: string;
+  startUrl: string | null;
+  recordedAt: string;
+  steps: { index: number; description: string }[];
+  unsupported: { statement: string; reason: string }[];
+}
+
+export interface JourneyList {
+  journeys: JourneySummary[];
+  recordings: { name: string; status: 'recording' | 'saved' | 'failed'; error?: string }[];
+}
+
 export interface StateMapData {
   states: {
     id: number;
@@ -82,7 +95,9 @@ export interface Settings {
 export interface StartRunBody {
   project: string;
   target: string;
-  mode?: 'crawl' | 'explore';
+  mode?: 'crawl' | 'explore' | 'journey';
+  journey?: string;
+  loginJourney?: string;
   maxStates?: number;
   maskSelectors?: string[];
   denyLabels?: string[];
@@ -138,6 +153,8 @@ export const api = {
   updateTicket: (runId: number, ticketId: string, changes: TicketChanges) =>
     request<Ticket>(`/api/runs/${runId}/tickets/${encodeURIComponent(ticketId)}`, { method: 'PATCH', body: JSON.stringify(changes) }),
   mergeTickets: (runId: number, into: string, from: string[]) => post<Ticket>(`/api/runs/${runId}/tickets/merge`, { into, from }),
+  journeys: (projectId: number) => request<JourneyList>(`/api/projects/${projectId}/journeys`),
+  recordJourney: (projectId: number, name: string, url: string) => post<{ name: string; status: string }>(`/api/projects/${projectId}/journeys/record`, { name, url }),
   stateMap: (runId: number) => request<StateMapData>(`/api/runs/${runId}/state-map`),
   exports: (runId: number) => request<ExportSummary[]>(`/api/runs/${runId}/exports`),
   createExport: (runId: number, preset: string) => post<ExportSummary>(`/api/runs/${runId}/exports`, { preset }),

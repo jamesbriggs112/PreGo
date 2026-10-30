@@ -8,10 +8,13 @@ import { Alert } from '@/components/ui/alert';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { StateMapDiagram } from '@/components/StateMapDiagram';
 
-type Phase = 'crawl' | 'group' | 'explore' | 'audit' | 'tickets';
+type Phase = 'login' | 'crawl' | 'group' | 'explore' | 'journey' | 'audit' | 'tickets';
 const CRAWL_PHASES: Phase[] = ['crawl', 'group', 'audit', 'tickets'];
 const EXPLORE_PHASES: Phase[] = ['explore', 'audit', 'tickets'];
+const JOURNEY_PHASES: Phase[] = ['journey', 'audit', 'tickets'];
 const PHASE_LABELS: Record<Phase, string> = {
+  login: 'Logging in',
+  journey: 'Replaying the journey',
   crawl: 'Finding pages',
   group: 'Grouping templates',
   explore: 'Exploring screens',
@@ -19,6 +22,7 @@ const PHASE_LABELS: Record<Phase, string> = {
   tickets: 'Building tickets',
 };
 type Found = Extract<RunEvent, { type: 'state-found' }>;
+type JourneyStep = Extract<RunEvent, { type: 'journey-step' }>;
 
 type Audited = Extract<RunEvent, { type: 'location-audited' }>;
 
@@ -27,7 +31,12 @@ export function LiveRun({ run }: { run: RunDetail }) {
   const stop = useMutation({ mutationFn: () => api.stopRun(run.id) });
 
   const explore = run.mode === 'explore';
-  const PHASES = explore ? EXPLORE_PHASES : CRAWL_PHASES;
+  const journey = run.mode === 'journey';
+  const steps = events.filter((e): e is JourneyStep => e.type === 'journey-step');
+  const PHASES = [
+    ...(run.settings.loginJourney ? (['login'] as Phase[]) : []),
+    ...(explore ? EXPLORE_PHASES : journey ? JOURNEY_PHASES : CRAWL_PHASES),
+  ];
   const phases = events.filter((e) => e.type === 'phase');
   const phase = phases.at(-1);
   const found = events.filter((e) => e.type === 'page-found');
@@ -89,8 +98,10 @@ export function LiveRun({ run }: { run: RunDetail }) {
           <div className="grid gap-2">
             <label htmlFor="audit-progress" className="text-sm font-medium">
               {latest
-                ? `${latest.done} of ${latest.total} ${explore ? 'screen' : 'page'} checks done`
-                : explore
+                ? `${latest.done} of ${latest.total} ${explore ? 'screen' : journey ? 'step' : 'page'} checks done`
+                : journey
+                  ? `${steps.filter((s) => s.ok).length} of ${steps[0]?.total ?? '?'} journey steps replayed`
+                  : explore
                   ? `${screens.length} ${screens.length === 1 ? 'screen' : 'screens'} found so far`
                   : `${found.length} ${found.length === 1 ? 'page' : 'pages'} found so far`}
             </label>
@@ -115,7 +126,23 @@ export function LiveRun({ run }: { run: RunDetail }) {
           </CardContent>
         </Card>
 
-        {explore ? (
+        {journey ? (
+          <Card>
+            <CardHeader>
+              <CardTitle>Journey steps</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ol className="space-y-1 text-sm">
+                {steps.map((s) => (
+                  <li key={s.index} className={s.ok ? '' : 'text-destructive'}>
+                    {s.index}. {s.description}
+                    {!s.ok && ` (failed: ${s.error})`}
+                  </li>
+                ))}
+              </ol>
+            </CardContent>
+          </Card>
+        ) : explore ? (
           <Card>
             <CardHeader>
               <CardTitle>Screens found ({screens.length})</CardTitle>

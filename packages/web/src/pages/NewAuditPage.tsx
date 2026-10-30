@@ -2,7 +2,8 @@ import { Children, cloneElement, isValidElement, useState, type FormEvent, type 
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { PROFILES, type ProfileName } from '@prego/core/profiles';
-import { api, ApiError, type Settings, type StartRunBody } from '@/lib/api';
+import { api, ApiError, type JourneySummary, type Settings, type StartRunBody } from '@/lib/api';
+import { JourneyPicker } from '@/components/JourneyPicker';
 import { useTitle } from '@/lib/use-title';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -22,7 +23,7 @@ const EMULATION = [
 const MODES = [
   { value: 'crawl', label: 'Site crawl', hint: 'Follows the sitemap and links. For websites and multi-page builds.', available: true },
   { value: 'explore', label: 'Interactive exploration', hint: 'Presses through single-page apps and kiosk interactives, mapping every screen it reaches.', available: true },
-  { value: 'journey', label: 'Scripted journey', hint: 'Replays a recorded journey. Coming in Phase 3.', available: false },
+  { value: 'journey', label: 'Scripted journey', hint: 'Replays a journey you record once (such as booking a ticket), with checks after every step.', available: true },
 ];
 
 const CHECKS = [
@@ -69,7 +70,9 @@ function NewAuditForm({ defaults, defaultDenyLabels }: { defaults?: Settings['de
   const [useSitemap, setUseSitemap] = useState(true);
   const [concurrency, setConcurrency] = useState(String(defaults?.concurrency ?? 2));
   const [delay, setDelay] = useState(String(defaults?.delayMs ?? 500));
-  const [mode, setMode] = useState<'crawl' | 'explore'>('crawl');
+  const [mode, setMode] = useState<'crawl' | 'explore' | 'journey'>('crawl');
+  const [journey, setJourney] = useState<JourneySummary | null>(null);
+  const [loginJourney, setLoginJourney] = useState<JourneySummary | null>(null);
   const [maxStates, setMaxStates] = useState('200');
   const [exploreDepth, setExploreDepth] = useState('8');
   const [denyLabels, setDenyLabels] = useState(defaultDenyLabels.join('\n'));
@@ -98,8 +101,11 @@ function NewAuditForm({ defaults, defaultDenyLabels }: { defaults?: Settings['de
     const explore = mode === 'explore';
     const body: StartRunBody = {
       project: project.trim(),
-      target: target.trim(),
+      // A journey starts where it was recorded.
+      target: mode === 'journey' ? (journey?.startUrl ?? target.trim()) : target.trim(),
       mode,
+      ...(mode === 'journey' && journey && { journey: journey.name }),
+      ...(mode !== 'journey' && loginJourney && { loginJourney: loginJourney.name }),
       viewports,
       emulation,
       maxPages: Number(maxPages),
@@ -154,9 +160,11 @@ function NewAuditForm({ defaults, defaultDenyLabels }: { defaults?: Settings['de
               ))}
             </datalist>
           </Field>
-          <Field id="target" label="Web address or folder" hint="A URL such as https://example.org, or the full path of a folder of HTML on this computer.">
-            <Input id="target" value={target} onChange={(e) => setTarget(e.target.value)} required placeholder="https://" />
-          </Field>
+          {mode !== 'journey' && (
+            <Field id="target" label="Web address or folder" hint="A URL such as https://example.org, or the full path of a folder of HTML on this computer.">
+              <Input id="target" value={target} onChange={(e) => setTarget(e.target.value)} required placeholder="https://" />
+            </Field>
+          )}
           <fieldset className="grid gap-3">
             <legend className="mb-1 text-sm font-medium">Exploration mode</legend>
             {MODES.map((option) => (
@@ -168,7 +176,7 @@ function NewAuditForm({ defaults, defaultDenyLabels }: { defaults?: Settings['de
                   value={option.value}
                   checked={mode === option.value}
                   onChange={() => {
-                    setMode(option.value as 'crawl' | 'explore');
+                    setMode(option.value as 'crawl' | 'explore' | 'journey');
                     if (option.value === 'explore') applyProjectSettings(project);
                   }}
                   disabled={!option.available}
@@ -224,6 +232,18 @@ function NewAuditForm({ defaults, defaultDenyLabels }: { defaults?: Settings['de
           )}
         </CardContent>
       </Card>
+
+      {mode === 'journey' && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Journey</CardTitle>
+            <CardDescription>Prego replays the journey step by step and checks the page after every step, at each viewport.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <JourneyPicker projectName={project} projects={projects.data} value={journey?.name ?? ''} onChange={setJourney} defaultUrl={target} legend="Journey to replay" />
+          </CardContent>
+        </Card>
+      )}
 
       {mode === 'explore' && (
         <>
@@ -323,6 +343,19 @@ function NewAuditForm({ defaults, defaultDenyLabels }: { defaults?: Settings['de
           <CardDescription>For staging sites behind basic auth. Credentials are used for this audit only and never saved.</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-5 sm:grid-cols-2">
+          {mode !== 'journey' && (
+            <div className="sm:col-span-2">
+              <JourneyPicker
+                projectName={project}
+                projects={projects.data}
+                value={loginJourney?.name ?? ''}
+                onChange={setLoginJourney}
+                defaultUrl={target}
+                legend="Log in first with a recorded journey"
+                optional
+              />
+            </div>
+          )}
           <Field id="username" label="Username">
             <Input id="username" value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="off" />
           </Field>
@@ -361,7 +394,7 @@ function NewAuditForm({ defaults, defaultDenyLabels }: { defaults?: Settings['de
       )}
 
       <div className="flex gap-3">
-        <Button type="submit" size="lg" disabled={start.isPending || viewports.length === 0}>
+        <Button type="submit" size="lg" disabled={start.isPending || viewports.length === 0 || (mode === 'journey' && !journey)}>
           {start.isPending ? 'Starting…' : 'Start audit'}
         </Button>
         <Button asChild variant="ghost" size="lg">

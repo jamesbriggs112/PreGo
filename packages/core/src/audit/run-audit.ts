@@ -6,6 +6,10 @@ import { exploreApp, openScreen } from '../explore/explorer.js';
 import { createSafety, DEFAULT_DENY_LABELS, type DummyData } from '../explore/safety.js';
 import { viewportName, type Emulation, type ProfileName } from '../browser/profiles.js';
 import { stateMapModule } from '../checks/state-map/state-map.js';
+import { guidanceFor } from '../checks/guidance.js';
+import type { CheckFinding } from '../checks/types.js';
+import { identifyScreen } from '../explore/state.js';
+import { runStep, type Journey, type JourneyStep } from '../journeys/journey.js';
 import { crawlSite } from '../crawl/crawler.js';
 import { extractStructure, groupTemplates, samplePages } from '../crawl/templates.js';
 import { captureCrop, captureFullPage } from '../capture/capture.js';
@@ -22,8 +26,12 @@ export interface AuditOptions {
   project: string;
   /** URL to audit, or a local folder, which Prego serves itself. */
   target: string;
-  /** Site crawl (default) or interactive exploration of a single-page app or kiosk. */
-  mode?: 'crawl' | 'explore';
+  /** Site crawl (default), interactive exploration of a single-page app or kiosk, or a recorded journey. */
+  mode?: 'crawl' | 'explore' | 'journey';
+  /** Journey mode: the recorded journey to replay, checking after every step. */
+  journey?: Journey;
+  /** Crawl or explore: replay this journey first to log in, and audit with the session it leaves. */
+  loginJourney?: Journey;
   viewports?: ProfileName[];
   emulation?: Emulation;
   maxPages?: number;
@@ -71,9 +79,10 @@ export interface AuditOptions {
 
 export type AuditEvent =
   | { type: 'started'; runId: number; projectId: number }
-  | { type: 'phase'; phase: 'crawl' | 'group' | 'explore' | 'audit' | 'tickets' | 'done'; message: string }
+  | { type: 'phase'; phase: 'login' | 'crawl' | 'group' | 'explore' | 'journey' | 'audit' | 'tickets' | 'done'; message: string }
   | { type: 'page-found'; url: string; count: number }
   | { type: 'state-found'; stateId: string; title: string; depth: number; count: number; fromStateId: string | null; action: string | null }
+  | { type: 'journey-step'; index: number; total: number; description: string; ok: boolean; error?: string }
   | {
       type: 'location-audited';
       url: string;
@@ -156,8 +165,14 @@ export async function runAudit(db: PregoDb, options: AuditOptions): Promise<Audi
       auditAll: options.auditAll ?? false,
       basicAuth: options.basicAuth ? { username: options.basicAuth.username } : null,
       keyJourneyUrls: options.keyJourneyUrls ?? [],
-      modules: [...modules.map((m) => ({ id: m.id, name: m.name })), ...(mode === 'explore' ? [{ id: 'state-map', name: 'Usability (state map)' }] : [])],
+      modules: [
+        ...modules.map((m) => ({ id: m.id, name: m.name })),
+        ...(mode === 'explore' ? [{ id: 'state-map', name: 'Usability (state map)' }] : []),
+        ...(mode === 'journey' ? [{ id: 'journey', name: 'Usability (journey replay)' }] : []),
+      ],
       maxTaps: options.maxTaps ?? 4,
+      journey: options.journey ? { name: options.journey.name, steps: options.journey.steps.length } : null,
+      loginJourney: options.loginJourney?.name ?? null,
     },
   });
   emit({ type: 'started', runId: run.id, projectId: project.id });
@@ -169,23 +184,28 @@ export async function runAudit(db: PregoDb, options: AuditOptions): Promise<Audi
   try {
     const browser = new BrowserSession({ basicAuth: options.basicAuth, authOrigin: new URL(startUrl).origin, storageStatePath, onRequest: options.onRequest });
     session = browser;
+    if (options.loginJourney) {
+      emit({ type: 'phase', phase: 'login', message: `Logging in with the "${options.loginJourney.name}" journey` });
+      await logInWithJourney(browser, options.loginJourney, storageStatePath);
+    }
     const context: DiscoveryContext = { db, run, options, startUrl, storageStatePath, browser, viewports, delayMs, emit };
-    const discovery = mode === 'explore' ? await discoverByExploring(context) : await discoverByCrawling(context);
+    const discovery =
+      mode === 'explore' ? await discoverByExploring(context) : mode === 'journey' ? await discoverByJourney(context) : await discoverByCrawling(context);
     const { toAudit } = discovery;
 
-    const noun = mode === 'explore' ? 'screens' : 'pages';
+    const noun = mode === 'explore' ? 'screens' : mode === 'journey' ? 'steps' : 'pages';
     emit({ type: 'phase', phase: 'audit', message: `Auditing ${toAudit.length} ${noun} at ${viewports.length} viewport(s)` });
     const jobs = toAudit.flatMap((location) => viewports.map((profile) => ({ location, profile })));
     let done = 0;
-    // Explorations replay paths in a stateful app, so they're checked one at a time.
-    await runPool(jobs, mode === 'explore' ? 1 : (options.concurrency ?? 2), async ({ location, profile }) => {
+    // Explorations and journeys replay paths in a stateful app, so they're checked one at a time.
+    await runPool(jobs, mode === 'crawl' ? (options.concurrency ?? 2) : 1, async ({ location, profile }) => {
       throwIfAborted(options.signal);
       try {
         const result = await auditLocation(db, () => discovery.open(location, profile), run, runDir, location, [...modules, ...(discovery.modules ?? [])], options.maxCropsPerLocation ?? 100);
         done++;
-        emit({ type: 'location-audited', url: location.title && mode === 'explore' ? location.title : location.url, viewport: result.viewport, findings: result.findings, done, total: jobs.length, screenshot: result.screenshot });
+        emit({ type: 'location-audited', url: location.title && mode !== 'crawl' ? location.title : location.url, viewport: result.viewport, findings: result.findings, done, total: jobs.length, screenshot: result.screenshot });
       } catch (error) {
-        if (mode !== 'explore') throw error;
+        if (mode === 'crawl') throw error;
         // A path found at one viewport may not exist at another (responsive layouts differ).
         done++;
         emit({ type: 'warning', message: `Couldn't reach "${location.title}" at ${profile}: ${error instanceof Error ? error.message.split('\n')[0] : error}` });
@@ -426,6 +446,112 @@ async function discoverByExploring({ db, run, options, startUrl, browser, viewpo
       stoppedEarly: result.stoppedEarly,
     },
   };
+}
+
+/** Replay each recorded step, recording the screen after every one so it can be checked. */
+async function discoverByJourney({ db, run, options, browser, viewports, emit }: DiscoveryContext): Promise<Discovery> {
+  const journey = options.journey;
+  if (!journey) throw new Error('Journey mode needs a recorded journey');
+  if (journey.steps.length === 0) throw new Error(`The "${journey.name}" journey has no steps Prego can replay`);
+  emit({ type: 'phase', phase: 'journey', message: `Replaying the "${journey.name}" journey (${journey.steps.length} steps)` });
+
+  const toAudit: Location[] = [];
+  const failures = new Map<number, CheckFinding[]>();
+  const opened = await browser.newPage(viewports[0], options.emulation);
+  try {
+    for (const step of journey.steps) {
+      throwIfAborted(options.signal);
+      try {
+        await runStep(opened.page, step);
+      } catch (error) {
+        const message = error instanceof Error ? error.message.split('\n')[0] : String(error);
+        emit({ type: 'journey-step', index: step.index, total: journey.steps.length, description: step.description, ok: false, error: message });
+        // Report the failure on the last step that worked (the screen the visitor would be stuck on).
+        const stuckAt = toAudit.at(-1);
+        if (stuckAt) failures.set(stuckAt.id, [journeyFailure(step, message)]);
+        break;
+      }
+      const identity = await identifyScreen(opened.page);
+      const location = db.addLocation({
+        runId: run.id,
+        kind: 'state',
+        url: opened.page.url(),
+        stateId: identity.id,
+        title: `Step ${step.index}: ${step.description}`,
+        statusCode: null,
+        depth: step.index,
+        templateKey: `journey:${journey.name}:${step.index}`,
+        structureHash: null,
+        audited: true,
+        steps: journey.steps.slice(0, step.index).map((s) => ({ key: s.statement, label: s.description, role: 'journey', kind: 'click', selector: '' })),
+      });
+      toAudit.push(location);
+      emit({ type: 'journey-step', index: step.index, total: journey.steps.length, description: step.description, ok: true });
+    }
+  } finally {
+    await opened.close();
+  }
+
+  const stepsByIndex = new Map(journey.steps.map((s) => [s.index, s]));
+  return {
+    toAudit,
+    open: async (location, profile) => {
+      const page = await browser.newPage(profile, options.emulation);
+      try {
+        for (let i = 1; i <= location.depth; i++) await runStep(page.page, stepsByIndex.get(i)!);
+        return page;
+      } catch (error) {
+        await page.close();
+        throw error;
+      }
+    },
+    modules: [
+      {
+        id: 'journey',
+        name: 'Usability (journey replay)',
+        async run({ location, viewport }) {
+          return viewport === viewportName(viewports[0], options.emulation) ? (failures.get(location.id) ?? []) : [];
+        },
+      },
+    ],
+    summary: {
+      journey: journey.name,
+      stepsRecorded: journey.steps.length,
+      stepsReplayed: toAudit.length,
+      completed: toAudit.length === journey.steps.length,
+      statesAudited: toAudit.length,
+    },
+  };
+}
+
+function journeyFailure(step: JourneyStep, message: string): CheckFinding {
+  const guidance = guidanceFor('prego', 'journey-step-failed')!;
+  return {
+    module: 'journey',
+    engine: 'prego',
+    ruleId: 'journey-step-failed',
+    category: 'UX',
+    severity: 'High',
+    title: guidance.title,
+    description: guidance.description,
+    helpUrl: null,
+    wcagCriteria: [],
+    wcagLevel: null,
+    selector: 'html',
+    html: step.statement,
+    failureSummary: `Step ${step.index} (${step.description}) failed: ${message}`,
+  };
+}
+
+/** Replay a login journey and save the session it leaves, so the audit runs logged in. */
+async function logInWithJourney(browser: BrowserSession, journey: Journey, storageStatePath: string) {
+  const opened = await browser.newPage('desktop');
+  try {
+    for (const step of journey.steps) await runStep(opened.page, step);
+    await BrowserSession.saveSession(opened.context, storageStatePath);
+  } finally {
+    await opened.close();
+  }
 }
 
 async function runPool<T>(items: T[], concurrency: number, worker: (item: T) => Promise<void>) {

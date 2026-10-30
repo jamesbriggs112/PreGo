@@ -6,7 +6,7 @@ import { createServer, type ViteDevServer } from 'vite';
 import { chromium, type Browser, type Page } from 'playwright';
 import { AxeBuilder } from '@axe-core/playwright';
 import { AXE_TAGS, PregoDb } from '@prego/core';
-import { buildApp, type PregoApp } from '@prego/server';
+import { buildApp, type AppOptions, type PregoApp } from '@prego/server';
 
 export interface Gui {
   url: string;
@@ -18,10 +18,10 @@ export interface Gui {
   close(): Promise<void>;
 }
 
-export async function startGui(): Promise<Gui> {
+export async function startGui(options: Pick<AppOptions, 'recorder'> = {}): Promise<Gui> {
   const dataDir = mkdtempSync(join(tmpdir(), 'prego-gui-'));
   const db = new PregoDb(join(dataDir, 'prego.sqlite'));
-  const prego = await buildApp({ db, dataDir });
+  const prego = await buildApp({ db, dataDir, ...options });
   const apiUrl = await prego.app.listen({ host: '127.0.0.1', port: 0 });
 
   process.env.PREGO_OPEN = '0';

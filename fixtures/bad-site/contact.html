@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Contact | Acme Widgets</title>
+  <!-- DEFECT: no meta description -->
+  <link rel="stylesheet" href="/css/site.css">
+</head>
+<body>
+  <header class="site-header">
+    <!-- DEFECT (all pages): logo image has no alt attribute -->
+    <a href="/index.html"><img src="/images/logo.svg" width="120" height="40"></a>
+    <nav>
+      <a href="/index.html">Home</a>
+      <a href="/about.html">About</a>
+      <a href="/news/post-1.html">News</a>
+      <a href="/contact.html">Contact</a>
+    </nav>
+  </header>
+  <main>
+    <h1>Contact us</h1>
+    <!-- DEFECT: form fields have placeholders but no labels -->
+    <form action="/contact-sent.html" method="get">
+      <p><input type="text" name="name" placeholder="Your name"></p>
+      <p><input type="email" name="email" placeholder="Email address"></p>
+      <p><select name="topic"><option>Sales</option><option>Support</option></select></p>
+      <p><textarea name="message" placeholder="Message" rows="5" cols="40"></textarea></p>
+      <p><button type="submit">Send</button></p>
+    </form>
+  </main>
+  <footer class="site-footer">
+    <p>&copy; 2026 Acme Widgets Ltd. <a href="/private/admin.html">Staff area</a></p>
+  </footer>
+</body>
+</html>

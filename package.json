@@ -19,6 +19,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "prego": "tsx --conditions=development packages/cli/src/cli.ts",
+    "fixtures": "tsx --conditions=development scripts/serve-fixtures.ts",
     "postinstall": "playwright install chromium"
   },
   "devDependencies": {

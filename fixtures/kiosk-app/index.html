@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=1920, initial-scale=1">
+  <title>Museum of Making: Gallery Guide</title>
+  <!--
+    Prego kiosk-app fixture: a single-URL touch interactive. The URL never changes; screens are
+    swapped in JavaScript. Deliberate defects are listed in fixtures/README.md.
+  -->
+  <style>
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; overflow: hidden; }
+    body { font-family: Arial, Helvetica, sans-serif; background: #12202f; color: #fff; user-select: none; }
+    #app { height: 100vh; display: flex; flex-direction: column; }
+    .screen-header { display: flex; align-items: center; justify-content: space-between; padding: 32px 64px; background: #0b1621; }
+    .screen-header h1 { margin: 0; font-size: 56px; }
+    .nav-buttons { display: flex; gap: 24px; }
+    .screen-body { flex: 1; padding: 48px 64px; display: flex; flex-direction: column; gap: 32px; }
+    .tiles { display: grid; grid-template-columns: repeat(2, 1fr); gap: 32px; }
+    button { font: inherit; font-size: 36px; color: #12202f; background: #f2c14e; border: 0; border-radius: 16px; padding: 32px 40px; cursor: pointer; }
+    button.secondary { background: #dfe7ef; font-size: 28px; padding: 20px 32px; }
+    .attract { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 48px; }
+    .attract h1 { font-size: 96px; margin: 0; }
+    .attract-hint { font-size: 40px; opacity: 0.85; animation: pulse 2s infinite; }
+    @keyframes pulse { 50% { opacity: 0.3; } }
+    p.body-text { font-size: 32px; line-height: 1.5; max-width: 1400px; margin: 0; }
+  </style>
+</head>
+<body>
+  <div id="app" role="application" aria-live="polite"></div>
+  <script>
+    // Each screen: title, optional body text, tiles (actions that open another screen),
+    // and nav ('full' = Back + Home, 'none' = no way out).
+    const screens = {
+      attract: { attract: true },
+      home: {
+        title: 'Gallery Guide', nav: 'home-only',
+        text: 'Choose what you would like to explore.',
+        tiles: [['Explore the galleries', 'galleries'], ['Our collection', 'collection'], ['Plan your visit', 'visit'], ['Share your visit', 'share']],
+      },
+      // Level 2
+      galleries: { title: 'The Galleries', nav: 'full', tiles: [['Ancient world', 'ancient'], ['Industrial age', 'industrial']] },
+      collection: { title: 'Our Collection', nav: 'full', tiles: [['Paintings', 'paintings'], ['Sculpture', 'sculpture']] },
+      visit: { title: 'Plan Your Visit', nav: 'full', tiles: [['Opening times', 'opening'], ['Access information', 'access']] },
+      share: {
+        title: 'Share Your Visit', nav: 'full',
+        text: 'Send yourself a postcard of today\'s visit.',
+        // DEFECT (safety test): this action must be on the explorer's denylist and never pressed.
+        tiles: [['Send to my email', 'email-sent']],
+      },
+      // Level 3
+      ancient: { title: 'Ancient World', nav: 'full', tiles: [['Egypt', 'egypt'], ['Rome', 'rome']] },
+      industrial: { title: 'Industrial Age', nav: 'full', tiles: [['Steam power', 'steam'], ['Textile mills', 'textiles']] },
+      paintings: {
+        title: 'Paintings', nav: 'full',
+        text: 'Our painting collection spans five centuries.',
+        // DEFECT: "Zoom in" looks like an action but does nothing.
+        tiles: [['Zoom in', null]],
+      },
+      sculpture: { title: 'Sculpture', nav: 'full', text: 'Over 400 sculptures in bronze, marble and wood.' },
+      // DEFECT: dead end. No Back or Home button, so a visitor is stuck until the idle timer fires.
+      opening: { title: 'Opening Times', nav: 'none', text: 'Open daily 10:00 to 17:00. Closed 24 to 26 December.' },
+      access: { title: 'Access Information', nav: 'full', text: 'All galleries are step-free. Ask staff for a wheelchair or ear defenders.' },
+      'email-sent': { title: 'Postcard Sent', nav: 'full', text: 'Your postcard is on its way.' },
+      // Level 4 content
+      egypt: { title: 'Egypt', nav: 'full', text: 'Discover objects from the time of the pharaohs.' },
+      rome: { title: 'Rome', nav: 'full', text: 'Mosaics, coins and everyday life in Roman Britain.' },
+      steam: { title: 'Steam Power', nav: 'full', text: 'How steam engines changed the way we work.' },
+      textiles: { title: 'Textile Mills', nav: 'full', text: 'The looms that built the city.' },
+    };
+
+    const app = document.getElementById('app');
+    const history = [];
+    let current = 'attract';
+
+    function el(tag, props = {}, children = []) {
+      const node = Object.assign(document.createElement(tag), props);
+      for (const child of children) node.append(child);
+      return node;
+    }
+
+    function go(id, { push = true } = {}) {
+      if (push && current !== id) history.push(current);
+      current = id;
+      render();
+    }
+
+    function render() {
+      const s = screens[current];
+      app.replaceChildren();
+      if (s.attract) {
+        const start = el('button', { className: 'attract', onclick: () => { history.length = 0; go('home'); } }, [
+          el('h1', { textContent: 'Museum of Making' }),
+          el('span', { className: 'attract-hint', textContent: 'Touch anywhere to begin' }),
+        ]);
+        start.style.background = 'transparent';
+        start.style.color = '#fff';
+        app.append(start);
+        return;
+      }
+      const nav = el('div', { className: 'nav-buttons' });
+      if (s.nav === 'full') {
+        nav.append(el('button', { className: 'secondary', textContent: 'Back', onclick: () => go(history.pop() ?? 'home', { push: false }) }));
+      }
+      if (s.nav === 'full' || s.nav === 'home-only') {
+        nav.append(el('button', { className: 'secondary', textContent: 'Home', onclick: () => { history.length = 0; go('home', { push: false }); } }));
+      }
+      const body = el('div', { className: 'screen-body' });
+      if (s.text) body.append(el('p', { className: 'body-text', textContent: s.text }));
+      if (s.tiles) {
+        const tiles = el('div', { className: 'tiles' });
+        for (const [label, target] of s.tiles) {
+          tiles.append(el('button', { textContent: label, onclick: () => { if (target) go(target); } }));
+        }
+        body.append(tiles);
+      }
+      app.append(el('header', { className: 'screen-header' }, [el('h1', { textContent: s.title }), nav]), body);
+    }
+
+    // Idle reset: after 60 seconds without a touch, return to the attract screen.
+    const IDLE_MS = 60_000;
+    let idleTimer;
+    function resetIdle() {
+      clearTimeout(idleTimer);
+      idleTimer = setTimeout(() => { history.length = 0; go('attract', { push: false }); }, IDLE_MS);
+    }
+    for (const type of ['pointerdown', 'keydown', 'touchstart']) document.addEventListener(type, resetIdle, true);
+    resetIdle();
+    render();
+  </script>
+</body>
+</html>

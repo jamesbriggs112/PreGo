@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Acme Widgets</title>
+  <!-- DEFECT: no meta description -->
+  <link rel="stylesheet" href="/css/site.css">
+</head>
+<body>
+  <header class="site-header">
+    <!-- DEFECT (all pages): logo image has no alt attribute -->
+    <a href="/index.html"><img src="/images/logo.svg" width="120" height="40"></a>
+    <nav>
+      <a href="/index.html">Home</a>
+      <a href="/about.html">About</a>
+      <a href="/news/post-1.html">News</a>
+      <a href="/contact.html">Contact</a>
+    </nav>
+  </header>
+  <main>
+    <h1>Welcome to Acme Widgets</h1>
+    <!-- DEFECT: hero image has no alt attribute -->
+    <img src="/images/hero.svg" width="640" height="240">
+    <!-- DEFECT: low-contrast text -->
+    <p class="muted">We have been making widgets since 1952. Browse our range below.</p>
+    <!-- DEFECT: heading levels skip from h1 to h3 -->
+    <h3>Featured widgets</h3>
+    <div class="card">
+      <p>The Mark IV widget is our best seller.</p>
+      <!-- DEFECT: broken link, this page does not exist -->
+      <a href="/products/mark-iv.html">See the Mark IV</a>
+    </div>
+  </main>
+  <footer class="site-footer">
+    <p>&copy; 2026 Acme Widgets Ltd. <a href="/private/admin.html">Staff area</a></p>
+  </footer>
+</body>
+</html>

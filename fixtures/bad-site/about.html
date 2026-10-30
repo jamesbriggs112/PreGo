@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<!-- DEFECT: <html> has no lang attribute -->
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>About us | Acme Widgets</title>
+  <meta name="description" content="The story of Acme Widgets, family widget makers since 1952.">
+  <link rel="stylesheet" href="/css/site.css">
+</head>
+<body>
+  <header class="site-header">
+    <!-- DEFECT (all pages): logo image has no alt attribute -->
+    <a href="/index.html"><img src="/images/logo.svg" width="120" height="40"></a>
+    <nav>
+      <a href="/index.html">Home</a>
+      <a href="/about.html">About</a>
+      <a href="/news/post-1.html">News</a>
+      <a href="/contact.html">Contact</a>
+    </nav>
+  </header>
+  <main>
+    <h1>About us</h1>
+    <p>Acme Widgets is a family business based in Sheffield.</p>
+    <h2>Our history</h2>
+    <p>Founded in 1952, we moved to our current workshop in 1987.</p>
+    <!-- DEFECT: low-contrast text -->
+    <p class="muted">Photographs courtesy of the Acme family archive.</p>
+  </main>
+  <footer class="site-footer">
+    <p>&copy; 2026 Acme Widgets Ltd. <a href="/private/admin.html">Staff area</a></p>
+  </footer>
+</body>
+</html>

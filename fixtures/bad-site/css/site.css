@@ -1,0 +1,10 @@
+/* Prego bad-site fixture. Deliberately flawed; see fixtures/README.md. */
+body { font-family: Georgia, serif; margin: 0; color: #222; background: #fff; }
+.site-header { display: flex; align-items: center; gap: 24px; padding: 16px 32px; background: #f4f4f4; }
+.site-header nav a { color: #1a4d8f; margin-right: 16px; }
+main { max-width: 760px; margin: 0 auto; padding: 24px 32px; }
+/* DEFECT: #aaaaaa on white is about 2.3:1, below the 4.5:1 AA minimum. */
+.muted { color: #aaaaaa; }
+.byline { color: #b0b0b0; font-size: 14px; }
+.card { border: 1px solid #ddd; padding: 16px; margin: 16px 0; }
+.site-footer { padding: 16px 32px; background: #f4f4f4; font-size: 14px; }

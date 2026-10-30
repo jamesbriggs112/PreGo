@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Widget of the year award | Acme Widgets</title>
+  <meta name="description" content="Widget of the year award: news from Acme Widgets.">
+  <link rel="stylesheet" href="/css/site.css">
+</head>
+<body>
+  <header class="site-header">
+    <!-- DEFECT (all pages): logo image has no alt attribute -->
+    <a href="/index.html"><img src="/images/logo.svg" width="120" height="40"></a>
+    <nav>
+      <a href="/index.html">Home</a>
+      <a href="/about.html">About</a>
+      <a href="/news/post-1.html">News</a>
+      <a href="/contact.html">Contact</a>
+    </nav>
+  </header>
+  <main>
+    <article>
+      <h1>Widget of the year award</h1>
+      <!-- DEFECT (post template): low-contrast byline -->
+      <p class="byline">Posted on 14 July 2026 by the Acme team</p>
+      <!-- DEFECT (post template): article photo has no alt attribute -->
+      <img src="/images/photo.svg" width="320" height="200">
+      <p>The Mark IV was named widget of the year at the National Widget Awards.</p>
+      <!-- DEFECT (post template): heading levels skip from h1 to h4 -->
+      <h4>Related posts</h4>
+      <p><a href="/news/post-1.html">New workshop opens</a></p>
+    </article>
+  </main>
+  <footer class="site-footer">
+    <p>&copy; 2026 Acme Widgets Ltd. <a href="/private/admin.html">Staff area</a></p>
+  </footer>
+</body>
+</html>

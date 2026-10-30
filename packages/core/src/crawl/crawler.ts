@@ -5,6 +5,7 @@ import { chromium, type BrowserContextOptions } from 'playwright';
 import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import type { BasicAuth } from '../browser/session.js';
+import { EVALUATE_SHIM } from '../browser/shim.js';
 
 export interface CrawlOptions {
   startUrl: string;
@@ -108,6 +109,11 @@ export async function crawlSite(options: CrawlOptions): Promise<CrawlResult> {
         prePageCreateHooks: [
           (_pageId, _controller, pageOptions) => {
             if (pageOptions) Object.assign(pageOptions, contextOptions);
+          },
+        ],
+        postPageCreateHooks: [
+          async (page) => {
+            await page.addInitScript(EVALUATE_SHIM);
           },
         ],
       },

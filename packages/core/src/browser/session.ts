@@ -1,6 +1,7 @@
 import { chromium, type Browser, type BrowserContext, type BrowserContextOptions, type Page } from 'playwright';
 import { existsSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { EVALUATE_SHIM } from './shim.js';
 import { PROFILES, viewportName, type Emulation, type ProfileName } from './profiles.js';
 
 export interface BasicAuth {
@@ -65,6 +66,7 @@ export class BrowserSession {
   async newPage(profileName: ProfileName, emulation: Emulation = {}): Promise<OpenedPage> {
     if (!this.browser) await this.start();
     const context = await this.browser!.newContext(this.contextOptions(profileName, emulation));
+    await context.addInitScript(EVALUATE_SHIM);
     const page = await context.newPage();
     return { context, page, viewport: viewportName(profileName, emulation), close: () => context.close() };
   }

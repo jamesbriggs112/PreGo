@@ -7,3 +7,4 @@ export { defaultDataDir } from './paths.js';
 export * from './browser/profiles.js';
 export { BrowserSession, sessionPath, type BasicAuth, type BrowserSessionOptions, type OpenedPage } from './browser/session.js';
 export { crawlSite, type CrawlOptions, type CrawlResult, type CrawledPage, type FailedPage } from './crawl/crawler.js';
+export * from './crawl/templates.js';

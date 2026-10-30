@@ -186,6 +186,12 @@ export async function crawlSite(options: CrawlOptions): Promise<CrawlResult> {
   }
 
   if (skipped.some((s) => s.reason === 'limit')) stoppedEarly = true;
+  // Which alias was fetched first depends on timing; pick the shortest URL so runs agree.
+  for (const page of pages) {
+    const [canonical, ...aliases] = [page.url, ...page.aliases].sort((a, b) => a.length - b.length || (a < b ? -1 : 1));
+    page.url = canonical;
+    page.aliases = aliases;
+  }
   pages.sort((a, b) => a.depth - b.depth || a.url.localeCompare(b.url));
   return { pages, failed, skipped, sitemapUrls, stoppedEarly };
 }

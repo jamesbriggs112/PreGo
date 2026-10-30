@@ -13,3 +13,5 @@ export { axeModule, AXE_TAGS, wcagFromTags, type AxeModuleOptions } from './chec
 export { guidanceFor, guidanceWithFallback, type RuleGuidance, type Effort } from './checks/guidance.js';
 export * from './audit/run-audit.js';
 export { captureCrop, captureFullPage, HIGHLIGHT_COLOUR, type CropOptions } from './capture/capture.js';
+export { buildTickets, fingerprint, calculatePriority, type BuildTicketsOptions } from './tickets/build.js';
+export { describeComponent, componentLabel, type ComponentInfo } from './tickets/component.js';

@@ -90,6 +90,10 @@ export interface RawFinding {
   failureSummary: string | null;
   /** Cropped, outlined image of the element, relative to the run folder. */
   crop: string | null;
+  /** Tag-and-class path to the component the element sits in (see tickets/component.ts). */
+  component: string | null;
+  /** Whether the component is shared site-wide (top-level header, footer or navigation). */
+  componentShared: boolean;
   fingerprint: string | null;
   ticketId: string | null;
 }

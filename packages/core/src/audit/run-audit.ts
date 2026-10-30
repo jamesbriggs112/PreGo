@@ -6,6 +6,8 @@ import type { Emulation, ProfileName } from '../browser/profiles.js';
 import { crawlSite } from '../crawl/crawler.js';
 import { extractStructure, groupTemplates, samplePages } from '../crawl/templates.js';
 import { captureCrop, captureFullPage } from '../capture/capture.js';
+import { describeComponent } from '../tickets/component.js';
+import { buildTickets } from '../tickets/build.js';
 import { serveFolder, type StaticServer } from '../serve/static-server.js';
 import { axeModule } from '../checks/axe/axe.js';
 import type { CheckModule } from '../checks/types.js';
@@ -34,6 +36,8 @@ export interface AuditOptions {
   perTemplate?: number;
   auditAll?: boolean;
   basicAuth?: BasicAuth;
+  /** URLs on a key user journey; problems there get a higher priority. */
+  keyJourneyUrls?: string[];
   /** Check modules to run. Default: axe. */
   modules?: CheckModule[];
   /** Maximum outlined crops per location and viewport. Default 100. */
@@ -94,6 +98,7 @@ export async function runAudit(db: PregoDb, options: AuditOptions): Promise<Audi
       perTemplate: options.perTemplate ?? 3,
       auditAll: options.auditAll ?? false,
       basicAuth: options.basicAuth ? { username: options.basicAuth.username } : null,
+      keyJourneyUrls: options.keyJourneyUrls ?? [],
       modules: modules.map((m) => ({ id: m.id, name: m.name })),
     },
   });
@@ -169,6 +174,9 @@ export async function runAudit(db: PregoDb, options: AuditOptions): Promise<Audi
       if (delayMs > 0) await sleep(delayMs);
     });
 
+    emit({ type: 'phase', phase: 'tickets', message: 'Grouping findings into tickets' });
+    buildTickets(db, run.id, { keyJourneyUrls: options.keyJourneyUrls });
+
     const findings = db.getRawFindings(run.id).length;
     db.finishRun(run.id, 'complete', {
       pagesFound: crawl.pages.length,
@@ -217,12 +225,21 @@ async function auditLocation(
       const findings = await module.run({ page: opened.page, location, viewport: opened.viewport });
       for (const finding of findings) {
         count++;
+        const component = await describeComponent(opened.page, finding.selector);
         let crop: string | null = null;
         if (count <= maxCrops) {
           const path = join('crops', `${location.id}-${safe(opened.viewport)}-${count}.png`);
           if (await captureCrop(opened.page, finding.selector, join(runDir, path))) crop = path;
         }
-        db.addRawFinding({ ...finding, runId: run.id, locationId: location.id, viewport: opened.viewport, crop });
+        db.addRawFinding({
+          ...finding,
+          runId: run.id,
+          locationId: location.id,
+          viewport: opened.viewport,
+          crop,
+          component: component.path,
+          componentShared: component.shared,
+        });
       }
     }
     return { viewport: opened.viewport, findings: count, screenshot };

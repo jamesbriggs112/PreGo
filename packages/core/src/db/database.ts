@@ -136,13 +136,18 @@ const MIGRATIONS: string[] = [
   );
   CREATE INDEX occurrences_ticket ON occurrences(runId, ticketId);
   `,
+  // 2: the component each finding sits in, for stable ticket fingerprints.
+  `
+  ALTER TABLE raw_findings ADD COLUMN component TEXT;
+  ALTER TABLE raw_findings ADD COLUMN componentShared INTEGER NOT NULL DEFAULT 0;
+  `,
 ];
 
 type NewRun = Pick<Run, 'projectId' | 'mode' | 'target'> & { settings?: Record<string, unknown> };
 type NewLocation = Omit<Location, 'id' | 'screenshots' | 'audited' | 'notAuditedReason' | 'stateId'> &
   Partial<Pick<Location, 'screenshots' | 'audited' | 'notAuditedReason' | 'stateId'>>;
-type NewRawFinding = Omit<RawFinding, 'id' | 'crop' | 'fingerprint' | 'ticketId'> &
-  Partial<Pick<RawFinding, 'crop' | 'fingerprint' | 'ticketId'>>;
+type NewRawFinding = Omit<RawFinding, 'id' | 'crop' | 'fingerprint' | 'ticketId' | 'component' | 'componentShared'> &
+  Partial<Pick<RawFinding, 'crop' | 'fingerprint' | 'ticketId' | 'component' | 'componentShared'>>;
 type NewOccurrence = Omit<Occurrence, 'id'>;
 
 const now = () => new Date().toISOString();
@@ -311,16 +316,18 @@ export class PregoDb {
       .prepare(
         `INSERT INTO raw_findings (runId, locationId, viewport, module, engine, ruleId, category, severity,
            title, description, helpUrl, wcagCriteria, wcagLevel, selector, html, failureSummary, crop,
-           fingerprint, ticketId)
+           fingerprint, ticketId, component, componentShared)
          VALUES (@runId, @locationId, @viewport, @module, @engine, @ruleId, @category, @severity,
            @title, @description, @helpUrl, @wcagCriteria, @wcagLevel, @selector, @html, @failureSummary, @crop,
-           @fingerprint, @ticketId)`,
+           @fingerprint, @ticketId, @component, @componentShared)`,
       )
       .run({
         crop: null,
         fingerprint: null,
         ticketId: null,
+        component: null,
         ...finding,
+        componentShared: finding.componentShared ? 1 : 0,
         wcagCriteria: JSON.stringify(finding.wcagCriteria),
       });
     return this.getRawFinding(Number(lastInsertRowid))!;
@@ -336,6 +343,12 @@ export class PregoDb {
       .prepare('SELECT * FROM raw_findings WHERE runId = ? ORDER BY id')
       .all(runId) as RawFindingRow[];
     return rows.map(toRawFinding);
+  }
+
+  /** Remove a run's tickets and occurrences so they can be rebuilt from its raw findings. */
+  clearTickets(runId: number) {
+    this.sqlite.prepare('DELETE FROM occurrences WHERE runId = ?').run(runId);
+    this.sqlite.prepare('DELETE FROM tickets WHERE runId = ?').run(runId);
   }
 
   setRawFindingTicket(id: number, fingerprint: string, ticketId: string) {
@@ -431,7 +444,7 @@ type RunRow = Omit<Run, 'settings' | 'summary' | 'mode' | 'status'> & {
   summary: string;
 };
 type LocationRow = Omit<Location, 'audited' | 'screenshots' | 'kind'> & { kind: string; audited: number; screenshots: string };
-type RawFindingRow = Omit<RawFinding, 'wcagCriteria'> & { wcagCriteria: string };
+type RawFindingRow = Omit<RawFinding, 'wcagCriteria' | 'componentShared'> & { wcagCriteria: string; componentShared: number };
 type TicketRow = Omit<Ticket, 'labels'> & { labels: string };
 
 const toRun = (row: RunRow): Run => ({
@@ -447,7 +460,11 @@ const toLocation = (row: LocationRow): Location => ({
   audited: row.audited === 1,
   screenshots: JSON.parse(row.screenshots),
 });
-const toRawFinding = (row: RawFindingRow): RawFinding => ({ ...row, wcagCriteria: JSON.parse(row.wcagCriteria) });
+const toRawFinding = (row: RawFindingRow): RawFinding => ({
+  ...row,
+  wcagCriteria: JSON.parse(row.wcagCriteria),
+  componentShared: row.componentShared === 1,
+});
 const toTicket = (row: TicketRow): Ticket => ({ ...row, labels: JSON.parse(row.labels) });
 
 const LOCATION_COLUMNS = new Set([

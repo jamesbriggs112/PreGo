@@ -584,6 +584,41 @@ const PREGO: Record<string, RuleGuidance> = {
     recommendation: 'Add a favicon and link it from every page with <link rel="icon">.',
     effort: 'Small',
   },
+  'certificate-expired': {
+    title: 'The security certificate has expired',
+    description: 'The site’s HTTPS certificate is past its expiry date.',
+    whyItMatters: 'Browsers show a full-page security warning, and most visitors will leave rather than click through it.',
+    recommendation: 'Renew the certificate now, and set up automatic renewal (for example with Let’s Encrypt).',
+    effort: 'Small',
+  },
+  'certificate-expiring': {
+    title: 'The security certificate expires soon',
+    description: 'The site’s HTTPS certificate expires within 30 days.',
+    whyItMatters: 'If it isn’t renewed in time, browsers will block the site with a security warning.',
+    recommendation: 'Renew the certificate, and check that automatic renewal is working.',
+    effort: 'Small',
+  },
+  'certificate-untrusted': {
+    title: 'Browsers won’t trust the security certificate',
+    description: 'The HTTPS certificate doesn’t match the address, is self-signed, or is missing part of its chain.',
+    whyItMatters: 'Browsers show a security warning, and some devices refuse to connect at all.',
+    recommendation: 'Install a certificate from a trusted authority that covers this address, including the intermediate certificates.',
+    effort: 'Small',
+  },
+  'old-tls': {
+    title: 'The server still accepts outdated encryption',
+    description: 'The server accepts TLS 1.0 or 1.1, which have known weaknesses and are no longer supported by browsers.',
+    whyItMatters: 'Old protocols can let an attacker weaken the encryption between visitors and the site, and they fail security reviews.',
+    recommendation: 'Turn off TLS 1.0 and 1.1 on the server or CDN, leaving TLS 1.2 and 1.3.',
+    effort: 'Small',
+  },
+  'vulnerable-library': {
+    title: 'The site uses a JavaScript library with known security holes',
+    description: 'A library the site loads is a version with publicly known vulnerabilities, according to the Retire.js database.',
+    whyItMatters: 'Attackers look for these versions because the weaknesses and how to use them are published.',
+    recommendation: 'Update the library to the version named in the ticket or later, then retest the pages that use it.',
+    effort: 'Medium',
+  },
   'no-analytics': {
     title: 'No analytics found',
     description: 'None of the common analytics scripts were found on the pages audited.',
@@ -599,6 +634,7 @@ const GENERIC_WHY =
 export function guidanceFor(engine: string, ruleId: string): RuleGuidance | undefined {
   if (engine === 'axe-core') return AXE[ruleId];
   if (engine === 'prego') return PREGO[ruleId];
+  if (engine === 'retire.js') return PREGO[ruleId];
   return undefined;
 }
 
@@ -614,8 +650,11 @@ export function guidanceWithFallback(
   ruleId: string,
   fallback: { title: string; description: string; helpUrl: string | null },
 ): RuleGuidance {
+  const guidance = guidanceFor(engine, ruleId);
+  // Each outdated library gets its own ticket, so its title names the library and version.
+  if (guidance && engine === 'retire.js') return { ...guidance, title: fallback.title };
   return (
-    guidanceFor(engine, ruleId) ?? {
+    guidance ?? {
       title: fallback.title,
       description: fallback.description,
       whyItMatters: GENERIC_WHY_BY_ENGINE[engine] ?? GENERIC_WHY,

@@ -14,6 +14,7 @@ import { markupModule } from './markup/markup.js';
 import { brokenLinksModule } from './links/links.js';
 import { ibmModule } from './ibm/ibm.js';
 import { goLiveModule } from './golive/golive.js';
+import { librariesModule } from './libraries/libraries.js';
 
 /** Everything a check factory may need from the audit. */
 export interface CheckFactoryContext {
@@ -89,12 +90,21 @@ const definitions: CheckDefinition[] = [
   },
   {
     id: 'security',
-    name: 'Security headers',
-    description: 'HTTPS, security headers (CSP, HSTS, framing, referrer, permissions, nosniff), cookie flags, mixed content and version disclosure.',
+    name: 'Security headers and certificate',
+    description: 'HTTPS, the certificate’s expiry and trust, outdated TLS versions, security headers (with the CSP checked by Google’s CSP Evaluator), cookie flags, mixed content and version disclosure. Passive: nothing is attacked.',
     categories: ['SEC'],
     defaultOn: true,
     cost: { seconds: [0.02, 0.1], perPage: true },
     create: () => securityModule(),
+  },
+  {
+    id: 'libraries',
+    name: 'Outdated JavaScript libraries',
+    description: 'Scripts the pages load, checked against the Retire.js database of libraries with published vulnerabilities (a copy kept on this computer).',
+    categories: ['SEC'],
+    defaultOn: true,
+    cost: { seconds: [0.05, 0.5], perPage: true },
+    create: () => librariesModule(),
   },
   {
     id: 'html',

@@ -1,12 +1,16 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { createServer as createTlsServer } from 'node:tls';
+import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { PregoDb } from '../../db/database.js';
 import { runAudit } from '../../audit/run-audit.js';
 import { serveFolder } from '../../serve/static-server.js';
 import type { Ticket } from '../../types.js';
-import { analyseHeaders } from './security.js';
+import { analyseHeaders, analyseTls, evaluateCsp } from './security.js';
+import { checkTls } from './tls.js';
 
 const dataDir = mkdtempSync(join(tmpdir(), 'prego-t27-'));
 let db: PregoDb;
@@ -109,5 +113,43 @@ describe('broken links on bad-site', () => {
     expect(broken[0]).toMatchObject({ category: 'UX', exampleSelector: expect.stringMatching(/a$/), templateKey: null });
     expect(broken[0].actual).toMatch(/^The link “See the Mark IV” goes to http:\/\/127\.0\.0\.1:\d+\/products\/mark-iv\.html, which returns HTTP 404\.$/);
     expect(db.getOccurrences(runId, broken[0].ticketId)[0].crop).toMatch(/^crops/);
+  });
+});
+
+describe('CSP Evaluator', () => {
+  it('flags weaknesses the simple checks miss, and passes a sound policy', () => {
+    expect(evaluateCsp("script-src 'self' https:; object-src 'none'").join(' ')).toMatch(/script-src/);
+    expect(evaluateCsp("default-src 'self'; frame-ancestors 'self'")).toEqual([]);
+  });
+});
+
+describe('certificates and TLS', () => {
+  const now = new Date('2026-10-30T12:00:00Z');
+  const report = { host: 'example.org', validTo: new Date('2027-06-01T00:00:00Z'), authorized: true, error: null, legacyProtocol: null };
+
+  it('reports expired, expiring, untrusted certificates and old protocols', () => {
+    expect(analyseTls(report, now)).toEqual([]);
+    expect(analyseTls({ ...report, validTo: new Date('2026-11-10T00:00:00Z') }, now)).toEqual([{ ruleId: 'certificate-expiring', detail: 'The certificate for example.org expires in 10 days (2026-11-10).' }]);
+    expect(analyseTls({ ...report, validTo: new Date('2026-10-01T00:00:00Z'), authorized: false, error: 'CERT_HAS_EXPIRED' }, now).map((p) => p.ruleId)).toEqual(['certificate-expired']);
+    expect(analyseTls({ ...report, authorized: false, error: 'DEPTH_ZERO_SELF_SIGNED_CERT', legacyProtocol: 'TLSv1' }, now).map((p) => p.ruleId)).toEqual(['certificate-untrusted', 'old-tls']);
+  });
+
+  it('reads a real certificate over a TLS connection', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'prego-tls-'));
+    try {
+      execFileSync('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-keyout', join(dir, 'key.pem'), '-out', join(dir, 'cert.pem'), '-days', '5', '-subj', '/CN=localhost'], { stdio: 'ignore' });
+      const server = createTlsServer({ key: readFileSync(join(dir, 'key.pem')), cert: readFileSync(join(dir, 'cert.pem')), minVersion: 'TLSv1.2' }, (s) => s.end());
+      await new Promise<void>((done) => server.listen(0, '127.0.0.1', done));
+      try {
+        const tls = await checkTls('localhost', (server.address() as AddressInfo).port);
+        expect(tls).toMatchObject({ host: 'localhost', authorized: false, legacyProtocol: null });
+        expect(tls.error).toMatch(/SELF_SIGNED/);
+        expect(analyseTls(tls).map((p) => p.ruleId)).toEqual(['certificate-expiring', 'certificate-untrusted']);
+      } finally {
+        server.close();
+      }
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

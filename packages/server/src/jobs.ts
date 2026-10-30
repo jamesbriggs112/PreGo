@@ -46,59 +46,51 @@ export class JobRunner {
   start(options: Omit<AuditOptions, 'dataDir' | 'signal' | 'onEvent'>): Promise<Job> {
     if (this.activeJob) return Promise.reject(new AuditInProgressError(this.activeJob.runId));
     const controller = new AbortController();
-    const buffered: JobEvent[] = [];
+    const events: JobEvent[] = [];
+    const listeners = new Set<(event: JobEvent) => void>();
     let job: Job | undefined;
+    let markStarted: (job: Job) => void = () => {};
+    const started = new Promise<Job>((resolve) => (markStarted = resolve));
 
-    return new Promise<Job>((resolve, reject) => {
-      const emit = (event: JobEvent) => {
-        if (!job) {
-          buffered.push(event);
-          return;
+    const emit = (event: JobEvent) => {
+      events.push(event);
+      for (const listener of listeners) listener(event);
+    };
+
+    // runAudit can emit 'started' synchronously, before it returns its promise (for web addresses
+    // there's nothing to wait for first), so the job is created here without touching that promise.
+    const audit = runAudit(this.db, {
+      ...options,
+      dataDir: this.dataDir,
+      signal: controller.signal,
+      onEvent: (event) => {
+        if (event.type === 'started' && !job) {
+          job = { runId: event.runId, projectId: event.projectId, status: 'running', events, listeners, controller, done: Promise.resolve() };
+          this.jobs.set(job.runId, job);
+          this.active = job;
+          markStarted(job);
         }
-        job.events.push(event);
-        for (const listener of job.listeners) listener(event);
-      };
+        emit(event);
+      },
+    });
 
-      const audit = runAudit(this.db, {
-        ...options,
-        dataDir: this.dataDir,
-        signal: controller.signal,
-        onEvent: (event) => {
-          if (event.type === 'started' && !job) {
-            job = {
-              runId: event.runId,
-              projectId: event.projectId,
-              status: 'running',
-              events: buffered,
-              listeners: new Set(),
-              controller,
-              done: Promise.resolve(),
-            };
-            job.done = audit.then(
-              () => undefined,
-              () => undefined,
-            );
-            this.jobs.set(job.runId, job);
-            this.active = job;
-            resolve(job);
-          }
-          emit(event);
-        },
-      });
+    const finished = audit.then(
+      ({ run }) => {
+        if (!job) throw new Error('Audit finished without starting');
+        job.status = run.status === 'running' ? 'failed' : run.status;
+        emit({ type: 'end', status: job.status, error: run.error ?? undefined });
+      },
+      (error: unknown) => {
+        if (!job) throw error;
+        job.status = 'failed';
+        emit({ type: 'end', status: 'failed', error: error instanceof Error ? error.message : String(error) });
+      },
+    );
 
-      audit.then(
-        ({ run }) => {
-          if (!job) return reject(new Error('Audit finished without starting'));
-          job.status = run.status === 'running' ? 'failed' : run.status;
-          emit({ type: 'end', status: job.status, error: run.error ?? undefined });
-        },
-        (error: unknown) => {
-          const message = error instanceof Error ? error.message : String(error);
-          if (!job) return reject(error);
-          job.status = 'failed';
-          emit({ type: 'end', status: 'failed', error: message });
-        },
-      );
+    // Resolve as soon as the run exists; reject if the audit fails before that.
+    return Promise.race([started, finished.then(() => started)]).then((startedJob) => {
+      startedJob.done = finished.catch(() => undefined);
+      return startedJob;
     });
   }
 

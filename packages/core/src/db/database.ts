@@ -322,6 +322,16 @@ export class PregoDb {
       .run(status, now(), JSON.stringify(summary), error, id);
   }
 
+  /**
+   * Mark runs still recorded as running as failed. Call on startup: a run can only be running inside
+   * the process that started it, so any left over were cut off by a crash or a restart.
+   */
+  failInterruptedRuns(reason: string): number {
+    return this.sqlite
+      .prepare("UPDATE runs SET status = 'failed', finishedAt = ?, error = ? WHERE status = 'running'")
+      .run(now(), reason).changes;
+  }
+
   // Locations
 
   addLocation(location: NewLocation): Location {

@@ -76,7 +76,14 @@ export function runDirectory(dataDir: string, runId: number): string {
 
 /** Crawl a site, audit a sample of pages per template at each viewport, and store the findings. */
 export async function runAudit(db: PregoDb, options: AuditOptions): Promise<AuditResult> {
-  const emit = options.onEvent ?? (() => {});
+  // A broken progress listener must never stop the audit or leave its run stuck at "running".
+  const emit = (event: AuditEvent) => {
+    try {
+      options.onEvent?.(event);
+    } catch (error) {
+      console.error('Prego: audit event listener failed', error);
+    }
+  };
   const dataDir = resolve(options.dataDir ?? defaultDataDir());
   const viewports = options.viewports ?? ['desktop'];
   const modules = options.modules ?? [axeModule()];
@@ -115,10 +122,13 @@ export async function runAudit(db: PregoDb, options: AuditOptions): Promise<Audi
   emit({ type: 'started', runId: run.id, projectId: project.id });
   const runDir = runDirectory(dataDir, run.id);
   const storageStatePath = sessionPath(dataDir, project.slug);
-  const session = new BrowserSession({ basicAuth: options.basicAuth, authOrigin: new URL(startUrl).origin, storageStatePath });
+  let session: BrowserSession | undefined;
 
   let pagesFound = 0;
+  // Everything after the run row exists is inside this try, so any failure is recorded on the run.
   try {
+    const browser = new BrowserSession({ basicAuth: options.basicAuth, authOrigin: new URL(startUrl).origin, storageStatePath });
+    session = browser;
     emit({ type: 'phase', phase: 'crawl', message: `Crawling ${startUrl}` });
     const crawl = await crawlSite({
       startUrl,
@@ -180,7 +190,7 @@ export async function runAudit(db: PregoDb, options: AuditOptions): Promise<Audi
     let done = 0;
     await runPool(jobs, options.concurrency ?? 2, async ({ location, profile }) => {
       throwIfAborted(options.signal);
-      const result = await auditLocation(db, session, run, runDir, location, profile, options.emulation, modules, options.maxCropsPerLocation ?? 100);
+      const result = await auditLocation(db, browser, run, runDir, location, profile, options.emulation, modules, options.maxCropsPerLocation ?? 100);
       done++;
       emit({ type: 'location-audited', url: location.url, viewport: result.viewport, findings: result.findings, done, total: jobs.length, screenshot: result.screenshot });
       if (delayMs > 0) await sleep(delayMs);
@@ -206,7 +216,7 @@ export async function runAudit(db: PregoDb, options: AuditOptions): Promise<Audi
     db.finishRun(run.id, aborted ? 'stopped' : 'failed', {}, error instanceof Error ? error.message : String(error));
     if (!aborted) throw error;
   } finally {
-    await session.close();
+    await session?.close();
     await server?.close();
   }
 

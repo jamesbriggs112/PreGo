@@ -15,6 +15,8 @@ const port = Number(process.env.PREGO_PORT ?? 4310);
 const serveGui = process.env.NODE_ENV !== 'development' && existsSync(join(webDist, 'index.html'));
 
 const db = new PregoDb(join(dataDir, 'prego.sqlite'));
+const interrupted = db.failInterruptedRuns('Prego stopped while this audit was running. Start a new audit to get results.');
+if (interrupted) console.log(`Marked ${interrupted} interrupted audit(s) as failed.`);
 const { app } = await buildApp({ db, dataDir, webDist: serveGui ? webDist : undefined, logger: process.env.PREGO_LOG === '1' });
 
 // Localhost only: Prego handles client data and must not be reachable from the network.

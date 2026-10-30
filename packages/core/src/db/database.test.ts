@@ -56,6 +56,14 @@ describe('PregoDb', () => {
     expect(db.listRuns(project.id).map((r) => r.id)).toEqual([run.id, second.id]);
   });
 
+  it('marks runs left running by a crash or restart as failed', () => {
+    const { run } = seedRun();
+    expect(db.failInterruptedRuns('Prego stopped')).toBe(1);
+    expect(db.getRun(run.id)).toMatchObject({ status: 'failed', error: 'Prego stopped' });
+    expect(db.getRun(run.id)!.finishedAt).not.toBeNull();
+    expect(db.failInterruptedRuns('Prego stopped')).toBe(0);
+  });
+
   it('creates, reads and updates locations', () => {
     const { run, location } = seedRun();
     expect(location).toMatchObject({ audited: true, screenshots: {}, stateId: null });

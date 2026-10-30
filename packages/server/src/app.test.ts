@@ -4,7 +4,7 @@ import JSZip from 'jszip';
 import { PNG } from 'pngjs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { PregoDb } from '@prego/core';
+import { PregoDb, serveFolder } from '@prego/core';
 import { buildApp, type PregoApp } from './app.js';
 import type { JobEvent } from './jobs.js';
 
@@ -127,6 +127,23 @@ describe('starting an audit', () => {
 
     const projects = await (await api('/api/projects')).json();
     expect(projects.find((p: { name: string }) => p.name === 'Acme')).toMatchObject({ lastRun: { id: runId, status: 'complete' } });
+  }, 120_000);
+
+  it('audits a web address, not just a local folder', async () => {
+    // Regression: with a URL target the audit announced itself synchronously, which crashed the job
+    // runner and left the run stuck at "running".
+    const site = await serveFolder(fixture, { substituteOrigin: true });
+    try {
+      const res = await post('/api/runs', { project: 'Web target', target: site.url, delayMs: 0 });
+      expect(res.status).toBe(202);
+      const { runId } = await res.json();
+      const events = await readEvents(runId);
+      expect(events[0]).toMatchObject({ type: 'started', runId });
+      expect(events.at(-1)).toEqual({ type: 'end', status: 'complete' });
+      expect(await (await api(`/api/runs/${runId}`)).json()).toMatchObject({ status: 'complete', target: site.url, summary: { pagesFound: 5 } });
+    } finally {
+      await site.close();
+    }
   }, 120_000);
 
   it('stops a running audit', async () => {

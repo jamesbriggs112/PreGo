@@ -424,6 +424,90 @@ const PREGO: Record<string, RuleGuidance> = {
     recommendation: 'Replace it with a short description of what the image conveys, or alt="" if it’s purely decorative.',
     effort: 'Small',
   },
+  'broken-link': {
+    title: 'Broken link',
+    description: 'A link leads to a page that returns an error, usually “page not found”.',
+    whyItMatters: 'Visitors hit a dead end, lose trust in the site, and search engines rank pages with broken links lower.',
+    recommendation: 'Update the link to the right address, or remove it. If the page moved, add a redirect from the old address.',
+    effort: 'Small',
+  },
+  'no-https': {
+    title: 'Site isn’t served over HTTPS',
+    description: 'Pages are served over plain HTTP, so traffic between the visitor and the site isn’t encrypted.',
+    whyItMatters: 'Anyone on the same network can read or change what visitors see and send, and browsers mark the site as “Not secure”.',
+    recommendation: 'Serve every page over HTTPS and redirect HTTP requests to it.',
+    effort: 'Medium',
+  },
+  'mixed-content': {
+    title: 'Secure pages load insecure content',
+    description: 'An HTTPS page loads images, scripts or styles over plain HTTP.',
+    whyItMatters: 'Browsers block or warn about mixed content, so parts of the page may break, and the insecure files can be tampered with.',
+    recommendation: 'Load every resource over HTTPS.',
+    effort: 'Small',
+  },
+  'missing-hsts': {
+    title: 'Browsers aren’t told to always use HTTPS',
+    description: 'The Strict-Transport-Security header is missing.',
+    whyItMatters: 'Without it, a visitor’s first request can be intercepted and downgraded to plain HTTP.',
+    recommendation: 'Send Strict-Transport-Security: max-age=31536000; includeSubDomains on every HTTPS response.',
+    effort: 'Small',
+  },
+  'missing-csp': {
+    title: 'No Content Security Policy',
+    description: 'The Content-Security-Policy header is missing, so the browser will run scripts from anywhere.',
+    whyItMatters: 'A Content Security Policy limits the damage if an attacker manages to inject a script (cross-site scripting).',
+    recommendation: 'Add a Content-Security-Policy that lists the sources the site actually uses, starting in report-only mode to test it.',
+    effort: 'Medium',
+  },
+  'weak-csp': {
+    title: 'Content Security Policy is too permissive',
+    description: 'The Content Security Policy allows inline scripts, eval or scripts from any source.',
+    whyItMatters: 'A permissive policy gives little protection against injected scripts.',
+    recommendation: 'Remove unsafe-inline and unsafe-eval from script sources; use nonces or hashes for any inline scripts.',
+    effort: 'Medium',
+  },
+  'missing-frame-protection': {
+    title: 'Pages can be embedded by other sites',
+    description: 'Neither X-Frame-Options nor a frame-ancestors policy stops other sites putting these pages in a frame.',
+    whyItMatters: 'Attackers can overlay the site in an invisible frame and trick visitors into clicking things (clickjacking).',
+    recommendation: 'Send Content-Security-Policy: frame-ancestors \'self\' (or X-Frame-Options: SAMEORIGIN).',
+    effort: 'Small',
+  },
+  'missing-referrer-policy': {
+    title: 'No referrer policy',
+    description: 'The Referrer-Policy header is missing.',
+    whyItMatters: 'Full page addresses, which can include private details, may be sent to other sites when visitors follow links.',
+    recommendation: 'Send Referrer-Policy: strict-origin-when-cross-origin.',
+    effort: 'Small',
+  },
+  'missing-permissions-policy': {
+    title: 'No permissions policy',
+    description: 'The Permissions-Policy header is missing, so the site doesn’t limit which browser features embedded content can use.',
+    whyItMatters: 'Third-party content could request the camera, microphone or location without the site meaning to allow it.',
+    recommendation: 'Send a Permissions-Policy that switches off features the site doesn’t use, e.g. camera=(), microphone=(), geolocation=().',
+    effort: 'Small',
+  },
+  'missing-nosniff': {
+    title: 'Browsers may guess file types',
+    description: 'X-Content-Type-Options: nosniff isn’t set.',
+    whyItMatters: 'Browsers may treat uploaded or mislabelled files as scripts, which attackers can exploit.',
+    recommendation: 'Send X-Content-Type-Options: nosniff on every response.',
+    effort: 'Small',
+  },
+  'insecure-cookie': {
+    title: 'Cookies are set without security flags',
+    description: 'Cookies are set without the Secure, HttpOnly or SameSite attributes.',
+    whyItMatters: 'Cookies without these flags can be stolen by scripts, sent over plain HTTP or used in cross-site attacks.',
+    recommendation: 'Set Secure and SameSite on every cookie, and HttpOnly on any cookie scripts don’t need to read.',
+    effort: 'Small',
+  },
+  'server-version-disclosed': {
+    title: 'Server software versions are revealed',
+    description: 'Response headers reveal the server or framework and its version.',
+    whyItMatters: 'Attackers use version numbers to look up known vulnerabilities to try.',
+    recommendation: 'Remove version numbers from the Server and X-Powered-By headers.',
+    effort: 'Small',
+  },
   'canvas-content': {
     title: 'Content drawn in a canvas needs manual review',
     description: 'A large part of the screen is drawn inside a <canvas> element (2D or WebGL). Automated accessibility checks cannot see anything drawn there.',
@@ -459,6 +543,7 @@ export function guidanceFor(engine: string, ruleId: string): RuleGuidance | unde
 /** Guidance with fallbacks for rules that have no plain-English entry yet. */
 /** Why-it-matters text for engines whose rules have no plain-English entry of their own. */
 const GENERIC_WHY_BY_ENGINE: Record<string, string> = {
+  'html-validate': 'Invalid markup is repaired differently by each browser and by assistive technology, so the page can look or behave differently from what was intended.',
   lighthouse: 'Slow, fragile or badly indexed pages lose visitors, cost more to run on mobile data and rank lower in search results.',
 };
 

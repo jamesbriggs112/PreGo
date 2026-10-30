@@ -40,3 +40,6 @@ export { customA11yModule, type CustomA11yOptions } from './checks/a11y-custom/a
 export { uiConsistencyModule, parseColour, lab, deltaE, hex, type UiConsistencyOptions } from './checks/ui/ui.js';
 export { contentModule, unhelpfulAlt } from './checks/content/content.js';
 export { lighthouseModule, averagePerformance, type LighthouseScores, type LighthouseModuleOptions } from './checks/lighthouse/lighthouse.js';
+export { securityModule, analyseHeaders, type HeaderReport } from './checks/security/security.js';
+export { markupModule } from './checks/markup/markup.js';
+export { brokenLinksModule } from './checks/links/links.js';

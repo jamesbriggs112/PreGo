@@ -117,7 +117,9 @@ describe('starting an audit', () => {
     const run = await (await api(`/api/runs/${runId}`)).json();
     expect(run).toMatchObject({ status: 'complete', project: { name: 'Acme' }, summary: { pagesFound: 5, pagesAudited: 5 } });
     expect(run.scores.A11Y).toBeGreaterThan(0);
-    expect(run.scores.SEC).toBeUndefined();
+    // Audits started through the API use the defaults in Settings, which include Lighthouse.
+    expect(run.scores.SEC).toBeGreaterThan(0);
+    expect(run.scores.PERF).toBeGreaterThanOrEqual(0);
     expect(run.settings).not.toHaveProperty('basicAuth.password');
 
     // Screenshots are served from the run folder.

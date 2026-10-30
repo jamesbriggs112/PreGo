@@ -8,6 +8,9 @@ import { uiConsistencyModule } from './ui/ui.js';
 import { contentModule } from './content/content.js';
 import { lighthouseModule } from './lighthouse/lighthouse.js';
 import type { BasicAuth } from '../browser/session.js';
+import { securityModule } from './security/security.js';
+import { markupModule } from './markup/markup.js';
+import { brokenLinksModule } from './links/links.js';
 
 /** Everything a check factory may need from the audit. */
 export interface CheckFactoryContext {
@@ -73,6 +76,30 @@ const definitions: CheckDefinition[] = [
     defaultOn: true,
     slow: true,
     create: (context) => lighthouseModule({ basicAuth: context.basicAuth, onRequest: context.onRequest }),
+  },
+  {
+    id: 'security',
+    name: 'Security headers',
+    description: 'HTTPS, security headers (CSP, HSTS, framing, referrer, permissions, nosniff), cookie flags, mixed content and version disclosure.',
+    categories: ['SEC'],
+    defaultOn: true,
+    create: () => securityModule(),
+  },
+  {
+    id: 'html',
+    name: 'HTML validity',
+    description: 'Markup checked against the HTML standard with html-validate.',
+    categories: ['TECH'],
+    defaultOn: true,
+    create: () => markupModule(),
+  },
+  {
+    id: 'links',
+    name: 'Broken links',
+    description: 'Links found while crawling that lead to errors, shown on the pages that contain them.',
+    categories: ['UX'],
+    defaultOn: true,
+    create: (context) => brokenLinksModule(context.failedPages),
   },
   {
     id: 'canvas',

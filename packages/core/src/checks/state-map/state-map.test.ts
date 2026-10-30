@@ -110,6 +110,6 @@ describe('state map tickets on kiosk-app (criterion 3)', () => {
   it('groups a problem in the shared app shell into one ticket across screens', () => {
     const main = tickets.find((t) => t.ruleId === 'landmark-one-main')!;
     expect(main).toMatchObject({ locationsAffected: 16, title: 'Page has no main content landmark (16 screens)' });
-    expect(tickets.length).toBeLessThan(8);
+    expect(tickets.filter((t) => t.engine === 'axe-core').length).toBeLessThan(6);
   });
 });

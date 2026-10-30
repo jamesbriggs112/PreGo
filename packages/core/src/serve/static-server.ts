@@ -35,6 +35,8 @@ export interface StaticServerOptions {
    * so fixtures write `{{ORIGIN}}/page.html` and get the real origin at serve time.
    */
   substituteOrigin?: boolean;
+  /** Extra response headers on every file (e.g. security headers, for tests). */
+  headers?: Record<string, string>;
 }
 
 export interface StaticServer {
@@ -84,7 +86,7 @@ export async function serveFolder(folder: string, options: StaticServerOptions =
     if (options.substituteOrigin && TEXT_EXTENSIONS.has(ext)) {
       body = body.toString('utf8').replaceAll('{{ORIGIN}}', origin);
     }
-    res.writeHead(200, { 'Content-Type': MIME_TYPES[ext] ?? 'application/octet-stream' });
+    res.writeHead(200, { ...options.headers, 'Content-Type': MIME_TYPES[ext] ?? 'application/octet-stream' });
     res.end(body);
   }
 

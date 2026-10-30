@@ -87,8 +87,8 @@ describe('report.docx', () => {
 
   it('reports categories that were not checked as "Not checked", not as a perfect score', () => {
     const summary = text.slice(text.indexOf('Scores by category'), text.indexOf('Top issues'));
-    expect(summary).toMatch(/Security\s*Not checked/);
-    expect(summary).not.toMatch(/Security\s*100/);
+    expect(summary).toMatch(/Performance\s*Not checked/);
+    expect(summary).not.toMatch(/Performance\s*100/);
   });
 });
 

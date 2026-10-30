@@ -28,6 +28,10 @@ news posts share a template.
 | `news/post-1.html` | Header link | Post template: photo has no `alt` (`image-alt`); low-contrast byline, #b0b0b0 on white (`color-contrast`); heading skips h1 to h4 (`heading-order`) |
 | `news/post-2.html` | **Only in `sitemap.xml`** (no page links to it) | Same post-template defects as `post-1` |
 
+The fixture server sends no security headers, so every page lacks a Content Security Policy,
+framing protection, Referrer-Policy, Permissions-Policy and nosniff (for the security check).
+`index.html` also contains a deprecated `<center>` element (for the HTML validity check).
+
 UI drift (for the UI consistency check), in `css/site.css`: two greys a shade apart (#aaaaaa and
 #b0b0b0), a 15px paragraph beside 16px body text, and a link blue (#1b4f91) one shade off the
 navigation blue (#1a4d8f).

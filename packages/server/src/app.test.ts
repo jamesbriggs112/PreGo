@@ -59,6 +59,12 @@ describe('local-only guard', () => {
   });
 });
 
+describe('health', () => {
+  it('answers once the server is up (the dev GUI waits for this before opening)', async () => {
+    expect(await (await api('/api/health')).json()).toEqual({ ok: true });
+  });
+});
+
 describe('projects', () => {
   it('creates and lists projects', async () => {
     const created = await post('/api/projects', { name: 'Museum of Making' });

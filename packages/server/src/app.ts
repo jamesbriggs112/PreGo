@@ -126,6 +126,8 @@ export async function buildApp(options: AppOptions): Promise<PregoApp> {
     await jobs.shutdown();
   });
 
+  app.get('/api/health', async () => ({ ok: true }));
+
   // Projects
 
   app.get('/api/projects', async () =>

@@ -15,6 +15,9 @@
     }
   },
   "dependencies": {
+    "@crawlee/memory-storage": "^3.18.2",
+    "@crawlee/playwright": "^3.18.2",
+    "@crawlee/utils": "^3.18.2",
     "better-sqlite3": "^13.0.3",
     "playwright": "^1.64.1"
   },

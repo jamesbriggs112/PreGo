@@ -17,7 +17,7 @@ export function RunPage() {
   if (run.isError)
     return (
       <Alert variant="destructive" role="alert">
-        Couldn’t load this audit: {run.error.message}. <Link to="/projects" className="underline">Back to projects</Link>
+        Couldn’t load this audit: {run.error.message}. <Link to="/" className="underline">Back to projects</Link>
       </Alert>
     );
   if (run.data.status === 'running') return <LiveRun run={run.data} />;

@@ -1,8 +1,7 @@
 import { useEffect, useRef } from 'react';
-import { NavLink, Route, Routes, useLocation } from 'react-router';
+import { Navigate, NavLink, Route, Routes, useLocation } from 'react-router';
 import { cn } from '@/lib/utils';
 import { ProjectsPage } from '@/pages/ProjectsPage';
-import { DashboardPage } from '@/pages/DashboardPage';
 import { Logo } from '@/components/Logo';
 import { NewAuditPage } from '@/pages/NewAuditPage';
 import { RunPage } from '@/pages/RunPage';
@@ -13,8 +12,7 @@ import { StateMapPage } from '@/pages/StateMapPage';
 import { NotFoundPage } from '@/pages/NotFoundPage';
 
 const NAV = [
-  { to: '/', label: 'Dashboard', end: true },
-  { to: '/projects', label: 'Projects', end: false },
+  { to: '/', label: 'Projects', end: true },
   { to: '/audits/new', label: 'New audit', end: false },
   { to: '/settings', label: 'Settings', end: false },
 ];
@@ -39,7 +37,7 @@ export function App() {
       </a>
       <header className="sticky top-0 z-40 border-b border-border/70 bg-card/90 backdrop-blur">
         <div className="mx-auto flex h-16 max-w-7xl items-center gap-8 px-6">
-          <NavLink to="/" aria-label="Prego dashboard">
+          <NavLink to="/" aria-label="Prego projects">
             <Logo />
           </NavLink>
           <nav aria-label="Main">
@@ -66,8 +64,8 @@ export function App() {
       </header>
       <main id="main" ref={main} tabIndex={-1} className="mx-auto max-w-7xl px-6 py-8 outline-none">
         <Routes>
-          <Route path="/" element={<DashboardPage />} />
-          <Route path="/projects" element={<ProjectsPage />} />
+          <Route path="/" element={<ProjectsPage />} />
+          <Route path="/projects" element={<Navigate to="/" replace />} />
           <Route path="/audits/new" element={<NewAuditPage />} />
           <Route path="/runs/:runId" element={<RunPage />} />
           <Route path="/runs/:runId/tickets/:ticketId" element={<TicketPage />} />

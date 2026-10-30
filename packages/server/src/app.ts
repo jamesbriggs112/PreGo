@@ -6,7 +6,6 @@ import JSZip from 'jszip';
 import mammoth from 'mammoth';
 import {
   CATEGORIES,
-  CATEGORY_NAMES,
   PregoDb,
   CSV_PRESETS,
   DEFAULT_DENY_LABELS,
@@ -168,61 +167,6 @@ export async function buildApp(options: AppOptions): Promise<PregoApp> {
   app.get('/api/checks', async () =>
     checkDefinitions().map(({ id, name, description, categories, defaultOn, slow }) => ({ id, name, description, categories, defaultOn, slow: !!slow })),
   );
-
-  // Dashboard: everything the home page shows, in one request.
-  app.get('/api/dashboard', async () => {
-    const projects = db.listProjects();
-    const runs = projects.flatMap((p) => db.listRuns(p.id).map((r) => ({ ...r, projectName: p.name })));
-    const completed = runs.filter((r) => r.status === 'complete').sort((a, b) => a.id - b.id);
-    // Each project's most recent completed audit is its current state.
-    const latestPerProject = projects
-      .map((p) => [...completed].reverse().find((r) => r.projectId === p.id))
-      .filter((r): r is (typeof completed)[number] => !!r);
-    const open = (runId: number) => db.getTickets(runId).filter((t) => t.status !== 'Dismissed' && t.status !== 'Needs review');
-    const openTickets = latestPerProject.flatMap((r) => open(r.id).map((t) => ({ ...t, projectName: r.projectName })));
-    const severityRank = { Critical: 0, High: 1, Medium: 2, Low: 3 } as const;
-    const latest = completed.at(-1);
-    const active = jobs.activeJob;
-
-    const categories = CATEGORIES.filter((c) => openTickets.some((t) => t.category === c));
-    return {
-      totals: {
-        projects: projects.length,
-        audits: runs.length,
-        openTickets: openTickets.length,
-        critical: openTickets.filter((t) => t.severity === 'Critical').length,
-      },
-      active: active ? { runId: active.runId, projectName: projects.find((p) => p.id === active.projectId)?.name ?? '' } : null,
-      latest: latest
-        ? { runId: latest.id, projectName: latest.projectName, mode: latest.mode, startedAt: latest.startedAt, scores: scoresFor(db, latest) }
-        : null,
-      recentRuns: [...runs]
-        .sort((a, b) => b.id - a.id)
-        .slice(0, 6)
-        .map((r) => ({ id: r.id, projectName: r.projectName, status: r.status, mode: r.mode, startedAt: r.startedAt })),
-      history: completed.slice(-16).map((r) => {
-        const tickets = open(r.id);
-        return {
-          runId: r.id,
-          projectName: r.projectName,
-          startedAt: r.startedAt,
-          tickets: tickets.length,
-          critical: tickets.filter((t) => t.severity === 'Critical').length,
-          a11y: scoresFor(db, r).A11Y ?? null,
-        };
-      }),
-      heatmap: {
-        categories: categories.map((c) => CATEGORY_NAMES[c]),
-        cells: categories.flatMap((c) =>
-          SEVERITIES.map((severity) => ({ category: CATEGORY_NAMES[c], severity, count: openTickets.filter((t) => t.category === c && t.severity === severity).length })),
-        ),
-      },
-      topIssues: [...openTickets]
-        .sort((a, b) => a.priority.localeCompare(b.priority) || severityRank[a.severity] - severityRank[b.severity] || b.locationsAffected - a.locationsAffected)
-        .slice(0, 5)
-        .map((t) => ({ runId: t.runId, ticketId: t.ticketId, title: t.title, severity: t.severity, priority: t.priority, projectName: t.projectName, occurrences: t.occurrences })),
-    };
-  });
 
   // Projects
 

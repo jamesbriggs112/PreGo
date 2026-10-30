@@ -50,16 +50,6 @@ export interface TicketChanges {
   dismissed?: boolean;
 }
 
-export interface DashboardData {
-  totals: { projects: number; audits: number; openTickets: number; critical: number };
-  active: { runId: number; projectName: string } | null;
-  latest: { runId: number; projectName: string; mode: 'crawl' | 'explore' | 'journey'; startedAt: string; scores: Scores } | null;
-  recentRuns: { id: number; projectName: string; status: Run['status']; mode: Run['mode']; startedAt: string }[];
-  history: { runId: number; projectName: string; startedAt: string; tickets: number; critical: number; a11y: number | null }[];
-  heatmap: { categories: string[]; cells: { category: string; severity: Severity; count: number }[] };
-  topIssues: { runId: number; ticketId: string; title: string; severity: Severity; priority: Priority; projectName: string; occurrences: number }[];
-}
-
 export interface CheckInfo {
   id: string;
   name: string;
@@ -161,7 +151,6 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 const post = <T>(path: string, body: unknown = {}) => request<T>(path, { method: 'POST', body: JSON.stringify(body) });
 
 export const api = {
-  dashboard: () => request<DashboardData>('/api/dashboard'),
   projects: () => request<ProjectListItem[]>('/api/projects'),
   project: (id: number) => request<ProjectDetail>(`/api/projects/${id}`),
   createProject: (name: string) => post<Project>('/api/projects', { name }),

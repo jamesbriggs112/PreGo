@@ -1,5 +1,6 @@
 import lighthouse, { desktopConfig } from 'lighthouse';
 import * as chromeLauncher from 'chrome-launcher';
+import { blockTrackersFlag } from '../../browser/trackers.js';
 import { chromium } from 'playwright';
 import type { Category, Severity } from '../../types.js';
 import type { BasicAuth } from '../../browser/session.js';
@@ -60,7 +61,7 @@ export function lighthouseModule(options: LighthouseModuleOptions = {}): CheckMo
         templatesDone.add(template);
       }
 
-      chrome ??= chromeLauncher.launch({ chromePath: chromium.executablePath(), chromeFlags: ['--headless=new', '--no-first-run', '--disable-extensions'] });
+      chrome ??= chromeLauncher.launch({ chromePath: chromium.executablePath(), chromeFlags: ['--headless=new', '--no-first-run', '--disable-extensions', blockTrackersFlag()] });
       const { port } = await chrome;
       const formFactor = touch ? 'mobile' : 'desktop';
       const extraHeaders = options.basicAuth

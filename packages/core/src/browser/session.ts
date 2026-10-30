@@ -3,6 +3,7 @@ import { existsSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { EVALUATE_SHIM } from './shim.js';
 import { PROFILES, viewportName, type Emulation, type ProfileName } from './profiles.js';
+import { blockTrackersFlag, reportUntracked } from './trackers.js';
 
 export interface BasicAuth {
   username: string;
@@ -40,7 +41,7 @@ export class BrowserSession {
   constructor(private readonly options: BrowserSessionOptions = {}) {}
 
   async start(): Promise<this> {
-    this.browser ??= chromium.launch({ headless: this.options.headless ?? true });
+    this.browser ??= chromium.launch({ headless: this.options.headless ?? true, args: [blockTrackersFlag()] });
     await this.browser;
     return this;
   }
@@ -73,7 +74,7 @@ export class BrowserSession {
     const context = await (await this.browser!).newContext(this.contextOptions(profileName, emulation));
     await context.addInitScript(EVALUATE_SHIM);
     const { onRequest } = this.options;
-    if (onRequest) context.on('request', (request) => onRequest(request.url()));
+    if (onRequest) context.on('request', reportUntracked(onRequest));
     const page = await context.newPage();
     return { context, page, viewport: viewportName(profileName, emulation), close: () => context.close() };
   }
@@ -89,3 +90,4 @@ export class BrowserSession {
 export function sessionPath(dataDir: string, projectSlug: string): string {
   return join(dataDir, 'sessions', `${projectSlug}.json`);
 }
+

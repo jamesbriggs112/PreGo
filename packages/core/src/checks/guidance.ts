@@ -619,6 +619,27 @@ const PREGO: Record<string, RuleGuidance> = {
     recommendation: 'Update the library to the version named in the ticket or later, then retest the pages that use it.',
     effort: 'Medium',
   },
+  'trackers-before-consent': {
+    title: 'Tracking starts before visitors agree to it',
+    description: 'Analytics or advertising scripts load as soon as the page opens, before the visitor has answered the cookie banner.',
+    whyItMatters: 'UK and EU privacy law (PECR and GDPR) requires consent before non-essential tracking. The ICO can act on this, and it undermines visitors’ trust.',
+    recommendation: 'Load these scripts only after the visitor accepts the relevant cookies, for example with Google Consent Mode or the consent platform’s script blocking.',
+    effort: 'Medium',
+  },
+  'tracking-cookies-before-consent': {
+    title: 'Tracking cookies are set before visitors agree to them',
+    description: 'Analytics or advertising cookies are stored as soon as the page opens, before the visitor has answered the cookie banner.',
+    whyItMatters: 'UK and EU privacy law (PECR and GDPR) requires consent before non-essential cookies are set.',
+    recommendation: 'Set these cookies only after consent, and make sure rejecting cookies stops them being set.',
+    effort: 'Medium',
+  },
+  'third-party-services': {
+    title: 'Pages contact outside services',
+    description: 'Before any consent is given, pages load files from or send requests to other organisations’ servers.',
+    whyItMatters: 'Each outside service learns the visitor’s IP address and which page they’re on. They should be listed in the privacy notice, and some need consent.',
+    recommendation: 'Check each service is needed and covered by the privacy notice. Host fonts and scripts on the site’s own server where you can.',
+    effort: 'Small',
+  },
   'no-analytics': {
     title: 'No analytics found',
     description: 'None of the common analytics scripts were found on the pages audited.',

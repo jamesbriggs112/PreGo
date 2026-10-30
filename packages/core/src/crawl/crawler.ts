@@ -6,6 +6,7 @@ import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import type { BasicAuth } from '../browser/session.js';
 import { EVALUATE_SHIM } from '../browser/shim.js';
+import { blockTrackersFlag, reportUntracked } from '../browser/trackers.js';
 
 export interface CrawlOptions {
   startUrl: string;
@@ -107,7 +108,7 @@ export async function crawlSite(options: CrawlOptions): Promise<CrawlResult> {
   let stoppedEarly = false;
   const crawler = new PlaywrightCrawler(
     {
-      launchContext: { launcher: chromium, launchOptions: { headless: true }, useIncognitoPages: true },
+      launchContext: { launcher: chromium, launchOptions: { headless: true, args: [blockTrackersFlag()] }, useIncognitoPages: true },
       browserPoolOptions: {
         useFingerprints: false,
         prePageCreateHooks: [
@@ -119,7 +120,7 @@ export async function crawlSite(options: CrawlOptions): Promise<CrawlResult> {
           async (page) => {
             await page.addInitScript(EVALUATE_SHIM);
             const { onRequest } = options;
-            if (onRequest) page.on('request', (request) => onRequest(request.url()));
+            if (onRequest) page.on('request', reportUntracked(onRequest));
           },
         ],
       },

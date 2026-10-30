@@ -1,4 +1,4 @@
-import { existsSync, statSync } from 'node:fs';
+import { existsSync, mkdirSync, statSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import type { PregoDb } from '../db/database.js';
 import { BrowserSession, sessionPath, type BasicAuth, type OpenedPage } from '../browser/session.js';
@@ -202,7 +202,8 @@ export async function runAudit(db: PregoDb, options: AuditOptions): Promise<Audi
       mode === 'explore' ? await discoverByExploring(context) : mode === 'journey' ? await discoverByJourney(context) : await discoverByCrawling(context);
     const { toAudit } = discovery;
     const modules = [
-      ...(options.modules ?? createChecks(checkIds, { startUrl, failedPages: discovery.failedPages ?? [], basicAuth: options.basicAuth, onRequest: options.onRequest })),
+      ...(options.modules ??
+        createChecks(checkIds, { startUrl, failedPages: discovery.failedPages ?? [], basicAuth: options.basicAuth, onRequest: options.onRequest, previousScreenshot: previousScreenshots(db, run, dataDir) })),
       ...(discovery.modules ?? []),
     ];
     const firstViewport = viewportName(viewports[0], options.emulation);
@@ -306,6 +307,28 @@ export interface AuditTimings {
   viewports?: number;
 }
 
+/**
+ * Screenshots from the project's last complete audit, matched by page path (so a local folder served
+ * on a new port each time still matches) and, for explored screens, by screen title.
+ */
+function previousScreenshots(db: PregoDb, run: Run, dataDir: string): (location: Location, viewport: string) => { path: string; runId: number; date: string } | null {
+  const previous = db
+    .listRuns(run.projectId)
+    .filter((r) => r.id < run.id && r.status === 'complete' && r.mode === run.mode)
+    .at(-1);
+  if (!previous) return () => null;
+  const key = (l: Location) => {
+    const url = new URL(l.url);
+    return `${url.pathname}${url.search}${l.kind === 'state' ? `#${l.title}` : ''}`;
+  };
+  const byKey = new Map(db.getLocations(previous.id).map((l) => [key(l), l]));
+  return (location, viewport) => {
+    const shot = byKey.get(key(location))?.screenshots[viewport];
+    const path = shot && join(runDirectory(dataDir, previous.id), shot);
+    return path && existsSync(path) ? { path, runId: previous.id, date: previous.startedAt.slice(0, 10) } : null;
+  };
+}
+
 async function auditLocation(
   db: PregoDb,
   open: () => Promise<OpenedPage>,
@@ -322,6 +345,7 @@ async function auditLocation(
   try {
     const screenshot = join('screenshots', `${location.id}-${safe(opened.viewport)}.png`);
     await captureFullPage(opened.page, join(runDir, screenshot));
+    const screenshotPath = join(runDir, screenshot);
     timings.openMs += Date.now() - opening;
     timings.pageViews++;
     db.updateLocation(location.id, { screenshots: { ...(db.getLocation(location.id)?.screenshots ?? {}), [opened.viewport]: screenshot } });
@@ -341,6 +365,7 @@ async function auditLocation(
           viewport: opened.viewport,
           touch,
           firstViewport: opened.viewport === firstViewport,
+          screenshot: screenshotPath,
           recordMetrics: (metrics) => db.updateLocation(location.id, { metrics: { ...db.getLocation(location.id)!.metrics, ...metrics } }),
         }),
       );
@@ -358,10 +383,15 @@ async function auditLocation(
         let crop: string | null = null;
         if (count <= maxCrops) {
           const path = join('crops', `${location.id}-${safe(opened.viewport)}-${count}.png`);
-          if (await captureCrop(opened.page, finding.selector, join(runDir, path))) crop = path;
+          if (finding.cropImage) {
+            mkdirSync(join(runDir, 'crops'), { recursive: true });
+            writeFileSync(join(runDir, path), finding.cropImage);
+            crop = path;
+          } else if (await captureCrop(opened.page, finding.selector, join(runDir, path))) crop = path;
         }
+        const { cropImage: _image, ...stored } = finding;
         db.addRawFinding({
-          ...finding,
+          ...stored,
           runId: run.id,
           locationId: location.id,
           viewport: opened.viewport,

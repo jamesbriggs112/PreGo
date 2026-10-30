@@ -11,6 +11,8 @@ export interface CheckContext {
   touch: boolean;
   /** True at the run's first viewport: for checks that should report once per location. */
   firstViewport: boolean;
+  /** Absolute path of this page view's full-page screenshot, already taken. */
+  screenshot?: string;
   /** Keep measurements (such as Lighthouse scores) on the location, for the report. */
   recordMetrics?: (metrics: Record<string, unknown>) => void;
 }
@@ -46,6 +48,8 @@ export interface CheckFinding {
   siteWide?: boolean;
   /** Override the component the finding is grouped under (e.g. the broken link's address). */
   component?: string;
+  /** A ready-made image (PNG) to show as evidence, instead of a crop of the element. */
+  cropImage?: Buffer;
 }
 
 /** A finding from a module's finish step, which runs once every location has been checked. */

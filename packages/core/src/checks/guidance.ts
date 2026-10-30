@@ -675,6 +675,13 @@ const PREGO: Record<string, RuleGuidance> = {
     recommendation: 'Compare the page side by side in both browsers and adjust the CSS for the listed elements.',
     effort: 'Small',
   },
+  'visual-change': {
+    title: 'The page looks different from the last audit',
+    description: 'The page’s screenshot differs from the same page in the project’s previous audit. The evidence image shows the changes in red.',
+    whyItMatters: 'Changes nobody intended (a broken style, a missing image, a layout shift) are easy to miss before launch. Intended changes can be confirmed and closed.',
+    recommendation: 'Compare the evidence with the design. If the change was intended, mark the ticket as Won’t fix; if not, find what caused it.',
+    effort: 'Small',
+  },
   'no-analytics': {
     title: 'No analytics found',
     description: 'None of the common analytics scripts were found on the pages audited.',

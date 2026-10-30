@@ -15,9 +15,11 @@
     }
   },
   "dependencies": {
+    "@axe-core/playwright": "^4.14.0",
     "@crawlee/memory-storage": "^3.18.2",
     "@crawlee/playwright": "^3.18.2",
     "@crawlee/utils": "^3.18.2",
+    "axe-core": "^4.14.0",
     "better-sqlite3": "^13.0.3",
     "playwright": "^1.64.1"
   },

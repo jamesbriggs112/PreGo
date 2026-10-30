@@ -20,12 +20,17 @@
   </header>
   <main>
     <h1>Contact us</h1>
-    <!-- DEFECT: form fields have placeholders but no labels -->
+    <!-- DEFECT: form fields without labels -->
     <form action="/contact-sent.html" method="get">
-      <p><input type="text" name="name" placeholder="Your name"></p>
+      <p>Your name</p>
+      <!-- DEFECT: no label at all (axe: label) -->
+      <p><input type="text" name="name"></p>
+      <!-- DEFECT: placeholder only, no label. axe accepts placeholder as a name, so it doesn't flag this. -->
       <p><input type="email" name="email" placeholder="Email address"></p>
+      <!-- DEFECT: no label (axe: select-name) -->
       <p><select name="topic"><option>Sales</option><option>Support</option></select></p>
-      <p><textarea name="message" placeholder="Message" rows="5" cols="40"></textarea></p>
+      <!-- DEFECT: no label at all (axe: label) -->
+      <p><textarea name="message" rows="5" cols="40"></textarea></p>
       <p><button type="submit">Send</button></p>
     </form>
   </main>

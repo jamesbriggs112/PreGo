@@ -8,3 +8,6 @@ export * from './browser/profiles.js';
 export { BrowserSession, sessionPath, type BasicAuth, type BrowserSessionOptions, type OpenedPage } from './browser/session.js';
 export { crawlSite, type CrawlOptions, type CrawlResult, type CrawledPage, type FailedPage } from './crawl/crawler.js';
 export * from './crawl/templates.js';
+export * from './checks/types.js';
+export { axeModule, AXE_TAGS, wcagFromTags, type AxeModuleOptions } from './checks/axe/axe.js';
+export { guidanceFor, guidanceWithFallback, type RuleGuidance, type Effort } from './checks/guidance.js';

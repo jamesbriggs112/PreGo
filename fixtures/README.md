@@ -24,7 +24,7 @@ news posts share a template.
 | All pages (shared header) | | Logo image has no `alt` (axe `image-alt`) |
 | `index.html` | Start URL | Hero image has no `alt` (`image-alt`); low-contrast intro text, #aaa on white, about 2.3:1 (`color-contrast`); heading skips h1 to h3 (`heading-order`); broken link to `/products/mark-iv.html` (404); no meta description |
 | `about.html` | Header link | `<html>` has no `lang` attribute (`html-has-lang`); low-contrast caption (`color-contrast`) |
-| `contact.html` | Header link | Four form fields (text, email, select, textarea) with placeholders but no labels (`label`, `select-name`); no meta description |
+| `contact.html` | Header link | Three form fields with no label at all: name input and textarea (`label`), topic select (`select-name`). An email field with a placeholder but no label, which axe accepts as a name, so it needs the custom form check (T24); no meta description |
 | `news/post-1.html` | Header link | Post template: photo has no `alt` (`image-alt`); low-contrast byline, #b0b0b0 on white (`color-contrast`); heading skips h1 to h4 (`heading-order`) |
 | `news/post-2.html` | **Only in `sitemap.xml`** (no page links to it) | Same post-template defects as `post-1` |
 

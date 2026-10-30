@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Text spacing</title>
+  <style>body { font-family: Arial, sans-serif; margin: 0; } main { padding: 16px; } .skip { position: absolute; left: -999px; } .skip:focus { left: 8px; top: 8px; }</style>
+
+</head>
+<body>
+  <main><h1>Text spacing</h1>
+  <!-- DEFECT: a fixed-size button whose two-line label wraps onto a third line, and is cut off, when
+       text spacing is increased (WCAG 1.4.12). -->
+  <button id="tight" style="width:150px;height:44px;line-height:18px;font-size:16px;overflow:hidden">Book tickets for the exhibition</button></main>
+</body>
+</html>

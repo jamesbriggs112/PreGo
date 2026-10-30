@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>No skip link</title>
+  <style>body { font-family: Arial, sans-serif; margin: 0; } main { padding: 16px; } .skip { position: absolute; left: -999px; } .skip:focus { left: 8px; top: 8px; }</style>
+
+</head>
+<body>
+  <header><nav><a href="index.html">Home</a> <a href="reflow.html">Reflow</a> <a href="zoom.html">Zoom</a> <a href="spacing.html">Spacing</a></nav></header>
+  <!-- DEFECT: four navigation links come before the content and there is no skip link (WCAG 2.4.1). -->
+  <main><h1>No skip link</h1><p>Content.</p></main>
+</body>
+</html>

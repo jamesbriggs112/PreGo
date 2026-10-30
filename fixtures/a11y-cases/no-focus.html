@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>No visible focus</title>
+  <style>body { font-family: Arial, sans-serif; margin: 0; } main { padding: 16px; } .skip { position: absolute; left: -999px; } .skip:focus { left: 8px; top: 8px; }</style>
+  <style>a:focus, button:focus { outline: none; }</style>
+</head>
+<body>
+  <main><h1>No visible focus</h1>
+  <!-- DEFECT: focus outlines are removed and nothing replaces them (WCAG 2.4.7). -->
+  <a href="index.html">Back to cases</a> <button>Save</button></main>
+</body>
+</html>

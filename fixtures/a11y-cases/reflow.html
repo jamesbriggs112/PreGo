@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Reflow</title>
+  <style>body { font-family: Arial, sans-serif; margin: 0; } main { padding: 16px; } .skip { position: absolute; left: -999px; } .skip:focus { left: 8px; top: 8px; }</style>
+
+</head>
+<body>
+  <main><h1>Reflow</h1>
+  <!-- DEFECT: a fixed 900px panel forces horizontal scrolling at 320px wide (WCAG 1.4.10). -->
+  <div id="wide" style="width:900px;background:#eef">A fixed-width promotional panel.</div></main>
+</body>
+</html>

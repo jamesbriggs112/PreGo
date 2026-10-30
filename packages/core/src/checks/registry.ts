@@ -3,6 +3,7 @@ import type { FailedPage } from '../crawl/crawler.js';
 import type { CheckModule } from './types.js';
 import { axeModule } from './axe/axe.js';
 import { canvasModule } from './canvas/canvas.js';
+import { customA11yModule } from './a11y-custom/a11y-custom.js';
 
 /** Everything a check factory may need from the audit. */
 export interface CheckFactoryContext {
@@ -32,6 +33,14 @@ const definitions: CheckDefinition[] = [
     categories: ['A11Y'],
     defaultOn: true,
     create: () => axeModule(),
+  },
+  {
+    id: 'a11y-custom',
+    name: 'Custom accessibility checks',
+    description: 'Keyboard traps, visible focus, reflow at 320px, 200% zoom, text spacing, touch target size, skip links, headings, landmarks and duplicate page titles.',
+    categories: ['A11Y'],
+    defaultOn: true,
+    create: () => customA11yModule(),
   },
   {
     id: 'canvas',

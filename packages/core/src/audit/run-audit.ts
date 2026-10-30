@@ -275,7 +275,7 @@ async function auditLocation(
     const touch = await opened.page.evaluate(() => navigator.maxTouchPoints > 0);
     for (const module of modules) {
       if (module.perViewport === false && opened.viewport !== firstViewport) continue;
-      const findings = await module.run({ page: opened.page, location, viewport: opened.viewport, touch });
+      const findings = await module.run({ page: opened.page, location, viewport: opened.viewport, touch, firstViewport: opened.viewport === firstViewport });
       for (const finding of findings) {
         count++;
         const component = finding.siteWide || finding.component ? findingComponent(finding) : await describeComponent(opened.page, finding.selector).then((c) => ({ component: c.path, componentShared: c.shared }));

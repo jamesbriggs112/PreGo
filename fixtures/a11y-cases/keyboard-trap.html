@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Keyboard trap</title>
+  <style>body { font-family: Arial, sans-serif; margin: 0; } main { padding: 16px; } .skip { position: absolute; left: -999px; } .skip:focus { left: 8px; top: 8px; }</style>
+
+</head>
+<body>
+  <main><h1>Keyboard trap</h1>
+  <!-- DEFECT: once focused, Tab keeps focus in this field (WCAG 2.1.2). -->
+  <label for="trap">Search</label> <input id="trap">
+  <a href="index.html">Back to cases</a> <button>Next</button></main>
+  <script>document.getElementById("trap").addEventListener("keydown", (e) => { if (e.key === "Tab") e.preventDefault(); });</script>
+</body>
+</html>

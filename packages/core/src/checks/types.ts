@@ -9,6 +9,8 @@ export interface CheckContext {
   viewport: string;
   /** Whether the screen is touch (mobile, tablet, kiosk profiles). */
   touch: boolean;
+  /** True at the run's first viewport: for checks that should report once per location. */
+  firstViewport: boolean;
 }
 
 /**

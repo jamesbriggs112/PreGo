@@ -36,3 +36,4 @@ export { stateMapPng, stateMapSvg, type ImageState } from './export/state-map-im
 export { stateMapStates } from './export/plan.js';
 export { parseJourney, describeStatement, runStep, loadJourney, listJourneys, journeysDir, journeyFile, ensureJourneysDir, STEP_TIMEOUT_MS, type Journey, type JourneyStep } from './journeys/journey.js';
 export { canvasModule, type CanvasModuleOptions } from './checks/canvas/canvas.js';
+export { customA11yModule, type CustomA11yOptions } from './checks/a11y-custom/a11y-custom.js';

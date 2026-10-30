@@ -11,6 +11,7 @@ const fixture = resolve('fixtures/bad-site');
 let db: PregoDb;
 let prego: PregoApp;
 let base: string;
+let completedRunId: number;
 
 beforeAll(async () => {
   db = new PregoDb(join(dataDir, 'prego.sqlite'));
@@ -86,6 +87,7 @@ describe('starting an audit', () => {
     const res = await post('/api/runs', { project: 'Acme', target: fixture, delayMs: 0, viewports: ['desktop'] });
     expect(res.status).toBe(202);
     const { runId } = await res.json();
+    completedRunId = runId;
     expect(await (await api('/api/runs/active')).json()).toMatchObject({ runId });
 
     const busy = await post('/api/runs', { project: 'Acme', target: fixture });
@@ -127,6 +129,48 @@ describe('starting an audit', () => {
     expect(await (await api(`/api/runs/${runId}`)).json()).toMatchObject({ status: 'stopped' });
     expect((await post(`/api/runs/${runId}/stop`, {})).status).toBe(409);
   }, 120_000);
+});
+
+describe('tickets', () => {
+  const patch = (ticketId: string, body: unknown) => api(`/api/runs/${completedRunId}/tickets/${ticketId}`, { method: 'PATCH', body: JSON.stringify(body) });
+  type ApiTicket = { ticketId: string; ruleId: string; templateKey: string | null; pages: string[]; occurrences: number };
+  const list = async (): Promise<ApiTicket[]> => (await api(`/api/runs/${completedRunId}/tickets`)).json();
+
+  it('lists tickets with the pages they affect', async () => {
+    const tickets = await list();
+    expect(tickets.length).toBeGreaterThan(5);
+    const logo = tickets.find((t) => t.ruleId === 'image-alt' && t.templateKey === null)!;
+    expect(logo.pages).toHaveLength(5);
+  });
+
+  it('returns a ticket with every occurrence and its crop', async () => {
+    const [first] = await list();
+    const detail = await (await api(`/api/runs/${completedRunId}/tickets/${first.ticketId}`)).json();
+    expect(detail.occurrenceList).toHaveLength(first.occurrences);
+    expect(detail.occurrenceList[0]).toMatchObject({ url: expect.stringMatching(/^http/), crop: expect.stringMatching(/^crops/) });
+    expect(detail.helpUrl).toMatch(/dequeuniversity/);
+    expect((await api(`/api/runs/${completedRunId}/tickets/PRG-A11Y-999`)).status).toBe(404);
+  });
+
+  it('validates and applies edits', async () => {
+    const [first] = await list();
+    expect((await patch(first.ticketId, { severity: 'Huge' })).status).toBe(400);
+    expect((await patch(first.ticketId, { colour: 'red' })).status).toBe(400);
+    expect((await patch(first.ticketId, {})).status).toBe(400);
+    expect((await patch('PRG-A11Y-999', { dismissed: true })).status).toBe(404);
+    const edited = await (await patch(first.ticketId, { severity: 'Low', auditorNotes: 'Checked with client' })).json();
+    expect(edited).toMatchObject({ severity: 'Low', auditorNotes: 'Checked with client' });
+  });
+
+  it('merges tickets', async () => {
+    const headings = (await list()).filter((t) => t.ruleId === 'heading-order');
+    expect(headings).toHaveLength(2);
+    const merge = (body: unknown) => api(`/api/runs/${completedRunId}/tickets/merge`, { method: 'POST', body: JSON.stringify(body) });
+    expect((await merge({ into: headings[0].ticketId, from: [headings[0].ticketId] })).status).toBe(400);
+    const merged = await (await merge({ into: headings[0].ticketId, from: [headings[1].ticketId] })).json();
+    expect(merged.occurrences).toBe(headings[0].occurrences + headings[1].occurrences);
+    expect((await list()).filter((t) => t.ruleId === 'heading-order')).toHaveLength(1);
+  });
 });
 
 describe('run files', () => {

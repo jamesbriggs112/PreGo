@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { PregoDb } from '../db/database.js';
+import type { PregoDb, TicketOverride } from '../db/database.js';
 import { guidanceWithFallback } from '../checks/guidance.js';
 import { componentLabel } from './component.js';
 import { CATEGORY_NAMES, SEVERITIES, type Location, type Priority, type RawFinding, type Severity, type Ticket } from '../types.js';
@@ -53,19 +53,29 @@ export function buildTickets(db: PregoDb, runId: number, options: BuildTicketsOp
     .map((finding) => ({ finding, key: orderKey(finding, locations) }))
     .sort((a, b) => compare(a.key, b.key))
     .map(({ finding }) => finding);
-  const groups = new Map<string, RawFinding[]>();
-  for (const finding of findings) {
-    const fp = fingerprint(finding, locations.get(finding.locationId)?.templateKey ?? null);
-    groups.set(fp, [...(groups.get(fp) ?? []), finding]);
-  }
-  const ordered = [...groups.entries()];
-
   const tickets: Ticket[] = [];
   db.transaction(() => {
     db.clearTickets(runId);
-    for (const [fp, findings] of ordered) {
-      const first = findings[0];
-      const { ticketId } = db.ticketIdFor(run.projectId, fp, first.category, runId);
+    // Group by ticket ID rather than fingerprint, so tickets the auditor merged stay merged.
+    // `primary` is a finding that belongs to the ticket itself rather than one merged into it, so a
+    // merged ticket keeps its own title and details.
+    const groups = new Map<string, { fp: string; findings: RawFinding[]; primary?: RawFinding }>();
+    const fingerprints = new Map<number, string>();
+    for (const finding of findings) {
+      const fp = fingerprint(finding, locations.get(finding.locationId)?.templateKey ?? null);
+      fingerprints.set(finding.id, fp);
+      const own = db.ticketIdFor(run.projectId, fp, finding.category, runId).ticketId;
+      const ticketId = db.resolveMerge(run.projectId, own);
+      if (!groups.has(ticketId)) groups.set(ticketId, { fp, findings: [] });
+      const group = groups.get(ticketId)!;
+      group.findings.push(finding);
+      if (own === ticketId && !group.primary) {
+        group.primary = finding;
+        group.fp = fp;
+      }
+    }
+    for (const [ticketId, { fp, findings, primary }] of groups) {
+      const first = primary ?? findings[0];
       const firstSeenRunId = db.ticketFirstSeenRun(run.projectId, ticketId) ?? runId;
       const firstSeen = firstSeenRunId === runId ? runDate : (db.getRun(firstSeenRunId)?.startedAt.slice(0, 10) ?? runDate);
       const location = locations.get(first.locationId)!;
@@ -76,6 +86,8 @@ export function buildTickets(db: PregoDb, runId: number, options: BuildTicketsOp
       const where = componentLabel(first.component ?? '', first.componentShared, location.templateKey);
       const criterion = first.wcagCriteria.join(', ') || null;
 
+      const override = db.getOverride(run.projectId, ticketId);
+      const reach = affected.size / auditedCount;
       const ticket: Ticket = {
         runId,
         ticketId,
@@ -83,7 +95,7 @@ export function buildTickets(db: PregoDb, runId: number, options: BuildTicketsOp
         category: first.category,
         title: `${guidance.title} (${where})`,
         severity,
-        priority: calculatePriority(severity, affected.size / auditedCount, onKeyJourney),
+        priority: calculatePriority(severity, reach, onKeyJourney),
         status: firstSeenRunId === runId ? 'New' : 'Recurring',
         wcagCriterion: criterion,
         wcagLevel: first.wcagLevel,
@@ -108,10 +120,11 @@ export function buildTickets(db: PregoDb, runId: number, options: BuildTicketsOp
         firstSeen,
         lastSeen: runDate,
       };
+      if (override) applyOverride(ticket, override, reach, onKeyJourney);
       db.saveTicket(ticket);
       tickets.push(ticket);
       for (const finding of findings) {
-        db.setRawFindingTicket(finding.id, fp, ticketId);
+        db.setRawFindingTicket(finding.id, fingerprints.get(finding.id)!, ticketId);
         db.addOccurrence({
           runId,
           ticketId,
@@ -126,6 +139,16 @@ export function buildTickets(db: PregoDb, runId: number, options: BuildTicketsOp
     }
   });
   return tickets.sort((a, b) => a.ticketId.localeCompare(b.ticketId, 'en', { numeric: true }));
+}
+
+/** Apply the auditor's saved triage to a freshly built ticket. */
+export function applyOverride(ticket: Ticket, override: TicketOverride, reach: number, onKeyJourney: boolean) {
+  if (override.title) ticket.title = override.title;
+  if (override.severity) ticket.severity = override.severity;
+  // A changed severity moves the computed priority too, unless priority itself was set.
+  ticket.priority = override.priority ?? calculatePriority(ticket.severity, reach, onKeyJourney);
+  if (override.auditorNotes !== null) ticket.auditorNotes = override.auditorNotes;
+  if (override.dismissed) ticket.status = 'Dismissed';
 }
 
 function orderKey(finding: RawFinding, locations: Map<number, Location>): string[] {

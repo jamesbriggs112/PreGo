@@ -6,10 +6,12 @@ import type {
   Category,
   Location,
   Occurrence,
+  Priority,
   Project,
   RawFinding,
   Run,
   RunStatus,
+  Severity,
   Ticket,
 } from '../types.js';
 
@@ -141,7 +143,38 @@ const MIGRATIONS: string[] = [
   ALTER TABLE raw_findings ADD COLUMN component TEXT;
   ALTER TABLE raw_findings ADD COLUMN componentShared INTEGER NOT NULL DEFAULT 0;
   `,
+  // 3: auditor triage, kept per project so it carries into later runs.
+  `
+  CREATE TABLE ticket_overrides (
+    projectId INTEGER NOT NULL REFERENCES projects(id),
+    ticketId TEXT NOT NULL,
+    title TEXT,
+    severity TEXT,
+    priority TEXT,
+    dismissed INTEGER NOT NULL DEFAULT 0,
+    auditorNotes TEXT,
+    updatedAt TEXT NOT NULL,
+    PRIMARY KEY (projectId, ticketId)
+  );
+
+  CREATE TABLE ticket_merges (
+    projectId INTEGER NOT NULL REFERENCES projects(id),
+    fromTicketId TEXT NOT NULL,
+    intoTicketId TEXT NOT NULL,
+    mergedAt TEXT NOT NULL,
+    PRIMARY KEY (projectId, fromTicketId)
+  );
+  `,
 ];
+
+/** Auditor changes to a ticket. Null fields keep the computed value. */
+export interface TicketOverride {
+  title: string | null;
+  severity: Severity | null;
+  priority: Priority | null;
+  dismissed: boolean;
+  auditorNotes: string | null;
+}
 
 type NewRun = Pick<Run, 'projectId' | 'mode' | 'target'> & { settings?: Record<string, unknown> };
 type NewLocation = Omit<Location, 'id' | 'screenshots' | 'audited' | 'notAuditedReason' | 'stateId'> &
@@ -382,6 +415,52 @@ export class PregoDb {
       .prepare('SELECT firstSeenRunId FROM ticket_registry WHERE projectId = ? AND ticketId = ?')
       .get(projectId, ticketId) as { firstSeenRunId: number } | undefined;
     return row?.firstSeenRunId;
+  }
+
+  // Triage
+
+  getOverride(projectId: number, ticketId: string): TicketOverride | undefined {
+    const row = this.sqlite
+      .prepare('SELECT title, severity, priority, dismissed, auditorNotes FROM ticket_overrides WHERE projectId = ? AND ticketId = ?')
+      .get(projectId, ticketId) as (Omit<TicketOverride, 'dismissed'> & { dismissed: number }) | undefined;
+    return row && { ...row, dismissed: row.dismissed === 1 };
+  }
+
+  /** Merge changes into a ticket's saved triage. `null` clears a field back to the computed value. */
+  saveOverride(projectId: number, ticketId: string, changes: Partial<TicketOverride>) {
+    const merged = { title: null, severity: null, priority: null, dismissed: false, auditorNotes: null, ...this.getOverride(projectId, ticketId), ...changes };
+    this.sqlite
+      .prepare(
+        `INSERT OR REPLACE INTO ticket_overrides (projectId, ticketId, title, severity, priority, dismissed, auditorNotes, updatedAt)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(projectId, ticketId, merged.title, merged.severity, merged.priority, merged.dismissed ? 1 : 0, merged.auditorNotes, now());
+  }
+
+  addMerge(projectId: number, fromTicketId: string, intoTicketId: string) {
+    this.sqlite
+      .prepare('INSERT OR REPLACE INTO ticket_merges (projectId, fromTicketId, intoTicketId, mergedAt) VALUES (?, ?, ?, ?)')
+      .run(projectId, fromTicketId, intoTicketId, now());
+  }
+
+  /** Follow merges to the ticket this one now lives in (itself if never merged). */
+  resolveMerge(projectId: number, ticketId: string): string {
+    const seen = new Set<string>();
+    let current = ticketId;
+    const lookup = this.sqlite.prepare('SELECT intoTicketId FROM ticket_merges WHERE projectId = ? AND fromTicketId = ?');
+    for (;;) {
+      const row = lookup.get(projectId, current) as { intoTicketId: string } | undefined;
+      if (!row || seen.has(row.intoTicketId)) return current;
+      seen.add(current);
+      current = row.intoTicketId;
+    }
+  }
+
+  /** Move a run's occurrences and findings from one ticket to another, and drop the emptied ticket. */
+  moveTicketContents(runId: number, fromTicketId: string, intoTicketId: string) {
+    this.sqlite.prepare('UPDATE occurrences SET ticketId = ? WHERE runId = ? AND ticketId = ?').run(intoTicketId, runId, fromTicketId);
+    this.sqlite.prepare('UPDATE raw_findings SET ticketId = ? WHERE runId = ? AND ticketId = ?').run(intoTicketId, runId, fromTicketId);
+    this.sqlite.prepare('DELETE FROM tickets WHERE runId = ? AND ticketId = ?').run(runId, fromTicketId);
   }
 
   // Tickets

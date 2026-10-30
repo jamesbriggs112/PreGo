@@ -6,6 +6,7 @@ import { formatDateTime } from '@/lib/utils';
 import { Alert } from '@/components/ui/alert';
 import { RunStatusBadge } from '@/components/RunStatusBadge';
 import { LiveRun } from './LiveRun';
+import { RunResults } from './RunResults';
 
 export function RunPage() {
   const runId = Number(useParams().runId);
@@ -20,8 +21,8 @@ export function RunPage() {
       </Alert>
     );
   if (run.data.status === 'running') return <LiveRun run={run.data} />;
+  if (run.data.status === 'complete') return <RunResults run={run.data} />;
 
-  const s = run.data.summary as Record<string, number>;
   return (
     <div className="space-y-4">
       <div>
@@ -35,11 +36,6 @@ export function RunPage() {
         <Alert variant="destructive" role="alert">
           The audit failed: {run.data.error}
         </Alert>
-      )}
-      {run.data.status === 'complete' && (
-        <p>
-          {s.pagesFound} pages found, {s.pagesAudited} audited, {s.tickets} tickets.
-        </p>
       )}
     </div>
   );

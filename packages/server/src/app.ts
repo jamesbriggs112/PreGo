@@ -5,8 +5,13 @@ import { extname, join, resolve, sep } from 'node:path';
 import {
   CATEGORIES,
   PregoDb,
+  SEVERITIES,
+  TriageError,
   categoryScore,
   checkedCategories,
+  mergeTickets,
+  updateTicket,
+  type TicketChanges,
   isProfileName,
   runDirectory,
   type Category,
@@ -226,6 +231,94 @@ export async function buildApp(options: AppOptions): Promise<PregoApp> {
     job.listeners.add(listener);
     request.raw.on('close', close);
   });
+
+  // Tickets and triage
+
+  app.get<{ Params: { id: string } }>('/api/runs/:id/tickets', async (request, reply) => {
+    const runId = Number(request.params.id);
+    if (!db.getRun(runId)) return reply.code(404).send({ error: 'Run not found' });
+    const locations = new Map(db.getLocations(runId).map((l) => [l.id, l.url]));
+    // Each ticket lists the pages it affects, for the page filter.
+    const pagesByTicket = new Map<string, Set<string>>();
+    for (const o of db.getOccurrences(runId)) {
+      if (!pagesByTicket.has(o.ticketId)) pagesByTicket.set(o.ticketId, new Set());
+      pagesByTicket.get(o.ticketId)!.add(locations.get(o.locationId) ?? '');
+    }
+    return db.getTickets(runId).map((t) => ({ ...t, pages: [...(pagesByTicket.get(t.ticketId) ?? [])] }));
+  });
+
+  app.get<{ Params: { id: string; ticketId: string } }>('/api/runs/:id/tickets/:ticketId', async (request, reply) => {
+    const runId = Number(request.params.id);
+    const ticket = db.getTicket(runId, request.params.ticketId);
+    if (!ticket) return reply.code(404).send({ error: 'Ticket not found' });
+    const locations = new Map(db.getLocations(runId).map((l) => [l.id, l]));
+    const findings = new Map(db.getRawFindings(runId).map((f) => [f.id, f]));
+    const occurrences = db.getOccurrences(runId, ticket.ticketId).map((o) => ({
+      id: o.id,
+      url: locations.get(o.locationId)?.url ?? '',
+      viewport: o.viewport,
+      selector: o.selector,
+      html: o.html,
+      crop: o.crop,
+      failureSummary: findings.get(o.rawFindingId)?.failureSummary ?? null,
+    }));
+    const helpUrl = db.getRawFindings(runId).find((f) => f.ticketId === ticket.ticketId)?.helpUrl ?? null;
+    return { ...ticket, helpUrl, occurrenceList: occurrences };
+  });
+
+  app.patch<{ Params: { id: string; ticketId: string }; Body: TicketChanges }>(
+    '/api/runs/:id/tickets/:ticketId',
+    {
+      schema: {
+        body: {
+          type: 'object',
+          additionalProperties: false,
+          minProperties: 1,
+          properties: {
+            title: { type: ['string', 'null'], maxLength: 300 },
+            severity: { anyOf: [{ type: 'null' }, { enum: [...SEVERITIES] }] },
+            priority: { anyOf: [{ type: 'null' }, { enum: ['P1', 'P2', 'P3', 'P4'] }] },
+            auditorNotes: { type: ['string', 'null'], maxLength: 5000 },
+            dismissed: { type: 'boolean' },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const runId = Number(request.params.id);
+      if (jobs.get(runId)?.status === 'running') return reply.code(409).send({ error: 'Wait for the audit to finish before editing tickets.' });
+      try {
+        return updateTicket(db, runId, request.params.ticketId, request.body);
+      } catch (error) {
+        if (error instanceof TriageError) return reply.code(404).send({ error: error.message });
+        throw error;
+      }
+    },
+  );
+
+  app.post<{ Params: { id: string }; Body: { into: string; from: string[] } }>(
+    '/api/runs/:id/tickets/merge',
+    {
+      schema: {
+        body: {
+          type: 'object',
+          required: ['into', 'from'],
+          additionalProperties: false,
+          properties: { into: { type: 'string' }, from: { type: 'array', items: { type: 'string' }, minItems: 1 } },
+        },
+      },
+    },
+    async (request, reply) => {
+      const runId = Number(request.params.id);
+      if (jobs.get(runId)?.status === 'running') return reply.code(409).send({ error: 'Wait for the audit to finish before merging tickets.' });
+      try {
+        return mergeTickets(db, runId, request.body.into, request.body.from);
+      } catch (error) {
+        if (error instanceof TriageError) return reply.code(400).send({ error: error.message });
+        throw error;
+      }
+    },
+  );
 
   // Screenshots and crops from a run folder.
   app.get<{ Params: { id: string; '*': string } }>('/api/runs/:id/files/*', async (request, reply) => {

@@ -1,4 +1,4 @@
-import type { Category, Location, Project, Run } from '@prego/core/types';
+import type { Category, Location, Priority, Project, Run, Severity, Ticket } from '@prego/core/types';
 
 export type RunSummary = Pick<Run, 'id' | 'projectId' | 'mode' | 'target' | 'status' | 'startedAt' | 'finishedAt' | 'summary' | 'error'>;
 export type Scores = Partial<Record<Category, number>>;
@@ -17,6 +17,34 @@ export interface RunDetail extends RunSummary {
   settings: Record<string, unknown>;
   locations: Location[];
   scores: Scores | null;
+}
+
+export interface ApiTicket extends Ticket {
+  /** Pages (URLs) the ticket's occurrences are on. */
+  pages: string[];
+}
+
+export interface TicketOccurrence {
+  id: number;
+  url: string;
+  viewport: string;
+  selector: string;
+  html: string;
+  crop: string | null;
+  failureSummary: string | null;
+}
+
+export interface TicketDetail extends Ticket {
+  helpUrl: string | null;
+  occurrenceList: TicketOccurrence[];
+}
+
+export interface TicketChanges {
+  title?: string | null;
+  severity?: Severity | null;
+  priority?: Priority | null;
+  auditorNotes?: string | null;
+  dismissed?: boolean;
 }
 
 export interface StartRunBody {
@@ -68,6 +96,11 @@ export const api = {
   activeRun: () => request<{ runId: number; projectId: number } | null>('/api/runs/active'),
   run: (id: number) => request<RunDetail>(`/api/runs/${id}`),
   stopRun: (id: number) => post<{ stopping: boolean }>(`/api/runs/${id}/stop`),
+  tickets: (runId: number) => request<ApiTicket[]>(`/api/runs/${runId}/tickets`),
+  ticket: (runId: number, ticketId: string) => request<TicketDetail>(`/api/runs/${runId}/tickets/${encodeURIComponent(ticketId)}`),
+  updateTicket: (runId: number, ticketId: string, changes: TicketChanges) =>
+    request<Ticket>(`/api/runs/${runId}/tickets/${encodeURIComponent(ticketId)}`, { method: 'PATCH', body: JSON.stringify(changes) }),
+  mergeTickets: (runId: number, into: string, from: string[]) => post<Ticket>(`/api/runs/${runId}/tickets/merge`, { into, from }),
 };
 
 export const fileUrl = (runId: number, path: string) => `/api/runs/${runId}/files/${path.split(/[\\/]/).map(encodeURIComponent).join('/')}`;

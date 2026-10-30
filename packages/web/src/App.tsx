@@ -4,6 +4,7 @@ import { cn } from '@/lib/utils';
 import { ProjectsPage } from '@/pages/ProjectsPage';
 import { NewAuditPage } from '@/pages/NewAuditPage';
 import { RunPage } from '@/pages/RunPage';
+import { TicketPage } from '@/pages/TicketPage';
 import { NotFoundPage } from '@/pages/NotFoundPage';
 
 const NAV = [
@@ -59,6 +60,7 @@ export function App() {
           <Route path="/" element={<ProjectsPage />} />
           <Route path="/audits/new" element={<NewAuditPage />} />
           <Route path="/runs/:runId" element={<RunPage />} />
+          <Route path="/runs/:runId/tickets/:ticketId" element={<TicketPage />} />
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </main>

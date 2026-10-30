@@ -21,3 +21,5 @@ export { reportDocx, writeReportDocx, categoryScore, type ReportBranding } from 
 export { exportRun, type ExportOptions, type ExportResult } from './export/bundle.js';
 export { verifyExport, type VerifyResult } from './export/verify.js';
 export { MODULE_CATEGORIES, checkedCategories } from './checks/categories.js';
+export { updateTicket, mergeTickets, TriageError, type TicketChanges } from './tickets/triage.js';
+export type { TicketOverride } from './db/database.js';

@@ -32,18 +32,21 @@ export interface OpenedPage {
  * Each page gets its own context so profiles don't leak into each other.
  */
 export class BrowserSession {
-  private browser: Browser | undefined;
+  // A shared promise, so concurrent newPage() calls never launch a second browser.
+  private browser: Promise<Browser> | undefined;
 
   constructor(private readonly options: BrowserSessionOptions = {}) {}
 
   async start(): Promise<this> {
-    this.browser ??= await chromium.launch({ headless: this.options.headless ?? true });
+    this.browser ??= chromium.launch({ headless: this.options.headless ?? true });
+    await this.browser;
     return this;
   }
 
   async close() {
-    await this.browser?.close();
+    const browser = this.browser;
     this.browser = undefined;
+    await (await browser)?.close();
   }
 
   contextOptions(profileName: ProfileName, emulation: Emulation = {}): BrowserContextOptions {
@@ -64,8 +67,8 @@ export class BrowserSession {
   }
 
   async newPage(profileName: ProfileName, emulation: Emulation = {}): Promise<OpenedPage> {
-    if (!this.browser) await this.start();
-    const context = await this.browser!.newContext(this.contextOptions(profileName, emulation));
+    await this.start();
+    const context = await (await this.browser!).newContext(this.contextOptions(profileName, emulation));
     await context.addInitScript(EVALUATE_SHIM);
     const page = await context.newPage();
     return { context, page, viewport: viewportName(profileName, emulation), close: () => context.close() };

@@ -11,3 +11,5 @@ export * from './crawl/templates.js';
 export * from './checks/types.js';
 export { axeModule, AXE_TAGS, wcagFromTags, type AxeModuleOptions } from './checks/axe/axe.js';
 export { guidanceFor, guidanceWithFallback, type RuleGuidance, type Effort } from './checks/guidance.js';
+export * from './audit/run-audit.js';
+export { captureCrop, captureFullPage, HIGHLIGHT_COLOUR, type CropOptions } from './capture/capture.js';

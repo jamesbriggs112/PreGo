@@ -95,3 +95,14 @@ describe('BrowserSession', () => {
     await restored.close();
   });
 });
+
+describe('BrowserSession concurrency', () => {
+  it('launches one browser when pages are opened concurrently', async () => {
+    const fresh = new BrowserSession();
+    const pages = await Promise.all([fresh.newPage('desktop'), fresh.newPage('mobile'), fresh.newPage('tablet')]);
+    const browsers = new Set(pages.map((p) => p.context.browser()));
+    expect(browsers.size).toBe(1);
+    await fresh.close();
+    expect([...browsers][0]!.isConnected()).toBe(false);
+  });
+});

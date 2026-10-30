@@ -12,6 +12,16 @@
       "types": "./dist/index.d.ts",
       "development": "./src/index.ts",
       "default": "./dist/index.js"
+    },
+    "./types": {
+      "types": "./dist/types.d.ts",
+      "development": "./src/types.ts",
+      "default": "./dist/types.js"
+    },
+    "./profiles": {
+      "types": "./dist/browser/profiles.d.ts",
+      "development": "./src/browser/profiles.ts",
+      "default": "./dist/browser/profiles.js"
     }
   },
   "dependencies": {

@@ -11,12 +11,14 @@
   "workspaces": [
     "packages/core",
     "packages/cli",
-    "packages/server"
+    "packages/server",
+    "packages/web"
   ],
   "scripts": {
-    "build": "tsc -b packages/core packages/cli packages/server",
+    "dev": "concurrently -k -n api,web -c blue,magenta \"NODE_ENV=development npm run dev -w @prego/server\" \"npm run dev -w @prego/web\"",
+    "build": "tsc -b packages/core packages/cli packages/server && npm run build -w @prego/web",
     "start": "node packages/server/dist/main.js",
-    "typecheck": "tsc -b packages/core packages/cli packages/server",
+    "typecheck": "tsc -b packages/core packages/cli packages/server && npm run typecheck -w @prego/web",
     "lint": "eslint .",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -27,7 +29,9 @@
   "devDependencies": {
     "@eslint/js": "^9.39.5",
     "@types/node": "^22.20.5",
+    "concurrently": "^10.0.6",
     "eslint": "^9.39.5",
+    "eslint-plugin-react-hooks": "^7.1.1",
     "globals": "^17.13.0",
     "tsx": "^4.23.15",
     "typescript": "^5.9.3",

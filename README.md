@@ -18,9 +18,23 @@ npm install
 
 `npm install` also downloads Playwright's Chromium (about 100 MB).
 
-## Running an audit (command line)
+## Using the GUI
 
-The GUI arrives in Phase 2. Until then, use the CLI:
+```bash
+npm run dev
+```
+
+This starts the API on port 4310 and the GUI on http://127.0.0.1:5173/, and opens it in your
+browser. For the production build:
+
+```bash
+npm run build && npm start
+```
+
+That serves everything from http://localhost:4310/ (set `PREGO_PORT` to change it). Prego only
+listens on this computer and refuses requests from other sites.
+
+## Running an audit from the command line
 
 ```bash
 npm run prego -- audit https://example.org --project "Example" --viewports desktop,mobile
@@ -84,6 +98,8 @@ npm run prego -- verify data/exports/example-2026-10-30-0907
 ```
 legacy/            original prototype, untouched
 packages/core      audit engine: crawl, checks, tickets, exports
+packages/server    Fastify API, background audit jobs, live progress
+packages/web       React GUI (Vite, Tailwind, shadcn/ui components)
 packages/cli       command-line wrapper around core
 fixtures/          test targets with known defects
 templates/         report template assets

@@ -2,7 +2,9 @@
 import { Command, InvalidArgumentError, Option } from 'commander';
 import { spawn } from 'node:child_process';
 import { createRequire } from 'node:module';
+import { appendFileSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
+import { loadScheduleConfig, type ScheduleConfig } from './config.js';
 import {
   CHECK_GROUPS,
   groupChecks,
@@ -23,8 +25,10 @@ import {
   slugify,
   runAudit,
   verifyExport,
+  SEVERITIES,
   type AuditEvent,
   type ProfileName,
+  type Run,
 } from '@prego/core';
 
 const program = new Command()
@@ -85,79 +89,185 @@ program
   .option('-q, --quiet', 'only print the final summary')
   .action(async (target: string, opts) => {
     const { db, dataDir } = openDb();
-    const project = opts.project ?? (/^https?:\/\//i.test(target) ? new URL(target).hostname : basename(resolve(target)));
     if (opts.user && !process.env.PREGO_PASSWORD) {
       program.error('Set the basic auth password in the PREGO_PASSWORD environment variable (it is never stored or passed on the command line).');
     }
-    const log = (line: string) => process.stderr.write(`${line}\n`);
-    const projectSlug = slugify(project);
-    const findJourney = (name: string) => {
-      const found = listJourneys(dataDir, projectSlug).find((j) => j.name === slugify(name));
-      if (!found) program.error(`No recorded journey called "${name}" for ${project}. Record one with: prego journey record "${project}" ${name} <url>`);
-      return found;
-    };
-    const journey = opts.mode === 'journey' ? findJourney(opts.journey ?? program.error('Journey mode needs --journey <name>.')) : undefined;
-    const loginJourney = opts.loginJourney ? findJourney(opts.loginJourney) : undefined;
-    const controller = new AbortController();
-    process.once('SIGINT', () => {
-      log('\nStopping after the current page…');
-      controller.abort();
-    });
     try {
-      const result = await runAudit(db, {
-        project,
-        target,
-        dataDir,
-        viewports: opts.viewports,
-        mode: opts.mode,
-        checks: opts.checks
-          ? String(opts.checks).split(',').map((c: string) => c.trim())
-          : opts.group
-            ? groupChecks(CHECK_GROUPS.find((g) => g.id === opts.group)!, checkDefinitions())
-            : getSettings(db).defaults.checks,
-        journey,
-        loginJourney,
-        maxPages: opts.maxPages,
-        maxDepth: opts.maxDepth,
-        maxStates: opts.maxStates,
-        maskSelectors: opts.mask,
-        denyLabels: [...DEFAULT_DENY_LABELS, ...(opts.deny ?? [])],
-        denySelectors: opts.denySelector,
-        dummyData: loadDummyData(resolve('config/dummy-data.json')),
-        timeBudgetMs: opts.timeBudget ? opts.timeBudget * 60_000 : undefined,
-        include: opts.include,
-        exclude: opts.exclude,
-        respectRobots: !opts.ignoreRobots,
-        useSitemap: opts.sitemap,
-        perTemplate: opts.perTemplate,
-        auditAll: opts.all,
-        concurrency: opts.concurrency,
-        delayMs: opts.delay,
-        basicAuth: opts.user ? { username: opts.user, password: process.env.PREGO_PASSWORD! } : undefined,
-        signal: controller.signal,
-        onEvent: opts.quiet ? undefined : (event) => log(describe(event)),
-      });
-      const { run } = result;
-      if (run.status !== 'complete') {
-        log(`Run ${run.id} ${run.status}${run.error ? `: ${run.error}` : ''}`);
-        process.exitCode = 1;
-        return;
-      }
-      const s = run.summary as Record<string, number>;
-      const found =
-        run.mode === 'explore'
-          ? `${s.statesFound} screens found and audited`
-          : run.mode === 'journey'
-            ? `${s.stepsReplayed} of ${s.stepsRecorded} journey steps replayed and audited`
-            : `${s.pagesFound} pages found, ${s.pagesAudited} audited`;
-      console.log(`Run ${run.id} complete: ${found}, ${s.tickets} tickets from ${s.findings} findings.`);
-      if (opts.export) {
-        const exported = await exportRun(db, run.id, { dataDir, preset: opts.preset });
-        console.log(`Export: ${exported.dir}`);
+      const outcome = await auditOnce(db, dataDir, { ...opts, target, password: process.env.PREGO_PASSWORD });
+      if (!outcome) process.exitCode = 1;
+    } finally {
+      db.close();
+    }
+  });
+
+/** Options for one audit, as `prego audit` takes them (after commander's defaults). */
+interface AuditCommandOptions {
+  target: string;
+  project?: string;
+  viewports: ProfileName[];
+  mode: 'crawl' | 'explore' | 'journey';
+  journey?: string;
+  loginJourney?: string;
+  maxPages: number;
+  maxDepth?: number;
+  maxStates: number;
+  mask?: string[];
+  deny?: string[];
+  denySelector?: string[];
+  timeBudget?: number;
+  include?: string[];
+  exclude?: string[];
+  ignoreRobots?: boolean;
+  sitemap: boolean;
+  perTemplate: number;
+  all?: boolean;
+  concurrency: number;
+  delay: number;
+  user?: string;
+  password?: string;
+  preset: string;
+  checks?: string | string[];
+  group?: string;
+  export: boolean;
+  quiet?: boolean;
+}
+
+/** Run one audit and its export. Returns undefined if the audit didn't complete. */
+async function auditOnce(db: PregoDb, dataDir: string, opts: AuditCommandOptions): Promise<{ run: Run; exportDir?: string } | undefined> {
+  const { target } = opts;
+  const project = opts.project ?? (/^https?:\/\//i.test(target) ? new URL(target).hostname : basename(resolve(target)));
+  const log = (line: string) => process.stderr.write(`${line}\n`);
+  const projectSlug = slugify(project);
+  const findJourney = (name: string) => {
+    const found = listJourneys(dataDir, projectSlug).find((j) => j.name === slugify(name));
+    if (!found) program.error(`No recorded journey called "${name}" for ${project}. Record one with: prego journey record "${project}" ${name} <url>`);
+    return found;
+  };
+  const journey = opts.mode === 'journey' ? findJourney(opts.journey ?? program.error('Journey mode needs --journey <name>.')) : undefined;
+  const loginJourney = opts.loginJourney ? findJourney(opts.loginJourney) : undefined;
+  const controller = new AbortController();
+  const stop = () => {
+    log('\nStopping after the current page…');
+    controller.abort();
+  };
+  process.once('SIGINT', stop);
+  try {
+    const checks = Array.isArray(opts.checks)
+      ? opts.checks
+      : opts.checks
+        ? opts.checks.split(',').map((c) => c.trim())
+        : opts.group
+          ? groupChecks(CHECK_GROUPS.find((g) => g.id === opts.group)!, checkDefinitions())
+          : getSettings(db).defaults.checks;
+    const { run } = await runAudit(db, {
+      project,
+      target,
+      dataDir,
+      viewports: opts.viewports,
+      mode: opts.mode,
+      checks,
+      journey,
+      loginJourney,
+      maxPages: opts.maxPages,
+      maxDepth: opts.maxDepth,
+      maxStates: opts.maxStates,
+      maskSelectors: opts.mask,
+      denyLabels: [...DEFAULT_DENY_LABELS, ...(opts.deny ?? [])],
+      denySelectors: opts.denySelector,
+      dummyData: loadDummyData(resolve('config/dummy-data.json')),
+      timeBudgetMs: opts.timeBudget ? opts.timeBudget * 60_000 : undefined,
+      include: opts.include,
+      exclude: opts.exclude,
+      respectRobots: !opts.ignoreRobots,
+      useSitemap: opts.sitemap,
+      perTemplate: opts.perTemplate,
+      auditAll: opts.all,
+      concurrency: opts.concurrency,
+      delayMs: opts.delay,
+      basicAuth: opts.user ? { username: opts.user, password: opts.password ?? '' } : undefined,
+      signal: controller.signal,
+      onEvent: opts.quiet ? undefined : (event) => log(describe(event)),
+    });
+    if (run.status !== 'complete') {
+      log(`Run ${run.id} ${run.status}${run.error ? `: ${run.error}` : ''}`);
+      return undefined;
+    }
+    const s = run.summary as Record<string, number>;
+    const found =
+      run.mode === 'explore'
+        ? `${s.statesFound} screens found and audited`
+        : run.mode === 'journey'
+          ? `${s.stepsReplayed} of ${s.stepsRecorded} journey steps replayed and audited`
+          : `${s.pagesFound} pages found, ${s.pagesAudited} audited`;
+    console.log(`Run ${run.id} complete: ${found}, ${s.tickets} tickets from ${s.findings} findings.`);
+    if (!opts.export) return { run };
+    const exported = await exportRun(db, run.id, { dataDir, preset: opts.preset });
+    console.log(`Export: ${exported.dir}`);
+    return { run, exportDir: exported.dir };
+  } finally {
+    process.off('SIGINT', stop);
+  }
+}
+
+program
+  .command('run')
+  .description('run every audit in a schedule file, for cron or CI (see docs/scheduled-audits.md)')
+  .argument('<config>', 'schedule file (JSON)')
+  .option('-q, --quiet', 'only print summaries')
+  .action(async (path: string, opts) => {
+    let config: ScheduleConfig;
+    try {
+      config = loadScheduleConfig(path);
+    } catch (error) {
+      return program.error(error instanceof Error ? error.message : String(error));
+    }
+    const missing = config.audits.filter((a) => a.passwordEnv && !process.env[a.passwordEnv]).map((a) => a.passwordEnv);
+    if (missing.length) return program.error(`Set ${[...new Set(missing)].join(', ')} in the environment (as CI secrets) before running.`);
+    const { db, dataDir } = openDb();
+    const rows: string[] = [];
+    let failed = false;
+    try {
+      for (const audit of config.audits) {
+        const outcome = await auditOnce(db, dataDir, {
+          viewports: ['desktop'],
+          mode: 'crawl',
+          maxPages: 100,
+          maxStates: 200,
+          sitemap: true,
+          perTemplate: 3,
+          concurrency: 2,
+          delay: 500,
+          preset: 'prego',
+          export: true,
+          quiet: opts.quiet,
+          ...audit,
+          password: audit.passwordEnv ? process.env[audit.passwordEnv] : undefined,
+        });
+        if (!outcome) {
+          failed = true;
+          rows.push(`| ${audit.project} | ${audit.target} | Didn’t complete | | | | |`);
+          continue;
+        }
+        const tickets = db.getTickets(outcome.run.id);
+        const count = (status: string) => tickets.filter((t) => t.status === status).length;
+        const open = tickets.filter((t) => !['Fixed', 'Dismissed', 'Needs review'].includes(t.status));
+        const threshold = audit.failOn ? SEVERITIES.indexOf(audit.failOn) : -1;
+        const blocking = threshold < 0 ? [] : open.filter((t) => (t.status === 'New' || t.status === 'Regressed') && SEVERITIES.indexOf(t.severity) <= threshold);
+        if (blocking.length) {
+          failed = true;
+          console.error(`✗ ${audit.project}: ${blocking.length} new or returning ${blocking.length === 1 ? 'issue' : 'issues'} at ${audit.failOn} severity or worse:`);
+          for (const t of blocking.slice(0, 20)) console.error(`    ${t.ticketId} ${t.severity}: ${t.title}`);
+        }
+        rows.push(`| ${audit.project} | ${audit.target} | ${blocking.length ? `✗ ${blocking.length} blocking` : 'Complete'} | ${open.length} | ${count('New')} | ${count('Fixed')} | ${count('Regressed')} |`);
       }
     } finally {
       db.close();
     }
+    const summary = ['## Prego audits', '', '| Project | Target | Result | Open | New | Fixed | Back again |', '|---|---|---|---|---|---|---|', ...rows, ''].join('\n');
+    console.log(`\n${summary}`);
+    // GitHub Actions shows this on the run's summary page.
+    if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${summary}\n`);
+    if (failed) process.exitCode = 1;
   });
 
 const journeys = program.command('journey').description('record and list scripted journeys');

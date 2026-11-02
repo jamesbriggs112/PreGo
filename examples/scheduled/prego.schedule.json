@@ -1,0 +1,21 @@
+{
+  "audits": [
+    {
+      "project": "Acme Widgets (fixture)",
+      "target": "fixtures/bad-site",
+      "group": "quick",
+      "viewports": ["desktop", "mobile"],
+      "delay": 0,
+      "preset": "productive"
+    },
+    {
+      "project": "Museum of Making (fixture)",
+      "target": "fixtures/kiosk-app",
+      "mode": "explore",
+      "group": "accessibility",
+      "viewports": ["kiosk-landscape"],
+      "maxStates": 40,
+      "delay": 0
+    }
+  ]
+}

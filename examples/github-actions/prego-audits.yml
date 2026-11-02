@@ -1,0 +1,57 @@
+# Example: run Prego's scheduled audits every Monday at 06:00 UTC, or on demand.
+#
+# To use it, copy this file to .github/workflows/ and point the schedule file at your sites.
+# Read docs/scheduled-audits.md first: on GitHub's own runners, screenshots and findings are
+# stored by GitHub (as the cache and artifacts below). For client sites, run it on a self-hosted
+# runner on a Four machine instead (change runs-on), so audit data stays in-house.
+name: Prego audits
+
+on:
+  schedule:
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # Installs Prego, then Playwright's Chromium, Firefox and WebKit (postinstall).
+      - run: npm ci
+
+      # The system libraries those browsers need on Linux.
+      - run: npx playwright install-deps chromium firefox webkit
+
+      - run: npm run build
+
+      # Keep the database between runs, so each audit is compared with the last one
+      # (New, Fixed, Recurring and Regressed tickets, and changes since the last audit).
+      - uses: actions/cache@v4
+        with:
+          path: data
+          key: prego-data-${{ github.run_id }}
+          restore-keys: prego-data-
+
+      - name: Run the audits
+        run: node packages/cli/dist/cli.js --data-dir data run examples/scheduled/prego.schedule.json --quiet
+        env:
+          # One secret per site that needs a password, named in the schedule file's passwordEnv.
+          ACME_STAGING_PASSWORD: ${{ secrets.ACME_STAGING_PASSWORD }}
+
+      # Reports, tickets.csv and screenshots, downloadable from the run page for 30 days.
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: prego-exports
+          path: data/exports/
+          retention-days: 30

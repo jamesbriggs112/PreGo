@@ -106,7 +106,8 @@ Useful options (see `npm run prego -- audit --help` for all of them):
 | `--concurrency`, `--delay` | 2, 500ms | Keep these gentle on live sites |
 | `--ignore-robots` | off | Only for staging sites you own |
 | `--user` | | Basic auth username; the password comes from `PREGO_PASSWORD` |
-| `--preset` | `prego` | `tickets.csv` columns for `jira`, `linear` or `trello` |
+| `--group` | | A test group instead of single checks: `quick`, `accessibility`, `content`, `design`, `performance`, `security`, `full` |
+| `--preset` | `prego` | `tickets.csv` columns for `jira`, `linear`, `productive` or `trello` |
 
 A local folder works as a target too: `npm run prego -- audit ./build`.
 
@@ -122,6 +123,13 @@ npm run prego -- journey record "Example" book-a-ticket https://example.org
 
 ```bash
 npm run prego -- audit https://example.org --project "Example" --mode journey --journey book-a-ticket
+```
+
+Run a list of audits from a schedule file, for cron or GitHub Actions (see
+[docs/scheduled-audits.md](docs/scheduled-audits.md)):
+
+```bash
+npm run prego -- run examples/scheduled/prego.schedule.json
 ```
 
 Other commands:

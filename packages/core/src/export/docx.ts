@@ -21,7 +21,7 @@ import { join } from 'node:path';
 import { CATEGORIES, CATEGORY_NAMES, SEVERITIES, type Severity } from '../types.js';
 import { checkedCategories } from '../checks/categories.js';
 import { averagePerformance, type LighthouseScores } from '../checks/lighthouse/lighthouse.js';
-import { stateMapStates, type ExportPlan, type PlannedTicket, type ReportSectionPlan } from './plan.js';
+import { allExported, stateMapStates, type ExportPlan, type PlannedTicket, type ReportSectionPlan } from './plan.js';
 
 export interface ReportBranding {
   /** Company shown on the cover and in the footer. */
@@ -359,11 +359,23 @@ function comparison(plan: ExportPlan): Paragraph[] {
     return out;
   }
   const count = (status: string) => plan.tickets.filter((t) => t.status === status).length;
+  const fixed = plan.fixed.length;
+  const bullet = (text: string) => new Paragraph({ bullet: { level: 0 }, children: [new TextRun(text)] });
   out.push(
     para(`Compared with the audit on ${formatDate(plan.previousRun.startedAt)}:`),
-    new Paragraph({ bullet: { level: 0 }, children: [new TextRun(`${count('New')} new ${plural(count('New'), 'issue')}`)] }),
-    new Paragraph({ bullet: { level: 0 }, children: [new TextRun(`${count('Recurring')} ${plural(count('Recurring'), 'issue')} still present`)] }),
+    bullet(`${fixed} ${plural(fixed, 'issue')} fixed`),
+    bullet(`${count('New')} new ${plural(count('New'), 'issue')}`),
+    bullet(`${count('Regressed')} ${plural(count('Regressed'), 'issue')} back again after being fixed`),
+    bullet(`${count('Recurring')} ${plural(count('Recurring'), 'issue')} still present`),
   );
+  const list = (title: string, tickets: PlannedTicket[], note: (t: PlannedTicket) => string) => {
+    if (!tickets.length) return;
+    out.push(heading(title, HeadingLevel.HEADING_2));
+    for (const t of tickets) out.push(new Paragraph({ bullet: { level: 0 }, children: [new TextRun({ text: t.ticketId, bold: true }), new TextRun(`: ${t.title}${note(t)}`)] }));
+  };
+  list('Fixed since the last audit', plan.fixed, (t) => `. Last seen ${formatDate(t.lastSeen)}.`);
+  list('Back again', plan.tickets.filter((t) => t.status === 'Regressed'), (t) => `. See section ${t.reportSection}.`);
+  out.push(para('An issue counts as fixed only when this audit ran the same check on the same pages and found nothing. Issues in areas this audit didn’t check are left out of the comparison.'));
   return out;
 }
 
@@ -404,7 +416,7 @@ function appendix(plan: ExportPlan): (Paragraph | Table)[] {
     para('Every ticket in this report. Full technical detail for each is in tickets.csv, and every individual occurrence is in occurrences.csv.'),
     table(
       ['Ticket ID', 'Title', 'Severity', 'Priority', 'Section'],
-      plan.tickets.map((t) => [t.ticketId, t.title, t.severity, t.priority, t.reportSection]),
+      allExported(plan).map((t) => [t.ticketId, t.status === 'Fixed' ? `${t.title} (fixed)` : t.title, t.severity, t.priority, t.reportSection]),
       { boldFirstColumn: true, fontSize: 18 },
     ),
   ];

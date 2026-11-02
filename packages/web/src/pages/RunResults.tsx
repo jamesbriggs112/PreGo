@@ -21,6 +21,8 @@ const STATUS_FILTERS = [
   { value: 'all', label: 'All' },
   { value: 'New', label: 'New' },
   { value: 'Recurring', label: 'Recurring' },
+  { value: 'Regressed', label: 'Regressed' },
+  { value: 'Fixed', label: 'Fixed since the last audit' },
   { value: 'Dismissed', label: 'Dismissed' },
 ];
 
@@ -81,6 +83,11 @@ export function RunResults({ run }: { run: RunDetail }) {
               <Link to={`/runs/${run.id}/map`}>State map</Link>
             </Button>
           )}
+          {run.status === 'complete' && run.hasPrevious && (
+            <Button asChild variant="outline">
+              <Link to={`/runs/${run.id}/compare`}>Compare with previous audit</Link>
+            </Button>
+          )}
           <Button asChild>
             <Link to={`/runs/${run.id}/export`}>Export report and tickets</Link>
           </Button>
@@ -102,7 +109,7 @@ export function RunResults({ run }: { run: RunDetail }) {
             </CardHeader>
           </Card>
         ))}
-        <Stat label="Open tickets" value={all.filter((t) => t.status !== 'Dismissed').length} />
+        <Stat label="Open tickets" value={all.filter((t) => t.status !== 'Dismissed' && t.status !== 'Fixed').length} />
         {run.mode === 'explore' ? (
           <Stat label="Screens audited" value={s.statesAudited ?? 0} />
         ) : run.mode === 'journey' ? (
@@ -288,7 +295,7 @@ export function RunResults({ run }: { run: RunDetail }) {
 function matches(t: ApiTicket, f: { category: string; severity: string; status: string; page: string; q: string }): boolean {
   if (f.category && t.category !== f.category) return false;
   if (f.severity && t.severity !== f.severity) return false;
-  if (f.status === 'open' && t.status === 'Dismissed') return false;
+  if (f.status === 'open' && (t.status === 'Dismissed' || t.status === 'Fixed')) return false;
   if (f.status !== 'open' && f.status !== 'all' && t.status !== f.status) return false;
   if (f.page && !t.pages.includes(f.page)) return false;
   const q = f.q.trim().toLowerCase();

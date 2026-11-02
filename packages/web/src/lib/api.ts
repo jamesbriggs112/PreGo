@@ -14,11 +14,35 @@ export interface ProjectDetail extends Project {
   runs: RunSummary[];
 }
 
+export interface ComparedTicket {
+  ticketId: string;
+  title: string;
+  category: Category;
+  severity: Severity;
+  priority: Priority;
+  status: Ticket['status'];
+}
+
+export interface Comparison {
+  project: Project;
+  base: RunSummary & { scores: Scores };
+  target: RunSummary & { scores: Scores };
+  /** Every complete audit of the project, to choose from. */
+  runs: RunSummary[];
+  added: ComparedTicket[];
+  fixed: ComparedTicket[];
+  regressed: ComparedTicket[];
+  recurring: ComparedTicket[];
+  notChecked: ComparedTicket[];
+}
+
 export interface RunDetail extends RunSummary {
   project: Project;
   settings: Record<string, unknown>;
   locations: Location[];
   scores: Scores | null;
+  /** Whether an earlier complete audit of the project exists to compare with. */
+  hasPrevious: boolean;
 }
 
 export interface ApiTicket extends Ticket {
@@ -162,6 +186,7 @@ export const api = {
   startRun: (body: StartRunBody) => post<{ runId: number; projectId: number }>('/api/runs', body),
   activeRun: () => request<{ runId: number; projectId: number } | null>('/api/runs/active'),
   run: (id: number) => request<RunDetail>(`/api/runs/${id}`),
+  compare: (id: number, withId?: number) => request<Comparison>(`/api/runs/${id}/compare${withId ? `?with=${withId}` : ''}`),
   stopRun: (id: number) => post<{ stopping: boolean }>(`/api/runs/${id}/stop`),
   tickets: (runId: number) => request<ApiTicket[]>(`/api/runs/${runId}/tickets`),
   ticket: (runId: number, ticketId: string) => request<TicketDetail>(`/api/runs/${runId}/tickets/${encodeURIComponent(ticketId)}`),

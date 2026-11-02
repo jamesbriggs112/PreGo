@@ -45,3 +45,4 @@ export { markupModule } from './checks/markup/markup.js';
 export { brokenLinksModule } from './checks/links/links.js';
 export { ibmModule, dropDuplicates } from './checks/ibm/ibm.js';
 export * from './checks/estimate.js';
+export * from './tickets/compare.js';

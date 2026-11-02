@@ -13,6 +13,7 @@ import {
   TriageError,
   buildExportPlan,
   checkDefinitions,
+  compareRuns,
   checkCosts,
   calibrate,
   CHECK_GROUPS,
@@ -361,7 +362,39 @@ export async function buildApp(options: AppOptions): Promise<PregoApp> {
     const run = db.getRun(Number(request.params.id));
     if (!run) return reply.code(404).send({ error: 'Run not found' });
     const project = db.getProject(run.projectId)!;
-    return { ...runSummary(run), project, settings: run.settings, locations: db.getLocations(run.id), scores: run.status === 'complete' ? scoresFor(db, run) : null };
+    return {
+      ...runSummary(run),
+      project,
+      settings: run.settings,
+      locations: db.getLocations(run.id),
+      scores: run.status === 'complete' ? scoresFor(db, run) : null,
+      hasPrevious: !!db.previousRun(run.id),
+    };
+  });
+
+  // Two audits of the same project side by side. `with` defaults to the audit before this one.
+  app.get<{ Params: { id: string }; Querystring: { with?: string } }>('/api/runs/:id/compare', async (request, reply) => {
+    const target = db.getRun(Number(request.params.id));
+    if (!target) return reply.code(404).send({ error: 'Run not found' });
+    const base = request.query.with ? db.getRun(Number(request.query.with)) : db.previousRun(target.id);
+    if (!base) return reply.code(404).send({ error: 'There’s no earlier audit of this project to compare with.' });
+    if (base.projectId !== target.projectId) return reply.code(400).send({ error: 'Both audits must belong to the same project.' });
+    if (base.status !== 'complete' || target.status !== 'complete') return reply.code(400).send({ error: 'Both audits must be complete.' });
+    const [earlier, later] = base.id < target.id ? [base, target] : [target, base];
+    const comparison = compareRuns(db, earlier.id, later.id);
+    const slim = (t: { ticketId: string; title: string; category: string; severity: string; priority: string; status: string }) => ({ ticketId: t.ticketId, title: t.title, category: t.category, severity: t.severity, priority: t.priority, status: t.status });
+    const side = (run: Run) => ({ ...runSummary(run), scores: scoresFor(db, run) });
+    return {
+      project: db.getProject(later.projectId),
+      base: side(earlier),
+      target: side(later),
+      runs: db.listRuns(later.projectId).filter((r) => r.status === 'complete').map(runSummary),
+      added: comparison.added.map(slim),
+      fixed: comparison.fixed.map(slim),
+      regressed: comparison.regressed.map(slim),
+      recurring: comparison.recurring.map(slim),
+      notChecked: comparison.notChecked.map(slim),
+    };
   });
 
   app.post<{ Params: { id: string } }>('/api/runs/:id/stop', async (request, reply) => {
@@ -723,10 +756,10 @@ function runSummary(run: Run) {
   return { id: run.id, projectId: run.projectId, mode: run.mode, target: run.target, status: run.status, startedAt: run.startedAt, finishedAt: run.finishedAt, summary: run.summary, error: run.error };
 }
 
-/** Score per checked category for a finished run, ignoring dismissed tickets. */
+/** Score per checked category for a finished run, ignoring dismissed and fixed tickets. */
 export function scoresFor(db: PregoDb, run: Run): Partial<Record<Category, number>> {
   const checked = checkedCategories(run.settings);
-  const tickets = db.getTickets(run.id).filter((t) => t.status !== 'Dismissed' && t.status !== 'Needs review');
+  const tickets = db.getTickets(run.id).filter((t) => t.status !== 'Dismissed' && t.status !== 'Needs review' && t.status !== 'Fixed');
   const scores: Partial<Record<Category, number>> = {};
   for (const category of CATEGORIES) {
     if (!checked.has(category)) continue;

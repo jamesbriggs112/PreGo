@@ -39,7 +39,10 @@ export interface ExportPlan {
   /** For interactive audits: what each action did. */
   edges: StateEdge[];
   sections: ReportSectionPlan[];
+  /** Current problems, in report order. */
   tickets: PlannedTicket[];
+  /** Problems the previous audit had and this one checked for and didn't find (report section 6). */
+  fixed: PlannedTicket[];
   /** Screenshot file name in the export → source path relative to the run folder. */
   screenshots: Map<string, string>;
 }
@@ -64,6 +67,13 @@ export function stateMapStates(plan: ExportPlan): ImageState[] {
 
 /** Section 4 of the report holds findings; each category with tickets gets a subsection. */
 export const FINDINGS_SECTION = 4;
+/** Section 6 compares with the previous audit, and lists what was fixed. */
+export const COMPARISON_SECTION = '6';
+
+/** Every ticket in the CSV: current problems, then fixed ones. */
+export function allExported(plan: ExportPlan): PlannedTicket[] {
+  return [...plan.tickets, ...plan.fixed];
+}
 
 export function buildExportPlan(db: PregoDb, runId: number): ExportPlan {
   const run = db.getRun(runId);
@@ -73,10 +83,14 @@ export function buildExportPlan(db: PregoDb, runId: number): ExportPlan {
   const locationById = new Map(locations.map((l) => [l.id, l]));
   const screenshots = new Map<string, string>();
 
-  const exported = db
+  const all = db
     .getTickets(runId)
     .filter((t) => !NOT_EXPORTED.has(t.status))
     .sort((a, b) => a.ticketId.localeCompare(b.ticketId, 'en', { numeric: true }));
+  const exported = all.filter((t) => t.status !== 'Fixed');
+  const fixed = all
+    .filter((t) => t.status === 'Fixed')
+    .map((t): PlannedTicket => ({ ...t, reportSection: COMPARISON_SECTION, screenshotFile: null, occurrenceList: [] }));
 
   const sections: ReportSectionPlan[] = [];
   for (const category of CATEGORIES) {
@@ -111,6 +125,7 @@ export function buildExportPlan(db: PregoDb, runId: number): ExportPlan {
     edges: db.getEdges(runId),
     sections,
     tickets: sections.flatMap((s) => s.tickets),
+    fixed,
     screenshots,
   };
 }

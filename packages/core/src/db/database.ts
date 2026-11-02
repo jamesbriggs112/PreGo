@@ -356,13 +356,15 @@ export class PregoDb {
   }
 
   /** The most recent finished run of the same project before this one. */
+  /** The project's last complete audit before this one, in the same mode (crawl, exploration or journey). */
   previousRun(runId: number): Run | undefined {
     const row = this.sqlite
       .prepare(
         `SELECT * FROM runs WHERE projectId = (SELECT projectId FROM runs WHERE id = ?)
+         AND mode = (SELECT mode FROM runs WHERE id = ?)
          AND id < ? AND status = 'complete' ORDER BY id DESC LIMIT 1`,
       )
-      .get(runId, runId) as RunRow | undefined;
+      .get(runId, runId, runId) as RunRow | undefined;
     return row && toRun(row);
   }
 

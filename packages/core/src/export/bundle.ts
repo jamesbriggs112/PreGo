@@ -3,7 +3,7 @@ import { join, resolve } from 'node:path';
 import type { PregoDb } from '../db/database.js';
 import { runDirectory } from '../audit/run-audit.js';
 import { defaultDataDir } from '../paths.js';
-import { buildExportPlan, stateMapStates, type ExportPlan } from './plan.js';
+import { allExported, buildExportPlan, stateMapStates, type ExportPlan } from './plan.js';
 import { stateMapPng } from './state-map-image.js';
 import { writeCsvFiles } from './csv.js';
 import { writeReportDocx, type ReportBranding } from './docx.js';
@@ -64,7 +64,7 @@ export async function exportRun(db: PregoDb, runId: number, options: ExportOptio
         project: plan.project,
         run: plan.run,
         locations: plan.locations,
-        tickets: plan.tickets.map(({ occurrenceList, ...ticket }) => ({
+        tickets: allExported(plan).map(({ occurrenceList, ...ticket }) => ({
           ...ticket,
           occurrences: occurrenceList.map(({ location, ...o }) => ({ ...o, url: location.url })),
         })),

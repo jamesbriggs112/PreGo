@@ -1,6 +1,6 @@
 import { stringify } from 'csv-stringify/sync';
 import { writeFileSync } from 'node:fs';
-import type { ExportPlan, PlannedTicket } from './plan.js';
+import { allExported, type ExportPlan, type PlannedTicket } from './plan.js';
 import type { Priority } from '../types.js';
 
 /** tickets.csv columns, in the order the spec sets (section 7.3). */
@@ -143,15 +143,16 @@ function toCsv(rows: string[][], bom = true): string {
 export function ticketsCsv(plan: ExportPlan, presetId = 'prego'): string {
   const preset = CSV_PRESETS[presetId];
   if (!preset) throw new Error(`Unknown CSV preset "${presetId}". Choose from: ${Object.keys(CSV_PRESETS).join(', ')}`);
-  if (preset.only) return toCsv([preset.only.map((c) => c.header), ...plan.tickets.map((t) => preset.only!.map((c) => c.value(t)))], !preset.noBom);
+  const tickets = allExported(plan);
+  if (preset.only) return toCsv([preset.only.map((c) => c.header), ...tickets.map((t) => preset.only!.map((c) => c.value(t)))], !preset.noBom);
   const columns = TICKET_COLUMNS.filter((c) => !(preset.splitLabels && c === 'Labels'));
-  const maxLabels = preset.splitLabels ? Math.max(1, ...plan.tickets.map((t) => t.labels.length)) : 0;
+  const maxLabels = preset.splitLabels ? Math.max(1, ...tickets.map((t) => t.labels.length)) : 0;
   const header = [
     ...columns.map((c) => preset.rename?.[c] ?? c),
     ...Array.from({ length: maxLabels }, () => 'Labels'),
     ...(preset.extra ?? []).map((e) => e.header),
   ];
-  const rows = plan.tickets.map((t) => {
+  const rows = tickets.map((t) => {
     const row = ticketRow(t);
     return [
       ...columns.map((c) => preset.values?.[c]?.(row[c], t) ?? row[c]),

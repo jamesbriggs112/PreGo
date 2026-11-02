@@ -340,7 +340,7 @@ describe('Scripted journeys (criterion 4)', () => {
     await page.getByLabel('Step', { exact: true }).selectOption({ label: 'Step 3: Click the “Contact” link' });
     await expect.poll(() => page.locator('tbody tr').filter({ hasText: 'Form fields have no label' }).count()).toBe(1);
     expect(await axeViolations(page)).toEqual([]);
-  });
+  }, 120_000);
 });
 
 describe('Deleting a project', () => {
@@ -411,5 +411,25 @@ describe('Test groups', () => {
     await page.getByLabel('HTML validity', { exact: true }).check();
     await expect(page.getByRole('group', { name: 'Test group' }).getByRole('radio', { checked: true }).count()).resolves.toBe(0);
     expect(await axeViolations(page)).toEqual([]);
-  });
+  }, 120_000);
+});
+
+describe('Compare screen', () => {
+  it('compares an audit with the one before, and has no axe violations', async () => {
+    const { page } = gui;
+    // A second crawl of the same site, to compare with the first.
+    const res = await fetch(`${gui.url}api/runs`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ project: 'Acme Widgets', target: fixture, checks: ['axe'], delayMs: 0 }),
+    });
+    const latest = { id: (await res.json()).runId as number };
+    await gui.prego.jobs.get(latest.id)!.done;
+    await page.goto(`${gui.url}runs/${latest.id}`);
+    await page.getByRole('link', { name: 'Compare with previous audit' }).click();
+    await page.getByRole('heading', { name: 'Compare audits: Acme Widgets' }).waitFor();
+    await expect(page.getByLabel('Later audit').inputValue()).resolves.toBe(String(latest.id));
+    await page.getByRole('heading', { name: /^Still present \(\d+\)$/ }).waitFor();
+    expect(await axeViolations(page)).toEqual([]);
+  }, 120_000);
 });

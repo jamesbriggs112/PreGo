@@ -45,3 +45,27 @@ describe('test groups and time estimates', () => {
     expect(calibration).toMatchObject({ runs: 1, openSeconds: expect.any(Number), checks: { axe: expect.any(Number) } });
   }, 120_000);
 });
+
+describe('comparing two audits', () => {
+  it('returns fixed, new, back-again and still-present tickets, earlier audit first', async () => {
+    const start = async () => {
+      const res = await fetch(`${base}/api/runs`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ project: 'Compared', target: resolve('fixtures/bad-site'), checks: ['axe'], delayMs: 0, maxPages: 3 }),
+      });
+      const { runId } = await res.json();
+      await prego.jobs.get(runId)!.done;
+      return runId as number;
+    };
+    const first = await start();
+    expect((await fetch(`${base}/api/runs/${first}/compare`)).status).toBe(404);
+    const second = await start();
+    const run = await (await fetch(`${base}/api/runs/${second}`)).json();
+    expect(run.hasPrevious).toBe(true);
+    const body = await (await fetch(`${base}/api/runs/${first}/compare?with=${second}`)).json();
+    expect(body).toMatchObject({ base: { id: first }, target: { id: second }, added: [], fixed: [], regressed: [], notChecked: [] });
+    expect(body.recurring.length).toBeGreaterThan(0);
+    expect(body.runs.map((r: { id: number }) => r.id)).toEqual(expect.arrayContaining([first, second]));
+  }, 120_000);
+});

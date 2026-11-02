@@ -183,7 +183,26 @@ npm run prego -- export 3 --preset jira
 npm run prego -- verify data/exports/example-2026-10-30-0907
 ```
 
-## Scripts
+## Desktop app (optional)
+
+Build a Mac app that runs Prego in its own window, without Terminal:
+
+```bash
+npm run desktop:build
+```
+
+It downloads Electron the first time, takes a few minutes, and writes
+`packages/desktop/out/Prego-darwin-<chip>/Prego.app` (about 580 MB). Drag it to Applications.
+
+- **Data:** the app keeps its own data in `~/Library/Application Support/Prego/data`, separate from
+  this folder's `data/`. **Data → Show data folder** opens it.
+- **Browsers:** the app uses Playwright's browsers already installed on the Mac (`npm install` puts
+  them in `~/Library/Caches/ms-playwright`). On another Mac, run
+  `npx playwright install chromium firefox webkit` once first.
+- **Other Macs:** the app is built for this Mac's chip and isn't signed by Apple, so macOS asks before
+  opening it the first time (right-click → Open). Signing needs a paid Apple Developer account.
+
+
 
 | Command | What it does |
 |---|---|

@@ -5,7 +5,7 @@ import globals from 'globals';
 
 export default tseslint.config(
   {
-    ignores: ['legacy/**', '**/dist/**', 'data/**', 'fixtures/**', 'node_modules/**', 'coverage/**'],
+    ignores: ['legacy/**', '**/dist/**', 'packages/desktop/build/**', 'packages/desktop/out/**', 'data/**', 'fixtures/**', 'node_modules/**', 'coverage/**'],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,
@@ -16,6 +16,12 @@ export default tseslint.config(
     rules: {
       '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
     },
+  },
+  {
+    // Electron's main process is CommonJS.
+    files: ['**/*.cjs'],
+    languageOptions: { sourceType: 'commonjs' },
+    rules: { '@typescript-eslint/no-require-imports': 'off' },
   },
   {
     files: ['packages/web/src/**/*.{ts,tsx}'],

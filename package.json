@@ -25,7 +25,8 @@
     "prego": "tsx --conditions=development packages/cli/src/cli.ts",
     "fixtures": "tsx --conditions=development scripts/serve-fixtures.ts",
     "postinstall": "patch-package && playwright install chromium firefox webkit",
-    "update:retire-db": "node scripts/update-retire-db.mjs"
+    "update:retire-db": "node scripts/update-retire-db.mjs",
+    "desktop:build": "npm --prefix packages/desktop install --no-audit --no-fund && node packages/desktop/build.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",

@@ -1,0 +1,16 @@
+{
+  "name": "@prego/desktop",
+  "version": "2.0.0-alpha.0",
+  "private": true,
+  "description": "Optional Mac desktop app: Prego in its own window, no Terminal needed. Not part of the main install.",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs"
+  },
+  "devDependencies": {
+    "@electron/packager": "20.3.0",
+    "@electron/rebuild": "4.2.1",
+    "electron": "45.2.1"
+  }
+}

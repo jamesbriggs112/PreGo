@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import type { PregoDb, TicketOverride } from '../db/database.js';
 import { guidanceWithFallback } from '../checks/guidance.js';
 import { componentLabel } from './component.js';
+import { AI_ENGINE } from '../checks/ai/ai.js';
 import { CATEGORY_NAMES, SEVERITIES, type Location, type Priority, type RawFinding, type Severity, type Ticket } from '../types.js';
 
 /**
@@ -104,7 +105,8 @@ export function buildTickets(db: PregoDb, runId: number, options: BuildTicketsOp
         title: `${guidance.title} (${where})`,
         severity,
         priority: calculatePriority(severity, reach, onKeyJourney),
-        status: firstSeenRunId === runId ? 'New' : comparison.statusOf(ticketId, first.module),
+        // AI suggestions wait for an auditor to approve them before they count or are exported.
+        status: first.engine === AI_ENGINE && !override?.approved ? 'Needs review' : firstSeenRunId === runId ? 'New' : comparison.statusOf(ticketId, first.module),
         wcagCriterion: criterion,
         wcagLevel: first.wcagLevel,
         ruleId: first.ruleId,

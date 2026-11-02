@@ -205,6 +205,10 @@ const MIGRATIONS: string[] = [
   `
   ALTER TABLE locations ADD COLUMN metrics TEXT NOT NULL DEFAULT '{}';
   `,
+  // 8: auditor approval of AI-suggested tickets.
+  `
+  ALTER TABLE ticket_overrides ADD COLUMN approved INTEGER NOT NULL DEFAULT 0;
+  `,
 ];
 
 export interface ExportRecord {
@@ -221,6 +225,8 @@ export interface TicketOverride {
   severity: Severity | null;
   priority: Priority | null;
   dismissed: boolean;
+  /** An AI-suggested ticket the auditor has accepted, so it's treated (and exported) like any other. */
+  approved: boolean;
   auditorNotes: string | null;
 }
 
@@ -548,20 +554,20 @@ export class PregoDb {
 
   getOverride(projectId: number, ticketId: string): TicketOverride | undefined {
     const row = this.sqlite
-      .prepare('SELECT title, severity, priority, dismissed, auditorNotes FROM ticket_overrides WHERE projectId = ? AND ticketId = ?')
-      .get(projectId, ticketId) as (Omit<TicketOverride, 'dismissed'> & { dismissed: number }) | undefined;
-    return row && { ...row, dismissed: row.dismissed === 1 };
+      .prepare('SELECT title, severity, priority, dismissed, approved, auditorNotes FROM ticket_overrides WHERE projectId = ? AND ticketId = ?')
+      .get(projectId, ticketId) as (Omit<TicketOverride, 'dismissed' | 'approved'> & { dismissed: number; approved: number }) | undefined;
+    return row && { ...row, dismissed: row.dismissed === 1, approved: row.approved === 1 };
   }
 
   /** Merge changes into a ticket's saved triage. `null` clears a field back to the computed value. */
   saveOverride(projectId: number, ticketId: string, changes: Partial<TicketOverride>) {
-    const merged = { title: null, severity: null, priority: null, dismissed: false, auditorNotes: null, ...this.getOverride(projectId, ticketId), ...changes };
+    const merged = { title: null, severity: null, priority: null, dismissed: false, approved: false, auditorNotes: null, ...this.getOverride(projectId, ticketId), ...changes };
     this.sqlite
       .prepare(
-        `INSERT OR REPLACE INTO ticket_overrides (projectId, ticketId, title, severity, priority, dismissed, auditorNotes, updatedAt)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT OR REPLACE INTO ticket_overrides (projectId, ticketId, title, severity, priority, dismissed, approved, auditorNotes, updatedAt)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
-      .run(projectId, ticketId, merged.title, merged.severity, merged.priority, merged.dismissed ? 1 : 0, merged.auditorNotes, now());
+      .run(projectId, ticketId, merged.title, merged.severity, merged.priority, merged.dismissed ? 1 : 0, merged.approved ? 1 : 0, merged.auditorNotes, now());
   }
 
   addMerge(projectId: number, fromTicketId: string, intoTicketId: string) {

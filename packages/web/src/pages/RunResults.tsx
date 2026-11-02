@@ -23,6 +23,7 @@ const STATUS_FILTERS = [
   { value: 'Recurring', label: 'Recurring' },
   { value: 'Regressed', label: 'Regressed' },
   { value: 'Fixed', label: 'Fixed since the last audit' },
+  { value: 'Needs review', label: 'Needs review (AI-suggested)' },
   { value: 'Dismissed', label: 'Dismissed' },
 ];
 

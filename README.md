@@ -58,7 +58,9 @@ required" ticket rather than being reported as fine.
 
 ## Checks
 
-Choose checks per audit on the New audit form (defaults in Settings), or with `--checks` on the CLI.
+Choose a test group or single checks per audit on the New audit form (defaults in Settings), or with
+`--group` or `--checks` on the CLI. The form estimates how long the audit will take. Every check is
+passive: it only loads pages a visitor could reach, and nothing is attacked.
 
 | Check | What it covers |
 |---|---|
@@ -68,13 +70,48 @@ Choose checks per audit on the New audit form (defaults in Settings), or with `-
 | `canvas` | Large canvas or WebGL content, flagged for manual review |
 | `ui` | Visual consistency: near-duplicate colours, too many greys or typefaces, text sizes, line heights and spacing a pixel apart |
 | `content` | Titles, meta descriptions, Open Graph tags, unhelpful alt text |
+| `spelling` | British English spelling in the main content (cspell's MIT dictionary). Dismiss a word once and it stays quiet |
+| `golive` | Staging leftovers: noindex, robots.txt blocking everything, links to staging addresses, placeholder text, missing pages that return 200, no sitemap, favicon or analytics |
 | `lighthouse` | Performance, best-practice and SEO scores and failing audits, one page per template. Adds several seconds per template |
-| `security` | HTTPS, security headers, cookie flags, mixed content, version disclosure |
+| `security` | HTTPS, certificate expiry and trust, old TLS versions, security headers (CSP checked by Google's CSP Evaluator), cookie flags, mixed content, version disclosure |
+| `libraries` | JavaScript libraries with published vulnerabilities (Retire.js, with a local copy of its database: `npm run update:retire-db` refreshes it) |
+| `privacy` | Trackers and tracking cookies that start before cookie consent, and the outside services each template contacts |
 | `html` | HTML validity (html-validate, standard preset) |
 | `links` | Broken links found while crawling |
+| `browsers` | Each template in Firefox and WebKit (Safari's engine), compared with Chrome. Off by default |
+| `visual` | Each page's screenshot compared with the project's previous audit. Off by default |
+| `ai` | Optional AI heuristic review with Ollama on this computer (see below). Off by default |
 
 Interactive explorations also get state map checks (dead ends, buttons that do nothing), and
 journeys a ticket if a step can no longer be replayed.
+
+Prego's browsers can't reach known advertising and analytics trackers, so audits send them nothing
+and don't show up in clients' analytics.
+
+### Comparing audits
+
+Each audit is compared with the project's previous one in the same mode. Tickets are `New`,
+`Recurring`, `Regressed` (back after being fixed) or `Fixed`. A ticket only counts as fixed when the
+new audit ran the same check on the same pages and found nothing, so running a smaller test group
+never makes problems look fixed. The Compare screen shows any two audits side by side.
+
+### AI review (optional)
+
+A vision model in [Ollama](https://ollama.com), running on this computer, reviews a screenshot of
+each template against Nielsen's 10 usability heuristics. Screenshots never leave the computer: Prego
+refuses any Ollama address that isn't `localhost` or `127.0.0.1`. Findings are labelled
+`AI-suggested` and start as `Needs review`. They stay out of scores and exports until an auditor
+approves them on the ticket page.
+
+1. Install Ollama and pull a vision model. The default, `qwen2.5vl:7b`, is Apache-2.0 licensed;
+   check the licence of any other model before using it for client work.
+
+   ```bash
+   ollama pull qwen2.5vl:7b
+   ```
+
+2. In Settings, tick **Offer AI review**, press **Check Ollama**, and save.
+3. Tick **AI heuristic review** on the New audit form. Expect 15 to 60 seconds per template.
 
 ## Running an audit from the command line
 

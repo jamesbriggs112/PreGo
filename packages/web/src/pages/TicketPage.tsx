@@ -75,6 +75,7 @@ function TicketView({ runId, ticket }: { runId: number; ticket: TicketDetail }) 
   }
 
   const dismissed = ticket.status === 'Dismissed';
+  const needsReview = ticket.status === 'Needs review';
   const occurrences = showAll ? ticket.occurrenceList : ticket.occurrenceList.slice(0, SHOW_FIRST);
 
   return (
@@ -168,6 +169,14 @@ function TicketView({ runId, ticket }: { runId: number; ticket: TicketDetail }) 
                 {save.isPending ? 'Saving…' : 'Save changes'}
               </Button>
             </form>
+            {needsReview && (
+              <div className="border-t pt-4">
+                <Button className="w-full" onClick={() => save.mutate({ approved: true })} disabled={save.isPending}>
+                  Approve AI suggestion
+                </Button>
+                <p className="mt-2 text-xs text-muted-foreground">AI-suggested tickets stay out of scores and exports until you approve them. Dismiss it if it’s wrong.</p>
+              </div>
+            )}
             <div className="border-t pt-4">
               <Button variant={dismissed ? 'outline' : 'secondary'} className="w-full" onClick={() => save.mutate({ dismissed: !dismissed })} disabled={save.isPending}>
                 {dismissed ? 'Restore ticket' : 'Dismiss as false positive'}

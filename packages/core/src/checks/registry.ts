@@ -19,6 +19,7 @@ import { privacyModule } from './privacy/privacy.js';
 import { spellingModule } from './spelling/spelling.js';
 import { browsersModule } from './browsers/browsers.js';
 import { visualModule } from './visual/visual.js';
+import { aiModule, type AiSettings } from './ai/ai.js';
 
 /** Everything a check factory may need from the audit. */
 export interface CheckFactoryContext {
@@ -28,6 +29,8 @@ export interface CheckFactoryContext {
   basicAuth?: BasicAuth;
   /** The project's previous audit's screenshot of the same page and viewport, if there is one. */
   previousScreenshot?: (location: Location, viewport: string) => { path: string; runId: number; date: string } | null;
+  /** Ollama on this computer, when AI review is switched on in Settings. */
+  ai?: AiSettings;
   /** Told about requests made by browsers that Prego doesn't open through BrowserSession. */
   onRequest?: (url: string) => void;
 }
@@ -184,6 +187,16 @@ const definitions: CheckDefinition[] = [
     defaultOn: false,
     cost: { seconds: [0.5, 1.5] },
     create: () => ibmModule(),
+  },
+  {
+    id: 'ai',
+    name: 'AI heuristic review (local)',
+    description: 'A vision model running in Ollama on this computer reviews a screenshot of each template against Nielsen’s 10 usability heuristics. Its findings are marked AI-suggested and stay out of reports until you approve them. Switch it on in Settings.',
+    categories: ['UX'],
+    defaultOn: false,
+    slow: true,
+    cost: { seconds: [15, 60], perPage: true, serial: true },
+    create: (context) => aiModule(context.ai),
   },
   {
     id: 'canvas',

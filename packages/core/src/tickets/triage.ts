@@ -9,6 +9,8 @@ export interface TicketChanges {
   priority?: Priority | null;
   auditorNotes?: string | null;
   dismissed?: boolean;
+  /** Accept an AI-suggested ticket, so it's exported like any other. */
+  approved?: boolean;
 }
 
 export class TriageError extends Error {}
@@ -25,6 +27,7 @@ export function updateTicket(db: PregoDb, runId: number, ticketId: string, chang
   if (changes.priority !== undefined) override.priority = changes.priority;
   if (changes.auditorNotes !== undefined) override.auditorNotes = changes.auditorNotes;
   if (changes.dismissed !== undefined) override.dismissed = changes.dismissed;
+  if (changes.approved !== undefined) override.approved = changes.approved;
   db.transaction(() => {
     db.saveOverride(run.projectId, ticketId, override);
     rebuild(db, runId);

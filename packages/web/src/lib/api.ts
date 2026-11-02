@@ -74,6 +74,7 @@ export interface TicketChanges {
   priority?: Priority | null;
   auditorNotes?: string | null;
   dismissed?: boolean;
+  approved?: boolean;
 }
 
 export interface CheckInfo {
@@ -84,6 +85,8 @@ export interface CheckInfo {
   defaultOn: boolean;
   slow: boolean;
   cost: CheckCost;
+  /** False when the check needs setting up first (AI review needs Ollama switched on in Settings). */
+  available: boolean;
 }
 
 export interface JourneySummary {
@@ -126,6 +129,7 @@ export interface ExportSummary {
 export interface Settings {
   branding: { companyName: string; accentColour: string };
   defaults: { viewports: string[]; perTemplate: number; concurrency: number; delayMs: number; respectRobots: boolean; csvPreset: string; checks: string[] };
+  ai: { enabled: boolean; url: string; model: string };
 }
 
 export interface StartRunBody {
@@ -202,6 +206,7 @@ export const api = {
   createExport: (runId: number, preset: string) => post<ExportSummary>(`/api/runs/${runId}/exports`, { preset }),
   reportPreview: (runId: number) => request<{ html: string }>(`/api/runs/${runId}/report-preview`),
   settings: () => request<Settings & { hasLogo: boolean; exploreDefaults: { denyLabels: string[] } }>('/api/settings'),
+  testOllama: (url: string) => post<{ models: string[] }>('/api/settings/ai/test', { url }),
   saveSettings: (settings: Settings) => request<Settings & { hasLogo: boolean }>('/api/settings', { method: 'PUT', body: JSON.stringify(settings) }),
   uploadLogo: (png: string) => request<{ hasLogo: boolean }>('/api/settings/logo', { method: 'PUT', body: JSON.stringify({ png }) }),
   removeLogo: () => request<{ hasLogo: boolean }>('/api/settings/logo', { method: 'DELETE' }),

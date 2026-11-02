@@ -18,6 +18,7 @@ import { buildTickets } from '../tickets/build.js';
 import { serveFolder, type StaticServer } from '../serve/static-server.js';
 import { checkDefinitions, createChecks, defaultChecks, unknownChecks } from '../checks/registry.js';
 import type { CheckModule } from '../checks/types.js';
+import type { AiSettings } from '../checks/ai/ai.js';
 import { defaultDataDir } from '../paths.js';
 import type { Location, Run } from '../types.js';
 
@@ -76,6 +77,8 @@ export interface AuditOptions {
   signal?: AbortSignal;
   /** Called with the URL of every request any browser makes during the audit. */
   onRequest?: (url: string) => void;
+  /** Ollama on this computer, for the optional AI review check. */
+  ai?: AiSettings;
   onEvent?: (event: AuditEvent) => void;
 }
 
@@ -203,7 +206,14 @@ export async function runAudit(db: PregoDb, options: AuditOptions): Promise<Audi
     const { toAudit } = discovery;
     const modules = [
       ...(options.modules ??
-        createChecks(checkIds, { startUrl, failedPages: discovery.failedPages ?? [], basicAuth: options.basicAuth, onRequest: options.onRequest, previousScreenshot: previousScreenshots(db, run, dataDir) })),
+        createChecks(checkIds, {
+          startUrl,
+          failedPages: discovery.failedPages ?? [],
+          basicAuth: options.basicAuth,
+          onRequest: options.onRequest,
+          previousScreenshot: previousScreenshots(db, run, dataDir),
+          ai: options.ai,
+        })),
       ...(discovery.modules ?? []),
     ];
     const firstViewport = viewportName(viewports[0], options.emulation);

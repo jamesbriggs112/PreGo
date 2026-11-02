@@ -22,6 +22,8 @@ export interface PregoSettings {
     /** Checks ticked on the New audit form and run by the CLI. */
     checks: string[];
   };
+  /** Optional AI review through Ollama on this computer. Off by default. */
+  ai: { enabled: boolean; url: string; model: string };
 }
 
 export const DEFAULT_SETTINGS: PregoSettings = {
@@ -35,13 +37,20 @@ export const DEFAULT_SETTINGS: PregoSettings = {
     csvPreset: 'prego',
     checks: checkDefinitions().filter((d) => d.defaultOn).map((d) => d.id),
   },
+  ai: { enabled: false, url: 'http://127.0.0.1:11434', model: 'qwen2.5vl:7b' },
 };
+
+/** Ollama settings for an audit, or undefined when AI review is off. */
+export function aiSettings(settings: PregoSettings): { url: string; model: string } | undefined {
+  return settings.ai.enabled ? { url: settings.ai.url, model: settings.ai.model } : undefined;
+}
 
 export function getSettings(db: PregoDb): PregoSettings {
   const saved = db.getSetting<Partial<PregoSettings>>('settings') ?? {};
   return {
     branding: { ...DEFAULT_SETTINGS.branding, ...saved.branding },
     defaults: { ...DEFAULT_SETTINGS.defaults, ...saved.defaults },
+    ai: { ...DEFAULT_SETTINGS.ai, ...saved.ai },
   };
 }
 

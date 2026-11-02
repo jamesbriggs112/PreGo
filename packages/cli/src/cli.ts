@@ -7,6 +7,7 @@ import { basename, dirname, join, resolve } from 'node:path';
 import { loadScheduleConfig, type ScheduleConfig } from './config.js';
 import {
   CHECK_GROUPS,
+  aiSettings,
   groupChecks,
   CSV_PRESETS,
   DEFAULT_DENY_LABELS,
@@ -157,12 +158,14 @@ async function auditOnce(db: PregoDb, dataDir: string, opts: AuditCommandOptions
       : opts.checks
         ? opts.checks.split(',').map((c) => c.trim())
         : opts.group
-          ? groupChecks(CHECK_GROUPS.find((g) => g.id === opts.group)!, checkDefinitions())
+          ? groupChecks(CHECK_GROUPS.find((g) => g.id === opts.group)!, checkDefinitions().filter((d) => d.id !== 'ai' || aiSettings(getSettings(db))))
           : getSettings(db).defaults.checks;
+    if (checks.includes('ai') && !aiSettings(getSettings(db))) program.error('AI review is switched off. Turn it on in Settings, with Ollama running on this computer.');
     const { run } = await runAudit(db, {
       project,
       target,
       dataDir,
+      ai: aiSettings(getSettings(db)),
       viewports: opts.viewports,
       mode: opts.mode,
       checks,

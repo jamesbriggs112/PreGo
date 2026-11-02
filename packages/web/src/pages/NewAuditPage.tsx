@@ -101,7 +101,7 @@ function NewAuditForm({ defaults, defaultDenyLabels }: { defaults?: Settings['de
       // A journey starts where it was recorded.
       target: mode === 'journey' ? (journey?.startUrl ?? target.trim()) : target.trim(),
       mode,
-      checks,
+      checks: checks.filter((id) => checkList.data?.find((c) => c.id === id)?.available ?? true),
       ...(mode === 'journey' && journey && { journey: journey.name }),
       ...(mode !== 'journey' && loginJourney && { loginJourney: loginJourney.name }),
       viewports,
@@ -374,7 +374,7 @@ function NewAuditForm({ defaults, defaultDenyLabels }: { defaults?: Settings['de
               <legend className="mb-2 text-sm font-medium">Test group</legend>
               <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
                 {checkGroups.data.groups.map((group) => {
-                  const ids = groupChecks(group, checkList.data);
+                  const ids = groupChecks(group, checkList.data.filter((c) => c.available));
                   const selected = ids.length === checks.length && ids.every((id) => checks.includes(id));
                   return (
                     <label
@@ -403,7 +403,8 @@ function NewAuditForm({ defaults, defaultDenyLabels }: { defaults?: Settings['de
               <div key={check.id} className="flex items-start gap-2">
                 <Checkbox
                   id={`check-${check.id}`}
-                  checked={checks.includes(check.id)}
+                  disabled={!check.available}
+                  checked={checks.includes(check.id) && check.available}
                   onCheckedChange={(state) => setChecks((current) => (state === true ? [...current, check.id] : current.filter((c) => c !== check.id)))}
                   aria-describedby={`check-${check.id}-hint`}
                   className="mt-0.5"
@@ -413,6 +414,15 @@ function NewAuditForm({ defaults, defaultDenyLabels }: { defaults?: Settings['de
                   <span id={`check-${check.id}-hint`} className="text-sm text-muted-foreground">
                     {check.description}
                     {check.slow && ' Adds several seconds per page.'}
+                    {!check.available && (
+                      <>
+                        {' '}
+                        <Link to="/settings" className="font-medium underline">
+                          Switch it on in Settings
+                        </Link>
+                        .
+                      </>
+                    )}
                   </span>
                 </div>
               </div>

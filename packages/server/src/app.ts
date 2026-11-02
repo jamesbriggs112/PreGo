@@ -13,6 +13,8 @@ import {
   TriageError,
   buildExportPlan,
   checkDefinitions,
+  aiSettings,
+  assertLocalOllama,
   compareRuns,
   checkCosts,
   calibrate,
@@ -172,7 +174,16 @@ export async function buildApp(options: AppOptions): Promise<PregoApp> {
 
   // The checks a run can choose from, for the New audit form.
   app.get('/api/checks', async () =>
-    checkDefinitions().map(({ id, name, description, categories, defaultOn, slow, cost }) => ({ id, name, description, categories, defaultOn, slow: !!slow, cost: { id, ...cost } })),
+    checkDefinitions().map(({ id, name, description, categories, defaultOn, slow, cost }) => ({
+      id,
+      name,
+      description,
+      categories,
+      defaultOn,
+      slow: !!slow,
+      cost: { id, ...cost },
+      available: id !== 'ai' || !!aiSettings(getSettings(db)),
+    })),
   );
 
   // Test groups, and how long checks took in the last 20 audits on this machine, for time estimates.
@@ -311,7 +322,10 @@ export async function buildApp(options: AppOptions): Promise<PregoApp> {
       const unknownCheckIds = unknownChecks(checks);
       if (unknownCheckIds.length) return reply.code(400).send({ error: `Unknown check: ${unknownCheckIds.join(', ')}` });
       if (body.loginJourney && !loginJourney) return reply.code(400).send({ error: `No recorded journey called "${body.loginJourney}" for this project.` });
+      const ai = aiSettings(getSettings(db));
+      if (checks.includes('ai') && !ai) return reply.code(400).send({ error: 'AI review is switched off. Turn it on in Settings, with Ollama running on this computer.' });
       const job = await jobs.start({
+        ai,
         project: body.project.trim(),
         target,
         mode: body.mode,
@@ -494,6 +508,7 @@ export async function buildApp(options: AppOptions): Promise<PregoApp> {
             priority: { anyOf: [{ type: 'null' }, { enum: ['P1', 'P2', 'P3', 'P4'] }] },
             auditorNotes: { type: ['string', 'null'], maxLength: 5000 },
             dismissed: { type: 'boolean' },
+            approved: { type: 'boolean' },
           },
         },
       },
@@ -543,9 +558,37 @@ export async function buildApp(options: AppOptions): Promise<PregoApp> {
     if (unknown.length) return reply.code(400).send({ error: `Unknown viewport: ${unknown.join(', ')}` });
     if (!CSV_PRESETS[request.body.defaults.csvPreset]) return reply.code(400).send({ error: 'Unknown CSV preset' });
     if (request.body.defaults.checks && unknownChecks(request.body.defaults.checks).length) return reply.code(400).send({ error: 'Unknown check' });
-    saveSettings(db, { ...request.body, branding: { ...request.body.branding, accentColour: request.body.branding.accentColour.replace(/^#/, '').toUpperCase() } });
+    const ai = request.body.ai ?? getSettings(db).ai;
+    try {
+      assertLocalOllama(ai.url);
+    } catch (error) {
+      return reply.code(400).send({ error: error instanceof Error ? error.message : String(error) });
+    }
+    saveSettings(db, { ...request.body, ai, branding: { ...request.body.branding, accentColour: request.body.branding.accentColour.replace(/^#/, '').toUpperCase() } });
     return { ...getSettings(db), hasLogo: existsSync(logoPath(dataDir)) };
   });
+
+  // Check Ollama is running on this computer and list its models, for the Settings screen.
+  app.post<{ Body: { url: string } }>(
+    '/api/settings/ai/test',
+    { schema: { body: { type: 'object', required: ['url'], additionalProperties: false, properties: { url: { type: 'string', maxLength: 200 } } } } },
+    async (request, reply) => {
+      let base: URL;
+      try {
+        base = assertLocalOllama(request.body.url);
+      } catch (error) {
+        return reply.code(400).send({ error: error instanceof Error ? error.message : String(error) });
+      }
+      try {
+        const res = await fetch(new URL('/api/tags', base), { signal: AbortSignal.timeout(5_000) });
+        if (!res.ok) return reply.code(502).send({ error: `Ollama answered ${res.status}.` });
+        const { models } = (await res.json()) as { models?: { name: string }[] };
+        return { models: (models ?? []).map((m) => m.name).sort() };
+      } catch {
+        return reply.code(502).send({ error: `Nothing is answering at ${base.origin}. Start Ollama (ollama serve) and try again.` });
+      }
+    },
+  );
 
   // The report logo, uploaded as a base64 PNG in JSON (so uploads need the same JSON content type
   // as every other write, which cross-site forms can't send).
@@ -746,6 +789,16 @@ const settingsSchema = {
           respectRobots: { type: 'boolean' },
           csvPreset: { type: 'string' },
           checks: { type: 'array', items: { type: 'string' }, uniqueItems: true },
+        },
+      },
+      ai: {
+        type: 'object',
+        required: ['enabled', 'url', 'model'],
+        additionalProperties: false,
+        properties: {
+          enabled: { type: 'boolean' },
+          url: { type: 'string', minLength: 1, maxLength: 200 },
+          model: { type: 'string', minLength: 1, maxLength: 100 },
         },
       },
     },

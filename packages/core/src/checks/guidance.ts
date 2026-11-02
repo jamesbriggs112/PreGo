@@ -716,6 +716,15 @@ export function guidanceWithFallback(
   const guidance = guidanceFor(engine, ruleId);
   // Each outdated library, misspelt word and browser gets its own ticket, so the title names it.
   if (guidance && (engine === 'retire.js' || ruleId === 'spelling' || ruleId.startsWith('browser-'))) return { ...guidance, title: fallback.title };
+  if (engine === 'ollama') {
+    return {
+      title: fallback.title,
+      description: fallback.description,
+      whyItMatters: 'Usability problems like this make the product harder to learn and use, and cause mistakes and drop-off. This is a suggestion from a local AI model, so check it on the screen before acting on it.',
+      recommendation: 'Confirm the problem on the screen. If it’s real, approve the ticket and follow the suggested fix in “Actual”; if not, dismiss it.',
+      effort: 'Medium',
+    };
+  }
   return (
     guidance ?? {
       title: fallback.title,

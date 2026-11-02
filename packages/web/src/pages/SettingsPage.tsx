@@ -29,12 +29,6 @@ export function SettingsPage() {
       )}
       {settings.data && <SettingsForm initial={settings.data} />}
       <LogoCard hasLogo={!!settings.data?.hasLogo} />
-      <Card>
-        <CardHeader>
-          <CardTitle>AI review</CardTitle>
-          <CardDescription>Optional heuristic review with a local Ollama model arrives in Phase 5. Nothing is sent off this computer.</CardDescription>
-        </CardHeader>
-      </Card>
     </div>
   );
 }
@@ -51,10 +45,18 @@ function SettingsForm({ initial }: { initial: Settings }) {
   const [csvPreset, setCsvPreset] = useState(initial.defaults.csvPreset);
   const [checks, setChecks] = useState<string[]>(initial.defaults.checks);
   const checkList = useQuery({ queryKey: ['checks'], queryFn: api.checks });
+  const [aiEnabled, setAiEnabled] = useState(initial.ai.enabled);
+  const [aiUrl, setAiUrl] = useState(initial.ai.url);
+  const [aiModel, setAiModel] = useState(initial.ai.model);
+  const testOllama = useMutation({ mutationFn: api.testOllama });
 
   const save = useMutation({
     mutationFn: api.saveSettings,
-    onSuccess: (saved) => queryClient.setQueryData(['settings'], saved),
+    onSuccess: (saved) => {
+      queryClient.setQueryData(['settings'], saved);
+      // Whether AI review can be chosen on the New audit form.
+      return queryClient.invalidateQueries({ queryKey: ['checks'] });
+    },
   });
 
   function onSubmit(event: FormEvent) {
@@ -62,6 +64,7 @@ function SettingsForm({ initial }: { initial: Settings }) {
     save.mutate({
       branding: { companyName: companyName.trim(), accentColour: accent.replace('#', '') },
       defaults: { viewports, perTemplate: Number(perTemplate), concurrency: Number(concurrency), delayMs: Number(delay), respectRobots, csvPreset, checks },
+      ai: { enabled: aiEnabled, url: aiUrl.trim(), model: aiModel.trim() },
     });
   }
 
@@ -169,6 +172,59 @@ function SettingsForm({ initial }: { initial: Settings }) {
               Respect robots.txt
             </Label>
           </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>AI review (optional)</CardTitle>
+          <CardDescription>
+            A vision model running in Ollama on this computer reviews a screenshot of each template against Nielsen’s 10 usability heuristics. Screenshots never leave this
+            computer. Its findings are marked AI-suggested and stay out of scores and reports until you approve them.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-5 sm:grid-cols-2">
+          <div className="flex items-center gap-2 sm:col-span-2">
+            <Checkbox id="ai-enabled" checked={aiEnabled} onCheckedChange={(state) => setAiEnabled(state === true)} />
+            <Label htmlFor="ai-enabled" className="font-normal">
+              Offer AI review on the New audit form
+            </Label>
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="ai-url">Ollama address</Label>
+            <Input id="ai-url" value={aiUrl} onChange={(e) => setAiUrl(e.target.value)} required aria-describedby="ai-url-hint" />
+            <span id="ai-url-hint" className="text-sm text-muted-foreground">
+              Must be on this computer, such as http://127.0.0.1:11434.
+            </span>
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="ai-model">Vision model</Label>
+            <Input id="ai-model" value={aiModel} onChange={(e) => setAiModel(e.target.value)} required aria-describedby="ai-model-hint" list="ai-models" />
+            <datalist id="ai-models">
+              {testOllama.data?.models.map((m) => (
+                <option key={m} value={m} />
+              ))}
+            </datalist>
+            <span id="ai-model-hint" className="text-sm text-muted-foreground">
+              A model that reads images, pulled with ollama pull, such as qwen2.5vl:7b.
+            </span>
+          </div>
+          <div className="flex flex-wrap items-center gap-3 sm:col-span-2">
+            <Button type="button" variant="outline" onClick={() => testOllama.mutate(aiUrl.trim())} disabled={testOllama.isPending}>
+              {testOllama.isPending ? 'Checking…' : 'Check Ollama'}
+            </Button>
+            <p role="status" className="text-sm">
+              {testOllama.isSuccess &&
+                (testOllama.data.models.length
+                  ? `Ollama is running with ${testOllama.data.models.length === 1 ? '1 model' : `${testOllama.data.models.length} models`}: ${testOllama.data.models.join(', ')}.${testOllama.data.models.includes(aiModel.trim()) ? '' : ` “${aiModel.trim()}” isn’t one of them yet: run ollama pull ${aiModel.trim()}.`}`
+                  : 'Ollama is running but has no models. Pull a vision model first.')}
+            </p>
+          </div>
+          {testOllama.isError && (
+            <Alert variant="destructive" role="alert" className="sm:col-span-2">
+              {testOllama.error.message}
+            </Alert>
+          )}
         </CardContent>
       </Card>
 

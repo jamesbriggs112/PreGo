@@ -1,8 +1,8 @@
 # Scheduled audits
 
 `prego run <schedule file>` runs every audit in the file, one after another, exports each one and
-prints a summary. Use it from cron, launchd or a CI system such as GitHub Actions. Each audit is
-compared with the project's previous one, so the summary shows what's new, fixed and back again.
+prints a summary of the issues found by severity. Use it from cron, launchd or a CI system such as
+GitHub Actions.
 
 ## The schedule file
 
@@ -36,7 +36,7 @@ A JSON file with a list of audits. Each audit takes the same settings as `prego 
 | `user`, `passwordEnv` | Basic auth for staging sites. The password is read from the environment variable `passwordEnv` names. A password in the file itself is rejected. |
 | `preset` | Column preset for tickets.csv: `prego`, `jira`, `linear`, `productive` or `trello`. |
 | `export` | `false` to skip the export bundle. |
-| `failOn` | `Critical`, `High`, `Medium` or `Low`. Exit with code 1 if any New or Regressed ticket is at that severity or worse, so a CI run fails when something breaks. |
+| `failOn` | `Critical`, `High`, `Medium` or `Low`. Exit with code 1 if any issue is at that severity or worse, so a CI run fails when something serious is found. |
 
 Prego checks the whole file before starting and lists every problem at once.
 
@@ -58,7 +58,7 @@ Add a line to your crontab (`crontab -e`) to run every Monday at 7am. The Mac mu
 ## GitHub Actions
 
 `examples/github-actions/prego-audits.yml` runs the schedule every Monday and on demand. It keeps
-Prego's data folder in the Actions cache, so each run is compared with the last, uploads the exports
+Prego's data folder in the Actions cache, so ticket IDs and dismissed false positives carry over, uploads the exports
 as a download, and writes the summary table to the run's summary page.
 
 **Where audit data goes.** On GitHub's own runners, screenshots, HTML and findings are stored by

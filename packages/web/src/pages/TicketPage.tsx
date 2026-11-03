@@ -127,7 +127,6 @@ function TicketView({ runId, ticket }: { runId: number; ticket: TicketDetail }) 
                 )}
               </Detail>
               <Detail term="Effort">{ticket.effort}</Detail>
-              <Detail term="First seen">{ticket.firstSeen}</Detail>
             </dl>
           </CardContent>
         </Card>
@@ -208,7 +207,7 @@ function TicketView({ runId, ticket }: { runId: number; ticket: TicketDetail }) 
                 {o.crop ? (
                   <img src={fileUrl(runId, o.crop)} alt={`Problem outlined on ${o.url} at the ${o.viewport} viewport`} className="max-h-64 w-full rounded border object-contain object-left-top" loading="lazy" />
                 ) : (
-                  <p className="text-muted-foreground">No screenshot for this occurrence.</p>
+                  <p className="text-muted-foreground">{ticket.screenshotsDeleted ? 'Screenshots are deleted once an audit is exported. This one is in the Word report.' : 'No screenshot for this occurrence.'}</p>
                 )}
                 <p className="break-all">
                   <span className="font-medium">{o.url}</span> · {o.viewport}

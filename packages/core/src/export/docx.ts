@@ -21,7 +21,7 @@ import { join } from 'node:path';
 import { CATEGORIES, CATEGORY_NAMES, SEVERITIES, type Severity } from '../types.js';
 import { checkedCategories } from '../checks/categories.js';
 import { averagePerformance, type LighthouseScores } from '../checks/lighthouse/lighthouse.js';
-import { allExported, stateMapStates, type ExportPlan, type PlannedTicket, type ReportSectionPlan } from './plan.js';
+import { stateMapStates, type ExportPlan, type PlannedTicket, type ReportSectionPlan } from './plan.js';
 
 export interface ReportBranding {
   /** Company shown on the cover and in the footer. */
@@ -59,7 +59,6 @@ export async function reportDocx(plan: ExportPlan, runDir: string, branding: Rep
     ...scopeAndMethod(plan),
     ...findings(plan, runDir),
     ...(plan.run.mode === 'explore' ? stateMapSection(plan, extras.stateMap) : plan.run.mode === 'journey' ? journeySection(plan) : siteMap(plan)),
-    ...comparison(plan),
     ...limitations(plan),
     ...appendix(plan),
   ];
@@ -129,7 +128,7 @@ function executiveSummary(plan: ExportPlan): (Paragraph | Table)[] {
         'Each issue has a ticket ID (for example PRG-A11Y-001) that matches a row in tickets.csv, so the development team can pick it up directly.',
     ),
     heading('Scores by category', HeadingLevel.HEADING_2),
-    para('Scores start at 100 and drop for each issue found, weighted by severity. They are a way to compare audits over time, not a measure of compliance.'),
+    para('Scores start at 100 and drop for each issue found, weighted by severity. They show where to focus first, not a measure of compliance.'),
     table(
       ['Category', 'Score', 'Issues', 'Critical', 'High', 'Medium', 'Low'],
       CATEGORIES.map((category) => {
@@ -142,7 +141,7 @@ function executiveSummary(plan: ExportPlan): (Paragraph | Table)[] {
     ),
     heading('Top issues', HeadingLevel.HEADING_2),
   ];
-  if (top.length === 0) out.push(para('Automated checks raised no issues in the areas checked. Manual testing is still needed (see section 7).'));
+  if (top.length === 0) out.push(para('Automated checks raised no issues in the areas checked. Manual testing is still needed (see section 6).'));
   for (const t of top) {
     out.push(
       new Paragraph({
@@ -298,7 +297,7 @@ function findingsSection(section: ReportSectionPlan, runDir: string): (Paragraph
       out.push(
         new Paragraph({
           spacing: { after: 240 },
-          children: [new TextRun({ text: `Example from `, italics: true, size: 18 }), new TextRun({ text: example.ticketId, bold: true, italics: true, size: 18 }), new TextRun({ text: `, problem outlined in pink. Screenshot: ${example.screenshotFile}`, italics: true, size: 18 })],
+          children: [new TextRun({ text: `Example from `, italics: true, size: 18 }), new TextRun({ text: example.ticketId, bold: true, italics: true, size: 18 }), new TextRun({ text: `, problem outlined in pink.`, italics: true, size: 18 })],
         }),
       );
     }
@@ -352,33 +351,6 @@ function siteMap(plan: ExportPlan): (Paragraph | Table)[] {
   ];
 }
 
-function comparison(plan: ExportPlan): Paragraph[] {
-  const out = [heading('6. Comparison with the previous audit', HeadingLevel.HEADING_1)];
-  if (!plan.previousRun) {
-    out.push(para('This is the first audit of this project, so there is nothing to compare with yet. Future audits will show which issues are new, fixed or still present.'));
-    return out;
-  }
-  const count = (status: string) => plan.tickets.filter((t) => t.status === status).length;
-  const fixed = plan.fixed.length;
-  const bullet = (text: string) => new Paragraph({ bullet: { level: 0 }, children: [new TextRun(text)] });
-  out.push(
-    para(`Compared with the audit on ${formatDate(plan.previousRun.startedAt)}:`),
-    bullet(`${fixed} ${plural(fixed, 'issue')} fixed`),
-    bullet(`${count('New')} new ${plural(count('New'), 'issue')}`),
-    bullet(`${count('Regressed')} ${plural(count('Regressed'), 'issue')} back again after being fixed`),
-    bullet(`${count('Recurring')} ${plural(count('Recurring'), 'issue')} still present`),
-  );
-  const list = (title: string, tickets: PlannedTicket[], note: (t: PlannedTicket) => string) => {
-    if (!tickets.length) return;
-    out.push(heading(title, HeadingLevel.HEADING_2));
-    for (const t of tickets) out.push(new Paragraph({ bullet: { level: 0 }, children: [new TextRun({ text: t.ticketId, bold: true }), new TextRun(`: ${t.title}${note(t)}`)] }));
-  };
-  list('Fixed since the last audit', plan.fixed, (t) => `. Last seen ${formatDate(t.lastSeen)}.`);
-  list('Back again', plan.tickets.filter((t) => t.status === 'Regressed'), (t) => `. See section ${t.reportSection}.`);
-  out.push(para('An issue counts as fixed only when this audit ran the same check on the same pages and found nothing. Issues in areas this audit didn’t check are left out of the comparison.'));
-  return out;
-}
-
 function limitations(plan: ExportPlan): Paragraph[] {
   const notAudited = plan.locations.filter((l) => !l.audited && (l.statusCode ?? 0) < 400).length;
   const items = [
@@ -401,7 +373,7 @@ function limitations(plan: ExportPlan): Paragraph[] {
     'Touch and kiosks: check target sizes, gestures with single-tap alternatives, and idle timeouts that give enough warning.',
   ];
   return [
-    heading('7. Limitations and manual testing', HeadingLevel.HEADING_1),
+    heading('6. Limitations and manual testing', HeadingLevel.HEADING_1),
     heading('What automated checks cannot cover', HeadingLevel.HEADING_2),
     ...items.map((text) => new Paragraph({ bullet: { level: 0 }, children: [new TextRun(text)] })),
     heading('Recommended manual tests', HeadingLevel.HEADING_2),
@@ -416,7 +388,7 @@ function appendix(plan: ExportPlan): (Paragraph | Table)[] {
     para('Every ticket in this report. Full technical detail for each is in tickets.csv, and every individual occurrence is in occurrences.csv.'),
     table(
       ['Ticket ID', 'Title', 'Severity', 'Priority', 'Section'],
-      allExported(plan).map((t) => [t.ticketId, t.status === 'Fixed' ? `${t.title} (fixed)` : t.title, t.severity, t.priority, t.reportSection]),
+      plan.tickets.map((t) => [t.ticketId, t.title, t.severity, t.priority, t.reportSection]),
       { boldFirstColumn: true, fontSize: 18 },
     ),
   ];

@@ -1,8 +1,8 @@
 // Acceptance criteria 5 and 6: the CLI produces a complete export from bad-site, and the Word report,
-// tickets.csv, occurrences.csv and screenshots/ all cross-reference each other.
+// tickets.csv and occurrences.csv all cross-reference each other. Screenshots live only in the report.
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { execFile } from 'node:child_process';
-import { cpSync, existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
@@ -47,8 +47,15 @@ describe('prego audit (CLI)', () => {
   });
 
   it('writes the full bundle into one folder (criterion 5)', () => {
-    expect(readdirSync(exportDir).sort()).toEqual(['occurrences.csv', 'report.docx', 'run.json', 'screenshots', 'tickets.csv']);
-    expect(readdirSync(join(exportDir, 'screenshots')).length).toBeGreaterThan(0);
+    expect(readdirSync(exportDir).sort()).toEqual(['occurrences.csv', 'report.docx', 'run.json', 'tickets.csv']);
+  });
+
+  it('embeds the screenshots in the report, then deletes them from Prego', async () => {
+    const zip = await JSZip.loadAsync(readFileSync(join(exportDir, 'report.docx')));
+    expect(Object.keys(zip.files).filter((f) => f.startsWith('word/media/')).length).toBeGreaterThan(0);
+    const runDir = join(dataDir, 'runs', readdirSync(join(dataDir, 'runs'))[0]);
+    expect(existsSync(join(runDir, 'screenshots'))).toBe(false);
+    expect(existsSync(join(runDir, 'crops'))).toBe(false);
   });
 
   it('raises tickets for every defect type in criterion 2', () => {
@@ -70,22 +77,6 @@ describe('cross-references (criterion 6)', () => {
     for (const { 'Ticket ID': id } of readCsv('tickets.csv')) expect(text, id).toContain(id);
   });
 
-  it('every screenshot named in any file exists in screenshots/', async () => {
-    const files = new Set(readdirSync(join(exportDir, 'screenshots')));
-    const named = [
-      ...((await reportText(exportDir)).match(/PRG-[A-Z0-9]+-\d{3,}_\d{2,}\.png/g) ?? []),
-      ...readCsv('tickets.csv').map((t) => t.Screenshot),
-      ...readCsv('occurrences.csv').map((o) => o['Screenshot crop']),
-    ].filter(Boolean);
-    expect(named.length).toBeGreaterThan(0);
-    const ids = new Set(readCsv('tickets.csv').map((t) => t['Ticket ID']));
-    for (const file of named) {
-      expect(files, file).toContain(file);
-      // Always prefixed with its ticket's ID.
-      expect(ids, file).toContain(file.replace(/_\d+\.png$/, ''));
-    }
-  });
-
   it('passes `prego verify`', async () => {
     const { stdout } = await prego('verify', exportDir);
     expect(stdout).toMatch(/^OK: \d+ tickets cross-reference correctly\./);
@@ -93,19 +84,16 @@ describe('cross-references (criterion 6)', () => {
 });
 
 describe('verifyExport catches broken bundles', () => {
-  it('reports a missing screenshot and a ticket dropped from the CSV', async () => {
+  it('reports a ticket dropped from the CSV', async () => {
     const broken = mkdtempSync(join(tmpdir(), 'prego-broken-'));
     try {
       cpSync(exportDir, broken, { recursive: true });
-      const shot = readdirSync(join(broken, 'screenshots'))[0];
-      unlinkSync(join(broken, 'screenshots', shot));
       const lines = readFileSync(join(broken, 'tickets.csv'), 'utf8').split('\r\n');
       const droppedId = /^"([^"]+)"/.exec(lines[1])![1];
       writeFileSync(join(broken, 'tickets.csv'), [lines[0], ...lines.slice(2)].join('\r\n'));
 
       const result = await verifyExport(broken);
       expect(result.ok).toBe(false);
-      expect(result.problems).toContainEqual(`${shot} is named but missing from screenshots/`);
       expect(result.problems).toContainEqual(`${droppedId} is in report.docx but appears 0 times in tickets.csv`);
       expect(existsSync(join(broken, 'report.docx'))).toBe(true);
     } finally {

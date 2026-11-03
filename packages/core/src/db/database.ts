@@ -209,6 +209,13 @@ const MIGRATIONS: string[] = [
   `
   ALTER TABLE ticket_overrides ADD COLUMN approved INTEGER NOT NULL DEFAULT 0;
   `,
+  // 9: tickets belong to one audit; Prego no longer tracks them across audits.
+  `
+  DELETE FROM tickets WHERE status = 'Fixed';
+  UPDATE tickets SET status = 'Open' WHERE status IN ('New', 'Recurring', 'Regressed');
+  ALTER TABLE tickets DROP COLUMN firstSeen;
+  ALTER TABLE tickets DROP COLUMN lastSeen;
+  `,
 ];
 
 export interface ExportRecord {
@@ -361,19 +368,6 @@ export class PregoDb {
     return rows.map(toRun);
   }
 
-  /** The most recent finished run of the same project before this one. */
-  /** The project's last complete audit before this one, in the same mode (crawl, exploration or journey). */
-  previousRun(runId: number): Run | undefined {
-    const row = this.sqlite
-      .prepare(
-        `SELECT * FROM runs WHERE projectId = (SELECT projectId FROM runs WHERE id = ?)
-         AND mode = (SELECT mode FROM runs WHERE id = ?)
-         AND id < ? AND status = 'complete' ORDER BY id DESC LIMIT 1`,
-      )
-      .get(runId, runId, runId) as RunRow | undefined;
-    return row && toRun(row);
-  }
-
   finishRun(id: number, status: RunStatus, summary: Record<string, unknown> = {}, error: string | null = null) {
     this.sqlite
       .prepare('UPDATE runs SET status = ?, finishedAt = ?, summary = ?, error = ? WHERE id = ?')
@@ -515,13 +509,6 @@ export class PregoDb {
     return { ticketId, isNew: true };
   }
 
-  /** The run in which a ticket was first seen, from the registry. */
-  ticketFirstSeenRun(projectId: number, ticketId: string): number | undefined {
-    const row = this.sqlite
-      .prepare('SELECT firstSeenRunId FROM ticket_registry WHERE projectId = ? AND ticketId = ?')
-      .get(projectId, ticketId) as { firstSeenRunId: number } | undefined;
-    return row?.firstSeenRunId;
-  }
 
   // Settings
 
@@ -604,11 +591,11 @@ export class PregoDb {
         `INSERT OR REPLACE INTO tickets (runId, ticketId, fingerprint, category, title, severity, priority, status,
            wcagCriterion, wcagLevel, ruleId, engine, templateKey, occurrences, locationsAffected, exampleLocation,
            exampleSelector, description, whyItMatters, stepsToReproduce, expected, actual, recommendation, effort,
-           labels, auditorNotes, firstSeen, lastSeen)
+           labels, auditorNotes)
          VALUES (@runId, @ticketId, @fingerprint, @category, @title, @severity, @priority, @status,
            @wcagCriterion, @wcagLevel, @ruleId, @engine, @templateKey, @occurrences, @locationsAffected, @exampleLocation,
            @exampleSelector, @description, @whyItMatters, @stepsToReproduce, @expected, @actual, @recommendation, @effort,
-           @labels, @auditorNotes, @firstSeen, @lastSeen)`,
+           @labels, @auditorNotes)`,
       )
       .run({ ...ticket, labels: JSON.stringify(ticket.labels) });
   }

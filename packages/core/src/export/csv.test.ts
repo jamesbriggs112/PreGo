@@ -11,13 +11,13 @@ let plan: ExportPlan;
 function ticket(runId: number, ticketId: string, overrides: Partial<Ticket> = {}): Ticket {
   return {
     runId, ticketId, fingerprint: ticketId, category: 'A11Y', title: 'Images have no text alternative (/)',
-    severity: 'Critical', priority: 'P1', status: 'New', wcagCriterion: '1.1.1', wcagLevel: 'A', ruleId: 'image-alt',
+    severity: 'Critical', priority: 'P1', status: 'Open', wcagCriterion: '1.1.1', wcagLevel: 'A', ruleId: 'image-alt',
     engine: 'axe-core', templateKey: '/', occurrences: 2, locationsAffected: 1, exampleLocation: 'https://example.org/',
     exampleSelector: 'img[src$="hero.svg"]', description: 'Images are missing an alt attribute.',
     whyItMatters: 'Screen reader users hear nothing.', stepsToReproduce: '1. Open the page.\n2. Find the image.',
     expected: 'Passes.', actual: 'Fix any of the following:\n  Element does not have an alt attribute',
     recommendation: 'Add alt text.', effort: 'Small', labels: ['prego', 'accessibility', 'wcag-1.1.1'], auditorNotes: '',
-    firstSeen: '2026-10-30', lastSeen: '2026-10-30', ...overrides,
+    ...overrides,
   };
 }
 
@@ -63,10 +63,10 @@ describe('tickets.csv', () => {
     // Dismissed tickets are left out.
     expect(rows.map((r) => r[0])).toEqual(['PRG-A11Y-001', 'PRG-SEC-001']);
     const a11y = Object.fromEntries(header.map((h, i) => [h, rows[0][i]]));
-    expect(a11y).toMatchObject({ Screenshot: 'PRG-A11Y-001_01.png', 'Report section': '4.1', Labels: 'prego accessibility wcag-1.1.1' });
+    expect(a11y).toMatchObject({ 'Report section': '4.1', Labels: 'prego accessibility wcag-1.1.1' });
     expect(a11y['Steps to reproduce']).toBe('1. Open the page.\n2. Find the image.');
     const sec = Object.fromEntries(header.map((h, i) => [h, rows[1][i]]));
-    expect(sec).toMatchObject({ 'Report section': '4.2', Screenshot: '', 'WCAG criterion': '' });
+    expect(sec).toMatchObject({ 'Report section': '4.2', 'WCAG criterion': '' });
   });
 
   it('applies the Jira preset', () => {
@@ -88,7 +88,7 @@ describe('tickets.csv', () => {
     expect(header).toEqual(['Title', 'Assignee', 'Description', 'Start Date', 'Due Date', 'Initial Estimate', 'Workflow Status']);
     const row = Object.fromEntries(header.map((h, i) => [h, rows[0][i]]));
     expect(row).toMatchObject({ Title: 'PRG-A11Y-001: Images have no text alternative (/)', Assignee: '', 'Start Date': '', 'Due Date': '', 'Initial Estimate': '', 'Workflow Status': 'Open' });
-    expect(row.Description).toMatch(/^Severity: Critical · Priority: P1 · Category: A11Y · Effort: Small · Screenshot: screenshots\/PRG-A11Y-001_01\.png\n\nImages are missing/);
+    expect(row.Description).toMatch(/^Severity: Critical · Priority: P1 · Category: A11Y · Effort: Small\n\nImages are missing/);
     expect(row.Description).toContain('Prego ticket: PRG-A11Y-001, report section 4.1');
     expect(rows).toHaveLength(plan.tickets.length);
   });
@@ -101,17 +101,14 @@ describe('tickets.csv', () => {
 });
 
 describe('occurrences.csv', () => {
-  it('has one row per occurrence with matching screenshot names', () => {
+  it('has one row per occurrence', () => {
     const [header, ...rows] = read(occurrencesCsv(plan));
-    expect(header).toEqual(['Ticket ID', 'Location (URL or state ID)', 'Viewport', 'Selector', 'HTML snippet', 'Screenshot crop']);
+    expect(header).toEqual(['Ticket ID', 'Location (URL or state ID)', 'Viewport', 'Selector', 'HTML snippet']);
     expect(rows).toEqual([
-      ['PRG-A11Y-001', 'https://example.org/', 'desktop', 'img', '<img src="café.png" alt="">', 'PRG-A11Y-001_01.png'],
-      ['PRG-A11Y-001', 'https://example.org/', 'desktop', 'img', '<img src="café.png" alt="">', 'PRG-A11Y-001_02.png'],
-      ['PRG-SEC-001', 'https://example.org/', 'desktop', 'img', '<img src="café.png" alt="">', ''],
+      ['PRG-A11Y-001', 'https://example.org/', 'desktop', 'img', '<img src="café.png" alt="">'],
+      ['PRG-A11Y-001', 'https://example.org/', 'desktop', 'img', '<img src="café.png" alt="">'],
+      ['PRG-SEC-001', 'https://example.org/', 'desktop', 'img', '<img src="café.png" alt="">'],
     ]);
-    expect([...plan.screenshots.entries()]).toEqual([
-      ['PRG-A11Y-001_01.png', 'crops/1.png'],
-      ['PRG-A11Y-001_02.png', 'crops/2.png'],
-    ]);
+    expect(plan.tickets[0].occurrenceList.map((o) => o.screenshotFile)).toEqual(['PRG-A11Y-001_01.png', 'PRG-A11Y-001_02.png']);
   });
 });

@@ -47,7 +47,7 @@ describe('ticket triage', () => {
     const contrast = find('color-contrast', '/');
     expect(updateTicket(db, runId, contrast.ticketId, { dismissed: true }).status).toBe('Dismissed');
     expect(buildExportPlan(db, runId).tickets.map((t) => t.ticketId)).not.toContain(contrast.ticketId);
-    expect(updateTicket(db, runId, contrast.ticketId, { dismissed: false }).status).toBe('New');
+    expect(updateTicket(db, runId, contrast.ticketId, { dismissed: false }).status).toBe('Open');
     updateTicket(db, runId, contrast.ticketId, { dismissed: true });
   });
 
@@ -79,11 +79,11 @@ describe('ticket triage', () => {
     const next = await runAudit(db, { project: 'Acme', target: 'fixtures/bad-site', dataDir, delayMs: 0 });
     const again = db.getTickets(next.run.id);
     const byId = (id: string) => again.find((t) => t.ticketId === id);
-    expect(byId(find('html-has-lang').ticketId)).toMatchObject({ severity: 'Low', auditorNotes: 'Client CMS sets this; check with dev team', status: 'Recurring' });
+    expect(byId(find('html-has-lang').ticketId)).toMatchObject({ severity: 'Low', auditorNotes: 'Client CMS sets this; check with dev team', status: 'Open' });
     expect(byId(find('color-contrast', '/').ticketId)?.status).toBe('Dismissed');
     expect(byId(find('heading-order', '/news/*').ticketId)).toBeUndefined();
     expect(byId(find('heading-order', '/').ticketId)?.locationsAffected).toBe(3);
     // Untouched tickets keep their IDs.
-    expect(byId(find('image-alt', null).ticketId)).toMatchObject({ occurrences: 5, status: 'Recurring' });
+    expect(byId(find('image-alt', null).ticketId)).toMatchObject({ occurrences: 5, status: 'Open' });
   }, 120_000);
 });

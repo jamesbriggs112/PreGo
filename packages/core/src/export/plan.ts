@@ -7,14 +7,14 @@ const NOT_EXPORTED = new Set<Ticket['status']>(['Dismissed', 'Needs review']);
 
 export interface PlannedOccurrence extends Occurrence {
   location: Location;
-  /** File name in the export's screenshots/ folder, e.g. `PRG-A11Y-014_02.png`, or null if no crop. */
+  /** Name for the occurrence's outlined crop, e.g. `PRG-A11Y-014_02.png`, or null if no crop. */
   screenshotFile: string | null;
 }
 
 export interface PlannedTicket extends Ticket {
   /** Word report section the ticket appears in, e.g. `4.2`. */
   reportSection: string;
-  /** First outlined crop, used in the CSV and the report. */
+  /** First outlined crop, shown in the report. */
   screenshotFile: string | null;
   occurrenceList: PlannedOccurrence[];
 }
@@ -34,17 +34,12 @@ export interface ReportSectionPlan {
 export interface ExportPlan {
   project: Project;
   run: Run;
-  previousRun: Run | undefined;
   locations: Location[];
   /** For interactive audits: what each action did. */
   edges: StateEdge[];
   sections: ReportSectionPlan[];
-  /** Current problems, in report order. */
+  /** Exported tickets, in report order. */
   tickets: PlannedTicket[];
-  /** Problems the previous audit had and this one checked for and didn't find (report section 6). */
-  fixed: PlannedTicket[];
-  /** Screenshot file name in the export → source path relative to the run folder. */
-  screenshots: Map<string, string>;
 }
 
 /** The explored screens, with their exported issues, for drawing the state map. */
@@ -67,30 +62,17 @@ export function stateMapStates(plan: ExportPlan): ImageState[] {
 
 /** Section 4 of the report holds findings; each category with tickets gets a subsection. */
 export const FINDINGS_SECTION = 4;
-/** Section 6 compares with the previous audit, and lists what was fixed. */
-export const COMPARISON_SECTION = '6';
-
-/** Every ticket in the CSV: current problems, then fixed ones. */
-export function allExported(plan: ExportPlan): PlannedTicket[] {
-  return [...plan.tickets, ...plan.fixed];
-}
-
 export function buildExportPlan(db: PregoDb, runId: number): ExportPlan {
   const run = db.getRun(runId);
   if (!run) throw new Error(`Run ${runId} not found`);
   const project = db.getProject(run.projectId)!;
   const locations = db.getLocations(runId);
   const locationById = new Map(locations.map((l) => [l.id, l]));
-  const screenshots = new Map<string, string>();
 
-  const all = db
+  const exported = db
     .getTickets(runId)
     .filter((t) => !NOT_EXPORTED.has(t.status))
     .sort((a, b) => a.ticketId.localeCompare(b.ticketId, 'en', { numeric: true }));
-  const exported = all.filter((t) => t.status !== 'Fixed');
-  const fixed = all
-    .filter((t) => t.status === 'Fixed')
-    .map((t): PlannedTicket => ({ ...t, reportSection: COMPARISON_SECTION, screenshotFile: null, occurrenceList: [] }));
 
   const sections: ReportSectionPlan[] = [];
   for (const category of CATEGORIES) {
@@ -101,10 +83,7 @@ export function buildExportPlan(db: PregoDb, runId: number): ExportPlan {
       let n = 0;
       const occurrenceList = db.getOccurrences(runId, ticket.ticketId).map((occurrence): PlannedOccurrence => {
         let screenshotFile: string | null = null;
-        if (occurrence.crop) {
-          screenshotFile = `${ticket.ticketId}_${String(++n).padStart(2, '0')}.png`;
-          screenshots.set(screenshotFile, occurrence.crop);
-        }
+        if (occurrence.crop) screenshotFile = `${ticket.ticketId}_${String(++n).padStart(2, '0')}.png`;
         return { ...occurrence, location: locationById.get(occurrence.locationId)!, screenshotFile };
       });
       return {
@@ -120,12 +99,9 @@ export function buildExportPlan(db: PregoDb, runId: number): ExportPlan {
   return {
     project,
     run,
-    previousRun: db.previousRun(runId),
     locations,
     edges: db.getEdges(runId),
     sections,
     tickets: sections.flatMap((s) => s.tickets),
-    fixed,
-    screenshots,
   };
 }

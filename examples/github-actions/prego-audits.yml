@@ -34,8 +34,8 @@ jobs:
 
       - run: npm run build
 
-      # Keep the database between runs, so each audit is compared with the last one
-      # (New, Fixed, Recurring and Regressed tickets, and changes since the last audit).
+      # Keep the database between runs, so ticket IDs stay the same and dismissed false positives
+      # stay dismissed.
       - uses: actions/cache@v4
         with:
           path: data
@@ -48,7 +48,7 @@ jobs:
           # One secret per site that needs a password, named in the schedule file's passwordEnv.
           ACME_STAGING_PASSWORD: ${{ secrets.ACME_STAGING_PASSWORD }}
 
-      # Reports, tickets.csv and screenshots, downloadable from the run page for 30 days.
+      # Reports (with their screenshots) and tickets.csv, downloadable from the run page for 30 days.
       - uses: actions/upload-artifact@v4
         if: always()
         with:

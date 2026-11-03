@@ -42,21 +42,20 @@ describe('scheduled runs', () => {
     // The first audit used the Productive preset.
     expect(readFileSync(join(exports[0], 'tickets.csv'), 'utf8').split('\n')[0]).toMatch(/^"Title","Assignee","Description"/);
     const summary = readFileSync(summaryFile, 'utf8');
-    expect(summary).toMatch(/\| Acme Widgets \(fixture\) \| fixtures\/bad-site \| Complete \| \d+ \| \d+ \| 0 \| 0 \|/);
+    expect(summary).toMatch(/\| Acme Widgets \(fixture\) \| fixtures\/bad-site \| Complete \| \d+ \| \d+ \| \d+ \| \d+ \| \d+ \|/);
     expect(summary).toMatch(/\| Museum of Making \(fixture\) \| fixtures\/kiosk-app \| Complete \|/);
   }, 400_000);
 
-  it('compares with the last scheduled run, and fails only on new problems at the chosen severity', async () => {
-    const path = config([{ project: 'Acme Widgets (fixture)', target: 'fixtures/bad-site', checks: ['axe'], delay: 0, viewports: ['desktop', 'mobile'], export: false, failOn: 'Critical' }]);
-    const again = await prego(['run', path, '--quiet']);
-    // Same project as the first test: the axe tickets are already known, so nothing is new.
-    expect(again.code).toBe(0);
-    expect(again.stdout).toMatch(/\| Complete \| \d+ \| 0 \| 0 \| 0 \|/);
+  it('fails only when an issue is at the chosen severity or worse', async () => {
+    const path = config([{ project: 'Acme Widgets (fixture)', target: 'fixtures/bad-site', checks: ['axe'], delay: 0, export: false }]);
+    const passing = await prego(['run', path, '--quiet']);
+    expect(passing.code).toBe(0);
+    expect(passing.stdout).toMatch(/\| Complete \| \d+ \| [1-9]\d* \|/);
 
-    const fresh = config([{ project: 'Brand new project', target: 'fixtures/bad-site', checks: ['axe'], delay: 0, export: false, failOn: 'Critical' }]);
-    const failing = await prego(['run', fresh, '--quiet']);
+    const strict = config([{ project: 'Acme Widgets (fixture)', target: 'fixtures/bad-site', checks: ['axe'], delay: 0, export: false, failOn: 'Critical' }]);
+    const failing = await prego(['run', strict, '--quiet']);
     expect(failing.code).toBe(1);
-    expect(failing.stderr).toMatch(/✗ Brand new project: \d+ new or returning issues? at Critical severity or worse:/);
+    expect(failing.stderr).toMatch(/✗ Acme Widgets \(fixture\): \d+ issues? at Critical severity or worse:/);
     expect(failing.stdout).toMatch(/✗ \d+ blocking/);
   }, 300_000);
 

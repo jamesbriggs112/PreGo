@@ -25,10 +25,10 @@ function seedRun() {
 function ticketFor(runId: number, ticketId: string): Ticket {
   return {
     runId, ticketId, fingerprint: 'fp1', category: 'A11Y', title: 'Images have no text alternative', severity: 'High',
-    priority: 'P2', status: 'New', wcagCriterion: '1.1.1', wcagLevel: 'A', ruleId: 'image-alt', engine: 'axe-core',
+    priority: 'P2', status: 'Open', wcagCriterion: '1.1.1', wcagLevel: 'A', ruleId: 'image-alt', engine: 'axe-core',
     templateKey: '/', occurrences: 1, locationsAffected: 1, exampleLocation: 'https://makeuk.org/', exampleSelector: 'img',
     description: 'd', whyItMatters: 'w', stepsToReproduce: 's', expected: 'e', actual: 'a', recommendation: 'r',
-    effort: 'Small', labels: ['accessibility', 'wcag-1.1.1'], auditorNotes: '', firstSeen: 'x', lastSeen: 'y',
+    effort: 'Small', labels: ['accessibility', 'wcag-1.1.1'], auditorNotes: '',
   };
 }
 
@@ -44,15 +44,13 @@ describe('PregoDb', () => {
     expect(slugify('Musée d’Orsay!')).toBe('musee-d-orsay');
   });
 
-  it('creates, reads and finishes runs, and finds the previous run', () => {
+  it('creates, reads and finishes runs', () => {
     const { project, run } = seedRun();
     expect(run.status).toBe('running');
     expect(run.settings).toEqual({ maxPages: 10 });
     db.finishRun(run.id, 'complete', { tickets: 3 });
     expect(db.getRun(run.id)).toMatchObject({ status: 'complete', summary: { tickets: 3 } });
     const second = db.createRun({ projectId: project.id, mode: 'crawl', target: 'https://makeuk.org/' });
-    expect(db.previousRun(second.id)?.id).toBe(run.id);
-    expect(db.previousRun(run.id)).toBeUndefined();
     expect(db.listRuns(project.id).map((r) => r.id)).toEqual([run.id, second.id]);
   });
 
@@ -92,7 +90,6 @@ describe('PregoDb', () => {
     expect(db.ticketIdFor(project.id, 'fp2', 'A11Y', run.id).ticketId).toBe('PRG-A11Y-002');
     expect(db.ticketIdFor(project.id, 'fp3', 'SEC', run.id).ticketId).toBe('PRG-SEC-001');
     expect(db.ticketIdFor(project.id, 'fp1', 'A11Y', run.id + 1)).toEqual({ ticketId: 'PRG-A11Y-001', isNew: false });
-    expect(db.ticketFirstSeenRun(project.id, 'PRG-A11Y-001')).toBe(run.id);
     // Another project numbers independently.
     const other = db.createProject('Other');
     expect(db.ticketIdFor(other.id, 'fp1', 'A11Y', run.id).ticketId).toBe('PRG-A11Y-001');

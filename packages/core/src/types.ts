@@ -20,7 +20,8 @@ export const SEVERITIES: readonly Severity[] = ['Critical', 'High', 'Medium', 'L
 
 export type Priority = 'P1' | 'P2' | 'P3' | 'P4';
 
-export type TicketStatus = 'New' | 'Recurring' | 'Fixed' | 'Regressed' | 'Dismissed' | 'Needs review';
+/** Open tickets are exported; dismissed ones and AI suggestions nobody has approved are not. */
+export type TicketStatus = 'Open' | 'Dismissed' | 'Needs review';
 
 export type RunStatus = 'running' | 'complete' | 'failed' | 'stopped';
 
@@ -161,8 +162,6 @@ export interface Ticket {
   effort: string;
   labels: string[];
   auditorNotes: string;
-  firstSeen: string;
-  lastSeen: string;
 }
 
 export interface Occurrence {

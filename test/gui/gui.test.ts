@@ -160,9 +160,9 @@ describe('Results and ticket triage', () => {
 
     await page.getByRole('link', { name: 'Back to tickets' }).click();
     await expect.poll(() => rows().filter({ hasText: contrast.ticketId }).count()).toBe(0);
-    await page.getByLabel('Status').selectOption('Dismissed');
+    await page.getByLabel('Show').selectOption('Dismissed');
     await expect.poll(() => rows().count()).toBe(1);
-    await page.getByLabel('Status').selectOption('open');
+    await page.getByLabel('Show').selectOption('open');
   });
 
   it('merges selected tickets', async () => {
@@ -215,6 +215,8 @@ describe('Settings and Export screens', () => {
     await page.goto(`${gui.url}runs/${runId}`);
     await page.getByRole('link', { name: 'Export report and tickets' }).click();
     await page.getByRole('heading', { name: /^Export/, level: 1 }).waitFor();
+    // This audit was exported in an earlier test, which deleted its screenshots.
+    await page.getByRole('note').getByText(/screenshots were deleted when it was first exported/).waitFor();
     // The saved preset is preselected.
     await expect(page.getByLabel('Jira').isChecked()).resolves.toBe(true);
     await page.getByLabel('Prego standard columns').check();
@@ -235,7 +237,8 @@ describe('Settings and Export screens', () => {
     const bundle = await JSZip.loadAsync(readFileSync((await zip.path())!));
     const names = Object.keys(bundle.files);
     for (const file of ['report.docx', 'tickets.csv', 'occurrences.csv', 'run.json']) expect(names).toContainEqual(expect.stringMatching(new RegExp(`/${file.replace('.', '\\.')}$`)));
-    expect(names.some((n) => /screenshots\/PRG-A11Y-\d{3}_\d{2}\.png$/.test(n))).toBe(true);
+    // Screenshots are only in the report, never loose files.
+    expect(names.some((n) => n.includes('/screenshots/'))).toBe(false);
   }, 120_000);
 
   it('previews the report', async () => {
@@ -414,22 +417,47 @@ describe('Test groups', () => {
   }, 120_000);
 });
 
-describe('Compare screen', () => {
-  it('compares an audit with the one before, and has no axe violations', async () => {
+
+describe('Setting up an audit by typing', () => {
+  it('reads the request, shows the settings to confirm, and starts only when confirmed', async () => {
     const { page } = gui;
-    // A second crawl of the same site, to compare with the first.
-    const res = await fetch(`${gui.url}api/runs`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ project: 'Acme Widgets', target: fixture, checks: ['axe'], delayMs: 0 }),
-    });
-    const latest = { id: (await res.json()).runId as number };
-    await gui.prego.jobs.get(latest.id)!.done;
-    await page.goto(`${gui.url}runs/${latest.id}`);
-    await page.getByRole('link', { name: 'Compare with previous audit' }).click();
-    await page.getByRole('heading', { name: 'Compare audits: Acme Widgets' }).waitFor();
-    await expect(page.getByLabel('Later audit').inputValue()).resolves.toBe(String(latest.id));
-    await page.getByRole('heading', { name: /^Still present \(\d+\)$/ }).waitFor();
+    await page.goto(gui.url);
+    const runsBefore = gui.db.listProjects().flatMap((p) => gui.db.listRuns(p.id)).length;
+    await page.getByLabel('Describe the audit').fill(`quick check of ${journeySite.origin}/ on mobile`);
+    await page.getByRole('button', { name: 'Set up audit' }).click();
+    await page.getByRole('heading', { name: 'Check these settings' }).waitFor();
+    const settings = page.getByRole('region', { name: 'Check these settings' });
+    await expect(settings.getByText('Quick check').count()).resolves.toBe(1);
+    await expect(settings.getByText('Mobile', { exact: true }).count()).resolves.toBe(1);
     expect(await axeViolations(page)).toEqual([]);
+    expect(gui.db.listProjects().flatMap((p) => gui.db.listRuns(p.id))).toHaveLength(runsBefore);
+
+    // Change settings opens the full form with everything filled in.
+    await page.getByRole('button', { name: 'Change settings' }).click();
+    await page.waitForURL(/\/audits\/new\?/);
+    await expect(page.getByLabel('Web address or folder').inputValue()).resolves.toBe(`${journeySite.origin}/`);
+    await expect(page.getByLabel(/^Mobile/).isChecked()).resolves.toBe(true);
+    await expect(page.getByLabel(/^Desktop/).isChecked()).resolves.toBe(false);
+    await expect(page.getByRole('radio', { name: /Quick check/ }).isChecked()).resolves.toBe(true);
+
+    await page.goBack();
+    await page.getByLabel('Describe the audit').fill(`quick check of ${journeySite.origin}/ on mobile`);
+    await page.getByRole('button', { name: 'Set up audit' }).click();
+    await page.getByRole('button', { name: 'Start audit' }).click();
+    await page.waitForURL(/\/runs\/\d+$/);
+    const started = gui.db.getRun(Number(page.url().split('/').pop()))!;
+    expect(started).toMatchObject({ target: `${journeySite.origin}/` });
+    expect(started.settings).toMatchObject({ viewports: ['mobile'] });
+    expect((started.settings.modules as { id: string }[]).map((m) => m.id).sort()).toEqual(['axe', 'golive', 'links', 'security']);
+    await gui.prego.jobs.get(started.id)!.done;
   }, 120_000);
+
+  it('asks for the site when the request doesn’t name one', async () => {
+    const { page } = gui;
+    await page.goto(gui.url);
+    await page.getByLabel('Describe the audit').fill('run an accessibility audit');
+    await page.getByRole('button', { name: 'Set up audit' }).click();
+    await page.getByText(/^Say which site to audit/).waitFor();
+    await expect(page.getByRole('button', { name: 'Start audit' }).count()).resolves.toBe(0);
+  });
 });

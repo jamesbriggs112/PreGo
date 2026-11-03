@@ -30,7 +30,7 @@ export interface ScheduledAudit {
   passwordEnv?: string;
   preset?: string;
   export?: boolean;
-  /** Fail the run (exit code 1) if any New or Regressed ticket is at this severity or worse. */
+  /** Fail the run (exit code 1) if any issue is at this severity or worse. */
   failOn?: Severity;
 }
 

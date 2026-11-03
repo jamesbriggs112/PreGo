@@ -1,6 +1,6 @@
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
 import fastifyStatic from '@fastify/static';
-import { createReadStream, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { createReadStream, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { basename, dirname, extname, join, resolve, sep } from 'node:path';
 import JSZip from 'jszip';
 import mammoth from 'mammoth';
@@ -15,11 +15,7 @@ import {
   checkDefinitions,
   aiSettings,
   assertLocalOllama,
-  compareRuns,
-  checkCosts,
-  calibrate,
   CHECK_GROUPS,
-  type RecordedTimings,
   unknownChecks,
   ensureJourneysDir,
   journeysDir,
@@ -30,6 +26,7 @@ import {
   stateMapPng,
   stateMapStates,
   exportRun,
+  runImagesDeleted,
   getSettings,
   logoPath,
   reportBranding,
@@ -51,6 +48,7 @@ import {
   type Run,
 } from '@prego/core';
 import { AuditInProgressError, JobRunner, type JobEvent } from './jobs.js';
+import { planAudit, recentCalibration } from './assistant.js';
 import { playwrightCodegen, type Recorder, type Recording } from './recorder.js';
 
 export interface AppOptions {
@@ -187,16 +185,15 @@ export async function buildApp(options: AppOptions): Promise<PregoApp> {
   );
 
   // Test groups, and how long checks took in the last 20 audits on this machine, for time estimates.
-  app.get('/api/check-groups', async () => {
-    const recent = db
-      .listProjects()
-      .flatMap((p) => db.listRuns(p.id))
-      .filter((r) => r.status === 'complete' && r.summary.timings)
-      .sort((a, b) => b.id - a.id)
-      .slice(0, 20)
-      .map((r) => r.summary.timings as RecordedTimings);
-    return { groups: CHECK_GROUPS, calibration: calibrate(recent, checkCosts()) };
-  });
+  app.get('/api/check-groups', async () => ({ groups: CHECK_GROUPS, calibration: recentCalibration(db) }));
+
+  // Read a typed request ("an accessibility audit of fcn.com") into audit settings, for the person
+  // to confirm. It never starts an audit itself.
+  app.post<{ Body: { text: string } }>(
+    '/api/assistant/plan',
+    { schema: { body: { type: 'object', required: ['text'], additionalProperties: false, properties: { text: { type: 'string', minLength: 1, maxLength: 1000 } } } } },
+    async (request) => planAudit(db, request.body.text),
+  );
 
   // Projects
 
@@ -382,32 +379,7 @@ export async function buildApp(options: AppOptions): Promise<PregoApp> {
       settings: run.settings,
       locations: db.getLocations(run.id),
       scores: run.status === 'complete' ? scoresFor(db, run) : null,
-      hasPrevious: !!db.previousRun(run.id),
-    };
-  });
-
-  // Two audits of the same project side by side. `with` defaults to the audit before this one.
-  app.get<{ Params: { id: string }; Querystring: { with?: string } }>('/api/runs/:id/compare', async (request, reply) => {
-    const target = db.getRun(Number(request.params.id));
-    if (!target) return reply.code(404).send({ error: 'Run not found' });
-    const base = request.query.with ? db.getRun(Number(request.query.with)) : db.previousRun(target.id);
-    if (!base) return reply.code(404).send({ error: 'There’s no earlier audit of this project to compare with.' });
-    if (base.projectId !== target.projectId) return reply.code(400).send({ error: 'Both audits must belong to the same project.' });
-    if (base.status !== 'complete' || target.status !== 'complete') return reply.code(400).send({ error: 'Both audits must be complete.' });
-    const [earlier, later] = base.id < target.id ? [base, target] : [target, base];
-    const comparison = compareRuns(db, earlier.id, later.id);
-    const slim = (t: { ticketId: string; title: string; category: string; severity: string; priority: string; status: string }) => ({ ticketId: t.ticketId, title: t.title, category: t.category, severity: t.severity, priority: t.priority, status: t.status });
-    const side = (run: Run) => ({ ...runSummary(run), scores: scoresFor(db, run) });
-    return {
-      project: db.getProject(later.projectId),
-      base: side(earlier),
-      target: side(later),
-      runs: db.listRuns(later.projectId).filter((r) => r.status === 'complete').map(runSummary),
-      added: comparison.added.map(slim),
-      fixed: comparison.fixed.map(slim),
-      regressed: comparison.regressed.map(slim),
-      recurring: comparison.recurring.map(slim),
-      notChecked: comparison.notChecked.map(slim),
+      screenshotsDeleted: runImagesDeleted(db, run.id),
     };
   });
 
@@ -480,6 +452,7 @@ export async function buildApp(options: AppOptions): Promise<PregoApp> {
     if (!ticket) return reply.code(404).send({ error: 'Ticket not found' });
     const locations = new Map(db.getLocations(runId).map((l) => [l.id, l]));
     const findings = new Map(db.getRawFindings(runId).map((f) => [f.id, f]));
+    const screenshotsDeleted = runImagesDeleted(db, runId);
     const occurrences = db.getOccurrences(runId, ticket.ticketId).map((o) => ({
       id: o.id,
       url: locations.get(o.locationId)?.url ?? '',
@@ -487,11 +460,11 @@ export async function buildApp(options: AppOptions): Promise<PregoApp> {
       viewport: o.viewport,
       selector: o.selector,
       html: o.html,
-      crop: o.crop,
+      crop: screenshotsDeleted ? null : o.crop,
       failureSummary: findings.get(o.rawFindingId)?.failureSummary ?? null,
     }));
     const helpUrl = db.getRawFindings(runId).find((f) => f.ticketId === ticket.ticketId)?.helpUrl ?? null;
-    return { ...ticket, helpUrl, occurrenceList: occurrences };
+    return { ...ticket, helpUrl, occurrenceList: occurrences, screenshotsDeleted };
   });
 
   app.patch<{ Params: { id: string; ticketId: string }; Body: TicketChanges }>(
@@ -658,8 +631,6 @@ export async function buildApp(options: AppOptions): Promise<PregoApp> {
     const zip = new JSZip();
     const folder = zip.folder(name)!;
     for (const file of Object.keys(EXPORT_FILES)) if (existsSync(join(record.dir, file))) folder.file(file, readFileSync(join(record.dir, file)));
-    const shots = join(record.dir, 'screenshots');
-    if (existsSync(shots)) for (const file of readdirSync(shots)) folder.file(`screenshots/${file}`, readFileSync(join(shots, file)));
     return reply
       .type('application/zip')
       .header('Content-Disposition', `attachment; filename="${name}.zip"`)
@@ -694,6 +665,7 @@ export async function buildApp(options: AppOptions): Promise<PregoApp> {
       ticketsByLocation.set(o.locationId, (ticketsByLocation.get(o.locationId) ?? new Set()).add(o.ticketId));
     }
     const firstViewport = ((run.settings.viewports as string[] | undefined) ?? [])[0];
+    const screenshotsDeleted = runImagesDeleted(db, runId);
     const states = db
       .getLocations(runId)
       .filter((l) => l.kind === 'state')
@@ -703,14 +675,14 @@ export async function buildApp(options: AppOptions): Promise<PregoApp> {
         title: l.title,
         depth: l.depth,
         steps: l.steps ?? [],
-        screenshot: l.screenshots[firstViewport] ?? Object.values(l.screenshots)[0] ?? null,
+        screenshot: screenshotsDeleted ? null : (l.screenshots[firstViewport] ?? Object.values(l.screenshots)[0] ?? null),
         tickets: [...(ticketsByLocation.get(l.id) ?? [])].map((id) => {
           const t = tickets.get(id)!;
           return { ticketId: t.ticketId, title: t.title, severity: t.severity, category: t.category };
         }),
       }));
     const edges = db.getEdges(runId).map((e) => ({ from: e.fromLocationId, to: e.toLocationId, label: e.step.label, outcome: e.outcome, reason: e.reason }));
-    return { states, edges };
+    return { states, edges, screenshotsDeleted };
   });
 
   // Screenshots and crops from a run folder.
@@ -749,7 +721,6 @@ const EXPORT_FILES: Record<string, string> = {
 };
 
 function exportSummary(record: ExportRecord) {
-  const shots = join(record.dir, 'screenshots');
   return {
     id: record.id,
     runId: record.runId,
@@ -758,7 +729,6 @@ function exportSummary(record: ExportRecord) {
     preset: record.preset,
     createdAt: record.createdAt,
     files: Object.keys(EXPORT_FILES).filter((f) => existsSync(join(record.dir, f))),
-    screenshots: existsSync(shots) ? readdirSync(shots).length : 0,
   };
 }
 
@@ -809,10 +779,10 @@ function runSummary(run: Run) {
   return { id: run.id, projectId: run.projectId, mode: run.mode, target: run.target, status: run.status, startedAt: run.startedAt, finishedAt: run.finishedAt, summary: run.summary, error: run.error };
 }
 
-/** Score per checked category for a finished run, ignoring dismissed and fixed tickets. */
+/** Score per checked category for a finished run, ignoring dismissed tickets and unapproved AI suggestions. */
 export function scoresFor(db: PregoDb, run: Run): Partial<Record<Category, number>> {
   const checked = checkedCategories(run.settings);
-  const tickets = db.getTickets(run.id).filter((t) => t.status !== 'Dismissed' && t.status !== 'Needs review' && t.status !== 'Fixed');
+  const tickets = db.getTickets(run.id).filter((t) => t.status === 'Open');
   const scores: Partial<Record<Category, number>> = {};
   for (const category of CATEGORIES) {
     if (!checked.has(category)) continue;

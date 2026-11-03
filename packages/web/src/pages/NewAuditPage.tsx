@@ -1,7 +1,7 @@
 import { Children, cloneElement, isValidElement, useState, type FormEvent, type ReactNode } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { PROFILES, type ProfileName } from '@prego/core/profiles';
+import { PROFILES, isProfileName, type ProfileName } from '@prego/core/profiles';
 import { estimateAudit, formatEstimate, groupChecks } from '@prego/core/estimate';
 import { Clock } from 'lucide-react';
 import { api, ApiError, type JourneySummary, type Settings, type StartRunBody } from '@/lib/api';
@@ -50,27 +50,30 @@ function NewAuditForm({ defaults, defaultDenyLabels }: { defaults?: Settings['de
   const projects = useQuery({ queryKey: ['projects'], queryFn: api.projects });
 
   const [project, setProject] = useState(params.get('project') ?? '');
-  const [target, setTarget] = useState('');
-  const [viewports, setViewports] = useState<ProfileName[]>((defaults?.viewports as ProfileName[] | undefined) ?? ['desktop']);
+  // The audit assistant on the first page passes its settings here to be changed.
+  const listParam = (name: string) => params.get(name)?.split(',').filter(Boolean);
+  const limitParam = params.get('limit');
+  const [target, setTarget] = useState(params.get('target') ?? '');
+  const [viewports, setViewports] = useState<ProfileName[]>((listParam('viewports')?.filter(isProfileName) ?? (defaults?.viewports as ProfileName[] | undefined)) ?? ['desktop']);
   const [emulation, setEmulation] = useState<Record<string, boolean>>({});
-  const [maxPages, setMaxPages] = useState('100');
+  const [maxPages, setMaxPages] = useState(params.get('mode') !== 'explore' && limitParam ? limitParam : '100');
   const [maxDepth, setMaxDepth] = useState('10');
   const [timeBudget, setTimeBudget] = useState('');
   const [perTemplate, setPerTemplate] = useState(String(defaults?.perTemplate ?? 3));
-  const [auditAll, setAuditAll] = useState(false);
+  const [auditAll, setAuditAll] = useState(params.get('all') === '1');
   const [include, setInclude] = useState('');
   const [exclude, setExclude] = useState('');
   const [respectRobots, setRespectRobots] = useState(defaults?.respectRobots ?? true);
   const [useSitemap, setUseSitemap] = useState(true);
   const [concurrency, setConcurrency] = useState(String(defaults?.concurrency ?? 2));
   const [delay, setDelay] = useState(String(defaults?.delayMs ?? 500));
-  const [mode, setMode] = useState<'crawl' | 'explore' | 'journey'>('crawl');
+  const [mode, setMode] = useState<'crawl' | 'explore' | 'journey'>(params.get('mode') === 'explore' ? 'explore' : 'crawl');
   const checkList = useQuery({ queryKey: ['checks'], queryFn: api.checks });
   const checkGroups = useQuery({ queryKey: ['check-groups'], queryFn: api.checkGroups });
-  const [checks, setChecks] = useState<string[]>(defaults?.checks ?? []);
+  const [checks, setChecks] = useState<string[]>(listParam('checks') ?? defaults?.checks ?? []);
   const [journey, setJourney] = useState<JourneySummary | null>(null);
   const [loginJourney, setLoginJourney] = useState<JourneySummary | null>(null);
-  const [maxStates, setMaxStates] = useState('200');
+  const [maxStates, setMaxStates] = useState(params.get('mode') === 'explore' && limitParam ? limitParam : '200');
   const [exploreDepth, setExploreDepth] = useState('8');
   const [denyLabels, setDenyLabels] = useState(defaultDenyLabels.join('\n'));
   const [denySelectors, setDenySelectors] = useState('');

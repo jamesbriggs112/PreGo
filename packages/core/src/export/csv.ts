@@ -1,18 +1,21 @@
 import { stringify } from 'csv-stringify/sync';
 import { writeFileSync } from 'node:fs';
-import { allExported, type ExportPlan, type PlannedTicket } from './plan.js';
+import type { ExportPlan, PlannedTicket } from './plan.js';
 import type { Priority } from '../types.js';
 
-/** tickets.csv columns, in the order the spec sets (section 7.3). */
+/**
+ * tickets.csv columns, in the order the spec sets (section 7.3), without the status and history
+ * columns: tickets are managed in the team's own tool once exported. Screenshots are in the report.
+ */
 export const TICKET_COLUMNS = [
-  'Ticket ID', 'Title', 'Category', 'Severity', 'Priority', 'Status', 'WCAG criterion', 'WCAG level', 'Rule ID',
-  'Engine', 'Occurrences', 'Locations affected', 'Example location', 'Example selector', 'Screenshot', 'Description',
+  'Ticket ID', 'Title', 'Category', 'Severity', 'Priority', 'WCAG criterion', 'WCAG level', 'Rule ID',
+  'Engine', 'Occurrences', 'Locations affected', 'Example location', 'Example selector', 'Description',
   'Why it matters', 'Steps to reproduce', 'Expected', 'Actual', 'Recommendation', 'Effort', 'Report section',
-  'First seen', 'Last seen', 'Auditor notes', 'Labels',
+  'Auditor notes', 'Labels',
 ] as const;
 export type TicketColumn = (typeof TICKET_COLUMNS)[number];
 
-export const OCCURRENCE_COLUMNS = ['Ticket ID', 'Location (URL or state ID)', 'Viewport', 'Selector', 'HTML snippet', 'Screenshot crop'];
+export const OCCURRENCE_COLUMNS = ['Ticket ID', 'Location (URL or state ID)', 'Viewport', 'Selector', 'HTML snippet'];
 
 type Row = Record<TicketColumn, string>;
 
@@ -61,7 +64,7 @@ export const CSV_PRESETS: Record<string, CsvPreset> = {
   jira: {
     id: 'jira',
     name: 'Jira',
-    rename: { Title: 'Summary', Status: 'Prego status' },
+    rename: { Title: 'Summary' },
     values: {
       Priority: (v) => JIRA_PRIORITY[v as Priority] ?? v,
       Description: (_v, t) => fullDescription(t),
@@ -72,7 +75,6 @@ export const CSV_PRESETS: Record<string, CsvPreset> = {
   linear: {
     id: 'linear',
     name: 'Linear',
-    rename: { Status: 'Prego status' },
     values: {
       Priority: (v) => LINEAR_PRIORITY[v as Priority] ?? v,
       Description: (_v, t) => fullDescription(t),
@@ -87,11 +89,11 @@ export const CSV_PRESETS: Record<string, CsvPreset> = {
     only: [
       { header: 'Title', value: (t) => `${t.ticketId}: ${t.title}` },
       { header: 'Assignee', value: () => '' },
-      { header: 'Description', value: (t) => `Severity: ${t.severity} · Priority: ${t.priority} · Category: ${t.category} · Effort: ${t.effort}${t.screenshotFile ? ` · Screenshot: screenshots/${t.screenshotFile}` : ''}\n\n${fullDescription(t)}` },
+      { header: 'Description', value: (t) => `Severity: ${t.severity} · Priority: ${t.priority} · Category: ${t.category} · Effort: ${t.effort}\n\n${fullDescription(t)}` },
       { header: 'Start Date', value: () => '' },
       { header: 'Due Date', value: () => '' },
       { header: 'Initial Estimate', value: () => '' },
-      { header: 'Workflow Status', value: (t) => (t.status === 'Fixed' || t.status === 'Dismissed' ? 'Closed' : 'Open') },
+      { header: 'Workflow Status', value: () => 'Open' },
     ],
     noBom: true,
   },
@@ -110,7 +112,6 @@ function ticketRow(t: PlannedTicket): Row {
     Category: t.category,
     Severity: t.severity,
     Priority: t.priority,
-    Status: t.status,
     'WCAG criterion': t.wcagCriterion ?? '',
     'WCAG level': t.wcagLevel ?? '',
     'Rule ID': t.ruleId,
@@ -119,7 +120,6 @@ function ticketRow(t: PlannedTicket): Row {
     'Locations affected': String(t.locationsAffected),
     'Example location': t.exampleLocation ?? '',
     'Example selector': t.exampleSelector ?? '',
-    Screenshot: t.screenshotFile ?? '',
     Description: t.description,
     'Why it matters': t.whyItMatters,
     'Steps to reproduce': t.stepsToReproduce,
@@ -128,8 +128,6 @@ function ticketRow(t: PlannedTicket): Row {
     Recommendation: t.recommendation,
     Effort: t.effort,
     'Report section': t.reportSection,
-    'First seen': t.firstSeen,
-    'Last seen': t.lastSeen,
     'Auditor notes': t.auditorNotes,
     Labels: t.labels.join(' '),
   };
@@ -143,7 +141,7 @@ function toCsv(rows: string[][], bom = true): string {
 export function ticketsCsv(plan: ExportPlan, presetId = 'prego'): string {
   const preset = CSV_PRESETS[presetId];
   if (!preset) throw new Error(`Unknown CSV preset "${presetId}". Choose from: ${Object.keys(CSV_PRESETS).join(', ')}`);
-  const tickets = allExported(plan);
+  const tickets = plan.tickets;
   if (preset.only) return toCsv([preset.only.map((c) => c.header), ...tickets.map((t) => preset.only!.map((c) => c.value(t)))], !preset.noBom);
   const columns = TICKET_COLUMNS.filter((c) => !(preset.splitLabels && c === 'Labels'));
   const maxLabels = preset.splitLabels ? Math.max(1, ...tickets.map((t) => t.labels.length)) : 0;
@@ -165,7 +163,7 @@ export function ticketsCsv(plan: ExportPlan, presetId = 'prego'): string {
 
 export function occurrencesCsv(plan: ExportPlan): string {
   const rows = plan.tickets.flatMap((t) =>
-    t.occurrenceList.map((o) => [t.ticketId, o.location.stateId ?? o.location.url, o.viewport, o.selector, o.html, o.screenshotFile ?? '']),
+    t.occurrenceList.map((o) => [t.ticketId, o.location.stateId ?? o.location.url, o.viewport, o.selector, o.html]),
   );
   return toCsv([OCCURRENCE_COLUMNS, ...rows]);
 }

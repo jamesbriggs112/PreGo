@@ -10,7 +10,6 @@ import { TicketPage } from '@/pages/TicketPage';
 import { ExportPage } from '@/pages/ExportPage';
 import { SettingsPage } from '@/pages/SettingsPage';
 import { StateMapPage } from '@/pages/StateMapPage';
-import { ComparePage } from '@/pages/ComparePage';
 import { NotFoundPage } from '@/pages/NotFoundPage';
 
 const NAV = [
@@ -74,7 +73,6 @@ export function App() {
           <Route path="/runs/:runId/tickets/:ticketId" element={<TicketPage />} />
           <Route path="/runs/:runId/export" element={<ExportPage />} />
           <Route path="/runs/:runId/map" element={<StateMapPage />} />
-          <Route path="/runs/:runId/compare" element={<ComparePage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="*" element={<NotFoundPage />} />
         </Routes>

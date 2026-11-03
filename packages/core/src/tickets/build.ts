@@ -45,7 +45,6 @@ export function buildTickets(db: PregoDb, runId: number, options: BuildTicketsOp
   const locations = new Map(db.getLocations(runId).map((l) => [l.id, l]));
   const auditedCount = [...locations.values()].filter((l) => l.audited).length || 1;
   const keyJourney = new Set(options.keyJourneyUrls ?? []);
-  const runDate = run.startedAt.slice(0, 10);
 
   // Group findings by fingerprint, in a fixed order so new IDs are allocated the same way every time.
   // Findings are stored in whatever order pages finished auditing, so sort them first.
@@ -54,7 +53,6 @@ export function buildTickets(db: PregoDb, runId: number, options: BuildTicketsOp
     .map((finding) => ({ finding, key: orderKey(finding, locations) }))
     .sort((a, b) => compare(a.key, b.key))
     .map(({ finding }) => finding);
-  const comparison = compareWithPrevious(db, run, [...locations.values()]);
   const tickets: Ticket[] = [];
   db.transaction(() => {
     db.clearTickets(runId);
@@ -78,8 +76,6 @@ export function buildTickets(db: PregoDb, runId: number, options: BuildTicketsOp
     }
     for (const [ticketId, { fp, findings, primary }] of groups) {
       const first = primary ?? findings[0];
-      const firstSeenRunId = db.ticketFirstSeenRun(run.projectId, ticketId) ?? runId;
-      const firstSeen = firstSeenRunId === runId ? runDate : (db.getRun(firstSeenRunId)?.startedAt.slice(0, 10) ?? runDate);
       const location = locations.get(first.locationId)!;
       const affected = new Set(findings.map((f) => f.locationId));
       const severity = SEVERITIES.find((s) => findings.some((f) => f.severity === s))!;
@@ -106,7 +102,7 @@ export function buildTickets(db: PregoDb, runId: number, options: BuildTicketsOp
         severity,
         priority: calculatePriority(severity, reach, onKeyJourney),
         // AI suggestions wait for an auditor to approve them before they count or are exported.
-        status: first.engine === AI_ENGINE && !override?.approved ? 'Needs review' : firstSeenRunId === runId ? 'New' : comparison.statusOf(ticketId, first.module),
+        status: first.engine === AI_ENGINE && !override?.approved ? 'Needs review' : 'Open',
         wcagCriterion: criterion,
         wcagLevel: first.wcagLevel,
         ruleId: first.ruleId,
@@ -127,8 +123,6 @@ export function buildTickets(db: PregoDb, runId: number, options: BuildTicketsOp
         effort: guidance.effort,
         labels: labelsFor(first),
         auditorNotes: '',
-        firstSeen,
-        lastSeen: runDate,
       };
       if (override) applyOverride(ticket, override, reach, onKeyJourney);
       db.saveTicket(ticket);
@@ -147,62 +141,8 @@ export function buildTickets(db: PregoDb, runId: number, options: BuildTicketsOp
         });
       }
     }
-    // Problems from the previous audit that this audit checked for, in the same places, and didn't find.
-    for (const ticket of comparison.fixed(new Set(groups.keys()))) {
-      db.saveTicket(ticket);
-      tickets.push(ticket);
-    }
   });
   return tickets.sort((a, b) => a.ticketId.localeCompare(b.ticketId, 'en', { numeric: true }));
-}
-
-/** Where a location is, for matching it across audits: its path, and the screen title for explored screens. */
-export function locationKey(location: Pick<Location, 'url' | 'kind' | 'title'>): string {
-  const url = new URL(location.url);
-  return `${url.pathname}${url.search}${location.kind === 'state' ? `#${location.title ?? ''}` : ''}`;
-}
-
-/**
- * Status against the project's previous complete audit. A ticket is Recurring if that audit had it,
- * Regressed if it was seen before but that audit checked for it and didn't find it (or marked it
- * Fixed), and Fixed if that audit had it, this audit ran the same check on at least one of the same
- * locations, and nothing was found. Anything this audit didn't check stays out, so running a smaller
- * test group doesn't make problems look fixed.
- */
-function compareWithPrevious(db: PregoDb, run: { id: number; settings: Record<string, unknown> }, locations: Location[]) {
-  const previous = db.previousRun(run.id);
-  const modulesOf = (settings: Record<string, unknown>) => new Set(((settings.modules as { id: string }[] | undefined) ?? []).map((m) => m.id));
-  const ranNow = modulesOf(run.settings);
-  const ranBefore = previous ? modulesOf(previous.settings) : new Set<string>();
-  const previousTickets = new Map((previous ? db.getTickets(previous.id) : []).map((t) => [t.ticketId, t]));
-  const checkedNow = new Set(locations.filter((l) => l.audited).map(locationKey));
-
-  return {
-    statusOf(ticketId: string, module: string): Ticket['status'] {
-      const before = previousTickets.get(ticketId);
-      if (before && before.status !== 'Fixed') return 'Recurring';
-      return previous && ranBefore.has(module) ? 'Regressed' : 'Recurring';
-    },
-    fixed(present: Set<string>): Ticket[] {
-      if (!previous) return [];
-      const previousLocations = new Map(db.getLocations(previous.id).map((l) => [l.id, l]));
-      const findings = new Map<string, RawFinding[]>();
-      for (const f of db.getRawFindings(previous.id)) if (f.ticketId) findings.set(f.ticketId, [...(findings.get(f.ticketId) ?? []), f]);
-      const out: Ticket[] = [];
-      for (const ticket of previousTickets.values()) {
-        if (present.has(ticket.ticketId) || ticket.status === 'Fixed' || ticket.status === 'Dismissed' || ticket.status === 'Needs review') continue;
-        const own = findings.get(ticket.ticketId) ?? [];
-        if (!own.length || !own.every((f) => ranNow.has(f.module))) continue;
-        const rechecked = own.some((f) => {
-          const location = previousLocations.get(f.locationId);
-          return location && checkedNow.has(locationKey(location));
-        });
-        if (!rechecked) continue;
-        out.push({ ...ticket, runId: run.id, status: 'Fixed', occurrences: 0, locationsAffected: 0 });
-      }
-      return out;
-    },
-  };
 }
 
 /** Apply the auditor's saved triage to a freshly built ticket. */

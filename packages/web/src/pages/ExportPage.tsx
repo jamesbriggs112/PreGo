@@ -46,9 +46,17 @@ export function ExportPage() {
       <div>
         <h1 className="text-2xl font-bold">Export{run.data ? ` ${run.data.project.name}` : ''}</h1>
         <p className="text-muted-foreground">
-          One folder with the Word report, tickets.csv, occurrences.csv and screenshots, all cross-referenced by ticket ID. Dismissed tickets are left out.
+          One folder with the Word report, tickets.csv and occurrences.csv, all cross-referenced by ticket ID. Dismissed tickets are left out.
         </p>
       </div>
+
+      {run.data && (
+        <Alert role="note">
+          {run.data.screenshotsDeleted
+            ? 'This audit’s screenshots were deleted when it was first exported, so a new export’s report won’t have any. The earlier report still has them.'
+            : 'Exporting puts the screenshots into the Word report and then deletes them from Prego. To keep them, keep the report.'}
+        </Alert>
+      )}
 
       <Card>
         <CardHeader>
@@ -159,7 +167,7 @@ function ExportCard({ summary, heading }: { summary: ExportSummary; heading: str
       <CardHeader>
         <CardTitle>{heading}</CardTitle>
         <CardDescription>
-          {formatDateTime(summary.createdAt)} · CSV for {CSV_PRESET_OPTIONS.find((p) => p.id === summary.preset)?.label ?? summary.preset} · {summary.screenshots} screenshots
+          {formatDateTime(summary.createdAt)} · CSV for {CSV_PRESET_OPTIONS.find((p) => p.id === summary.preset)?.label ?? summary.preset}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">

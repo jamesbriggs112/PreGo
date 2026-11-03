@@ -33,9 +33,7 @@ describe('ticket grouping', () => {
   it('gives identical ticket IDs on two runs of an unchanged site', () => {
     expect(first.length).toBeGreaterThan(5);
     expect(second.map((t) => [t.ticketId, t.fingerprint])).toEqual(first.map((t) => [t.ticketId, t.fingerprint]));
-    expect(first.every((t) => t.status === 'New')).toBe(true);
-    expect(second.every((t) => t.status === 'Recurring')).toBe(true);
-    expect(second.every((t) => t.firstSeen === first[0].firstSeen)).toBe(true);
+    expect([...first, ...second].every((t) => t.status === 'Open')).toBe(true);
   });
 
   it('numbers tickets PRG-{CATEGORY}-{NNN} without gaps, per category', () => {

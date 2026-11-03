@@ -47,7 +47,7 @@ describe('canvas detection', () => {
     const db = new PregoDb(':memory:');
     const { run } = await runAudit(db, { project: 'Gallery', target: cases.url + 'canvas.html', dataDir, delayMs: 0, maxDepth: 0, useSitemap: false });
     const ticket = db.getTickets(run.id).find((t) => t.ruleId === 'canvas-content')!;
-    expect(ticket).toMatchObject({ labels: expect.arrayContaining(['manual-review']), status: 'New' });
+    expect(ticket).toMatchObject({ labels: expect.arrayContaining(['manual-review']), status: 'Open' });
     expect(db.getOccurrences(run.id, ticket.ticketId)[0].crop).toMatch(/^crops/);
     expect(run.settings.modules).toContainEqual({ id: 'canvas', name: 'Canvas and WebGL detection' });
     db.close();

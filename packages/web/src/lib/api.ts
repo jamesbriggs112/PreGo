@@ -14,35 +14,13 @@ export interface ProjectDetail extends Project {
   runs: RunSummary[];
 }
 
-export interface ComparedTicket {
-  ticketId: string;
-  title: string;
-  category: Category;
-  severity: Severity;
-  priority: Priority;
-  status: Ticket['status'];
-}
-
-export interface Comparison {
-  project: Project;
-  base: RunSummary & { scores: Scores };
-  target: RunSummary & { scores: Scores };
-  /** Every complete audit of the project, to choose from. */
-  runs: RunSummary[];
-  added: ComparedTicket[];
-  fixed: ComparedTicket[];
-  regressed: ComparedTicket[];
-  recurring: ComparedTicket[];
-  notChecked: ComparedTicket[];
-}
-
 export interface RunDetail extends RunSummary {
   project: Project;
   settings: Record<string, unknown>;
   locations: Location[];
   scores: Scores | null;
-  /** Whether an earlier complete audit of the project exists to compare with. */
-  hasPrevious: boolean;
+  /** Screenshots are deleted from Prego once the audit is exported; the report keeps them. */
+  screenshotsDeleted: boolean;
 }
 
 export interface ApiTicket extends Ticket {
@@ -66,6 +44,8 @@ export interface TicketOccurrence {
 export interface TicketDetail extends Ticket {
   helpUrl: string | null;
   occurrenceList: TicketOccurrence[];
+  /** True once the audit has been exported: the screenshots are then only in the report. */
+  screenshotsDeleted: boolean;
 }
 
 export interface TicketChanges {
@@ -113,6 +93,7 @@ export interface StateMapData {
     tickets: { ticketId: string; title: string; severity: Severity; category: string }[];
   }[];
   edges: { from: number; to: number | null; label: string; outcome: string; reason: string | null }[];
+  screenshotsDeleted: boolean;
 }
 
 export interface ExportSummary {
@@ -123,7 +104,6 @@ export interface ExportSummary {
   preset: string;
   createdAt: string;
   files: string[];
-  screenshots: number;
 }
 
 export interface Settings {
@@ -159,6 +139,18 @@ export interface StartRunBody {
   basicAuth?: { username: string; password: string };
 }
 
+/** An audit read from a typed request, waiting for the person to confirm it. */
+export interface AuditPlan {
+  source: 'ollama' | 'reader';
+  note?: string;
+  /** What's missing before it can start, such as the site's address. */
+  problems: string[];
+  run: StartRunBody & { mode: 'crawl' | 'explore'; checks: string[]; viewports: string[] };
+  projectExists: boolean;
+  checksLabel: string;
+  estimate: string;
+}
+
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -188,9 +180,9 @@ export const api = {
   deleteProject: (id: number) =>
     request<{ deleted: { project: string; audits: number; exports: number } }>(`/api/projects/${id}`, { method: 'DELETE' }),
   startRun: (body: StartRunBody) => post<{ runId: number; projectId: number }>('/api/runs', body),
+  planAudit: (text: string) => post<AuditPlan>('/api/assistant/plan', { text }),
   activeRun: () => request<{ runId: number; projectId: number } | null>('/api/runs/active'),
   run: (id: number) => request<RunDetail>(`/api/runs/${id}`),
-  compare: (id: number, withId?: number) => request<Comparison>(`/api/runs/${id}/compare${withId ? `?with=${withId}` : ''}`),
   stopRun: (id: number) => post<{ stopping: boolean }>(`/api/runs/${id}/stop`),
   tickets: (runId: number) => request<ApiTicket[]>(`/api/runs/${runId}/tickets`),
   ticket: (runId: number, ticketId: string) => request<TicketDetail>(`/api/runs/${runId}/tickets/${encodeURIComponent(ticketId)}`),

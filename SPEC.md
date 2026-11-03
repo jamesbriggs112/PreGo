@@ -321,6 +321,13 @@ Build in phase order. Each task should be a separate commit, and each phase must
 
 Critical path: T1 → T2 → T3 → T4 → T5/T7 → T9 → T10/T11 → T12, then the GUI (Phase 2). Phase 3 can start once T9 is done. Phase 4 tasks are independent of each other.
 
+### Changes after Phase 5 (agreed with James, November 2026)
+| # | Change | Replaces |
+|---|---|---|
+| T33 | Tickets aren't tracked across audits: they're managed in the team's own tool once exported. Statuses are only `Open`, `Dismissed` and `Needs review`. The `Status`, `Screenshot`, `First seen` and `Last seen` columns, the Compare screen, report section 6 (comparison) and the Visual changes check are removed. Ticket edits, merges and dismissals stay. | T29, criterion 7 (second half), section 7.3 columns |
+| T34 | Screenshots go into report.docx only. Once an export is written, the run's screenshots and crops are deleted from Prego. The bundle has no `screenshots/` folder. | Section 7.6 `screenshots/` |
+| T35 | A chat box on the first page: describe an audit in plain English, Prego (with a local Ollama model, or a built-in reader) fills in the settings, and you confirm before it starts. | – |
+
 ---
 
 ## 10. Evaluation

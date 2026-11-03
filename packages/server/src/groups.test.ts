@@ -46,30 +46,6 @@ describe('test groups and time estimates', () => {
   }, 120_000);
 });
 
-describe('comparing two audits', () => {
-  it('returns fixed, new, back-again and still-present tickets, earlier audit first', async () => {
-    const start = async () => {
-      const res = await fetch(`${base}/api/runs`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ project: 'Compared', target: resolve('fixtures/bad-site'), checks: ['axe'], delayMs: 0, maxPages: 3 }),
-      });
-      const { runId } = await res.json();
-      await prego.jobs.get(runId)!.done;
-      return runId as number;
-    };
-    const first = await start();
-    expect((await fetch(`${base}/api/runs/${first}/compare`)).status).toBe(404);
-    const second = await start();
-    const run = await (await fetch(`${base}/api/runs/${second}`)).json();
-    expect(run.hasPrevious).toBe(true);
-    const body = await (await fetch(`${base}/api/runs/${first}/compare?with=${second}`)).json();
-    expect(body).toMatchObject({ base: { id: first }, target: { id: second }, added: [], fixed: [], regressed: [], notChecked: [] });
-    expect(body.recurring.length).toBeGreaterThan(0);
-    expect(body.runs.map((r: { id: number }) => r.id)).toEqual(expect.arrayContaining([first, second]));
-  }, 120_000);
-});
-
 describe('AI review settings', () => {
   const put = (body: unknown) => fetch(`${base}/api/settings`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
 
@@ -94,5 +70,37 @@ describe('AI review settings', () => {
     expect(test.status).toBe(502);
     expect((await test.json()).error).toMatch(/Nothing is answering/);
     await put({ ...editable });
+  });
+});
+
+describe('setting up an audit from a typed request', () => {
+  const plan = async (text: string) => (await fetch(`${base}/api/assistant/plan`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }) })).json();
+
+  it('reads the request into settings to confirm, without starting anything', async () => {
+    const runsBefore = db.listProjects().flatMap((p) => db.listRuns(p.id)).length;
+    const body = await plan('run an accessibility audit on fcn.com, desktop and mobile');
+    expect(body).toMatchObject({
+      source: 'reader',
+      problems: [],
+      projectExists: false,
+      checksLabel: 'Accessibility',
+      estimate: expect.stringMatching(/minute|hour/),
+      run: { project: 'fcn.com', target: 'https://fcn.com/', mode: 'crawl', checks: ['axe', 'a11y-custom', 'ibm', 'canvas'], viewports: ['desktop', 'mobile'], maxPages: 100, auditAll: false },
+    });
+    expect(db.listProjects().flatMap((p) => db.listRuns(p.id))).toHaveLength(runsBefore);
+    expect(db.listProjects().some((p) => p.name === 'fcn.com')).toBe(false);
+  });
+
+  it('finds the existing project by name or by an earlier audit of the same site', async () => {
+    const fcn = db.createProject('Football Club Network');
+    db.createRun({ projectId: fcn.id, mode: 'crawl', target: 'https://www.fcn.com/' });
+    expect(await plan('quick check of fcn.com')).toMatchObject({ projectExists: true, run: { project: 'Football Club Network', checks: ['axe', 'golive', 'links', 'security'] } });
+    expect(await plan('security audit of staging.fcn.com for "football club network"')).toMatchObject({ projectExists: true, run: { project: 'Football Club Network' } });
+  });
+
+  it('asks for the site when the request doesn’t give one, and rejects empty requests', async () => {
+    expect((await plan('run an accessibility audit')).problems).toEqual([expect.stringMatching(/^Say which site to audit/)]);
+    const empty = await fetch(`${base}/api/assistant/plan`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: '' }) });
+    expect(empty.status).toBe(400);
   });
 });

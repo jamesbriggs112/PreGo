@@ -79,7 +79,6 @@ passive: it only loads pages a visitor could reach, and nothing is attacked.
 | `html` | HTML validity (html-validate, standard preset) |
 | `links` | Broken links found while crawling |
 | `browsers` | Each template in Firefox and WebKit (Safari's engine), compared with Chrome. Off by default |
-| `visual` | Each page's screenshot compared with the project's previous audit. Off by default |
 | `ai` | Optional AI heuristic review with Ollama on this computer (see below). Off by default |
 
 Interactive explorations also get state map checks (dead ends, buttons that do nothing), and
@@ -88,12 +87,31 @@ journeys a ticket if a step can no longer be replayed.
 Prego's browsers can't reach known advertising and analytics trackers, so audits send them nothing
 and don't show up in clients' analytics.
 
-### Comparing audits
+### Tickets
 
-Each audit is compared with the project's previous one in the same mode. Tickets are `New`,
-`Recurring`, `Regressed` (back after being fixed) or `Fixed`. A ticket only counts as fixed when the
-new audit ran the same check on the same pages and found nothing, so running a smaller test group
-never makes problems look fixed. The Compare screen shows any two audits side by side.
+Prego doesn't track tickets from one audit to the next: once exported, they're managed in the team's
+own tool (the Productive preset imports straight into Productive). Each audit stands on its own.
+Before exporting you can still edit a ticket's title, severity, priority and notes, merge tickets and
+dismiss false positives, and those changes carry over to the project's later audits. A problem keeps
+the same ticket ID every time it's found.
+
+### Screenshots
+
+Exporting puts the outlined screenshots into the Word report, then deletes them from Prego. The
+export has no separate screenshots folder. After that, ticket pages show no images, and exporting
+the same audit again gives a report without them, so keep the first report.
+
+### Setting up an audit by typing
+
+The Projects page has a box for describing an audit in plain English, such as *"run an accessibility
+audit on fcn.com, desktop and mobile"*. Prego reads it into the site, test groups, screen sizes and
+page limit, matches it to an existing project where it can, and shows the settings with a time
+estimate. Nothing starts until you press **Start audit**; **Change settings** opens the full form
+filled in. Anything the request doesn't mention comes from the defaults in Settings.
+
+A built-in reader handles requests phrased like the example. With AI review switched on (below), the
+local Ollama model also reads looser wording, such as *"check fcn.com works for screen reader users
+on phones"*. The site's address is always taken from what you typed, never made up by the model.
 
 ### AI review (optional)
 
@@ -127,10 +145,10 @@ tickets and writes an export folder to `data/exports/{project}-{date}/`:
 | `report.docx` | Readable audit report for clients and stakeholders |
 | `tickets.csv` | One row per ticket, ready to import into a ticketing tool |
 | `occurrences.csv` | Every individual instance of every ticket |
-| `screenshots/` | Outlined crops, named after their ticket (`PRG-A11Y-003_01.png`) |
 | `run.json` | Raw run data |
 
-Every ticket ID in the report matches a row in `tickets.csv`.
+Every ticket ID in the report matches a row in `tickets.csv`. Screenshots are inside the report, and
+are deleted from Prego once it's written.
 
 Useful options (see `npm run prego -- audit --help` for all of them):
 

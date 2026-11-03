@@ -17,12 +17,8 @@ import { RunStatusBadge } from '@/components/RunStatusBadge';
 import { SeverityBadge, StatusBadge } from '@/components/TicketBadges';
 
 const STATUS_FILTERS = [
-  { value: 'open', label: 'Open (not dismissed)' },
+  { value: 'open', label: 'Not dismissed' },
   { value: 'all', label: 'All' },
-  { value: 'New', label: 'New' },
-  { value: 'Recurring', label: 'Recurring' },
-  { value: 'Regressed', label: 'Regressed' },
-  { value: 'Fixed', label: 'Fixed since the last audit' },
   { value: 'Needs review', label: 'Needs review (AI-suggested)' },
   { value: 'Dismissed', label: 'Dismissed' },
 ];
@@ -84,11 +80,6 @@ export function RunResults({ run }: { run: RunDetail }) {
               <Link to={`/runs/${run.id}/map`}>State map</Link>
             </Button>
           )}
-          {run.status === 'complete' && run.hasPrevious && (
-            <Button asChild variant="outline">
-              <Link to={`/runs/${run.id}/compare`}>Compare with previous audit</Link>
-            </Button>
-          )}
           <Button asChild>
             <Link to={`/runs/${run.id}/export`}>Export report and tickets</Link>
           </Button>
@@ -110,7 +101,7 @@ export function RunResults({ run }: { run: RunDetail }) {
             </CardHeader>
           </Card>
         ))}
-        <Stat label="Open tickets" value={all.filter((t) => t.status !== 'Dismissed' && t.status !== 'Fixed').length} />
+        <Stat label="Tickets" value={all.filter((t) => t.status === 'Open').length} />
         {run.mode === 'explore' ? (
           <Stat label="Screens audited" value={s.statesAudited ?? 0} />
         ) : run.mode === 'journey' ? (
@@ -146,7 +137,7 @@ export function RunResults({ run }: { run: RunDetail }) {
                 </option>
               ))}
             </FilterSelect>
-            <FilterSelect id="filter-status" label="Status" value={filters.status} onChange={(v) => setFilter('status', v === 'open' ? '' : v)}>
+            <FilterSelect id="filter-status" label="Show" value={filters.status} onChange={(v) => setFilter('status', v === 'open' ? '' : v)}>
               {STATUS_FILTERS.map((f) => (
                 <option key={f.value} value={f.value}>
                   {f.label}
@@ -205,7 +196,6 @@ export function RunResults({ run }: { run: RunDetail }) {
                   <TableHead scope="col">Ticket</TableHead>
                   <TableHead scope="col">Severity</TableHead>
                   <TableHead scope="col">Priority</TableHead>
-                  <TableHead scope="col">Status</TableHead>
                   <TableHead scope="col" className="text-right">
                     Occurrences
                   </TableHead>
@@ -231,14 +221,12 @@ export function RunResults({ run }: { run: RunDetail }) {
                         <span className="font-semibold text-primary underline-offset-2 group-hover:underline">{t.ticketId}</span>
                         <span className="block text-foreground">{t.title}</span>
                       </Link>
+                      <StatusBadge status={t.status} />
                     </TableCell>
                     <TableCell>
                       <SeverityBadge severity={t.severity} />
                     </TableCell>
                     <TableCell>{t.priority}</TableCell>
-                    <TableCell>
-                      <StatusBadge status={t.status} />
-                    </TableCell>
                     <TableCell className="text-right">{t.occurrences}</TableCell>
                     <TableCell className="text-right">{t.locationsAffected}</TableCell>
                   </TableRow>
@@ -296,7 +284,7 @@ export function RunResults({ run }: { run: RunDetail }) {
 function matches(t: ApiTicket, f: { category: string; severity: string; status: string; page: string; q: string }): boolean {
   if (f.category && t.category !== f.category) return false;
   if (f.severity && t.severity !== f.severity) return false;
-  if (f.status === 'open' && (t.status === 'Dismissed' || t.status === 'Fixed')) return false;
+  if (f.status === 'open' && t.status === 'Dismissed') return false;
   if (f.status !== 'open' && f.status !== 'all' && t.status !== f.status) return false;
   if (f.page && !t.pages.includes(f.page)) return false;
   const q = f.q.trim().toLowerCase();

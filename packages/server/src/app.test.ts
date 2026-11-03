@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import JSZip from 'jszip';
 import { PNG } from 'pngjs';
 import { tmpdir } from 'node:os';
@@ -255,7 +255,6 @@ describe('exports', () => {
     expect(res.status).toBe(201);
     const created = await res.json();
     expect(created).toMatchObject({ preset: 'jira', files: ['report.docx', 'tickets.csv', 'occurrences.csv', 'run.json'] });
-    expect(created.screenshots).toBeGreaterThan(0);
     expect(await (await api(`/api/runs/${completedRunId}/exports`)).json()).toContainEqual(expect.objectContaining({ id: created.id }));
 
     const csv = await (await api(`/api/exports/${created.id}/files/tickets.csv`)).text();
@@ -265,6 +264,14 @@ describe('exports', () => {
     const zip = await JSZip.loadAsync(docx);
     expect(await zip.file('word/document.xml')!.async('string')).toContain('Four Agency');
     expect(Object.keys(zip.files).filter((f) => f.startsWith('word/media/')).length).toBeGreaterThan(1);
+
+    // The screenshots are in the report now, so Prego deletes its own copies.
+    expect(await (await api(`/api/runs/${completedRunId}`)).json()).toMatchObject({ screenshotsDeleted: true });
+    expect(readdirSync(join(dataDir, 'runs', String(completedRunId)))).not.toContain('crops');
+    const [ticket] = await (await api(`/api/runs/${completedRunId}/tickets`)).json();
+    const detail = await (await api(`/api/runs/${completedRunId}/tickets/${ticket.ticketId}`)).json();
+    expect(detail.screenshotsDeleted).toBe(true);
+    expect(detail.occurrenceList.every((o: { crop: string | null }) => o.crop === null)).toBe(true);
   });
 
   it('downloads the whole bundle as a zip', async () => {
@@ -275,7 +282,7 @@ describe('exports', () => {
     const names = Object.keys(zip.files);
     expect(names).toContainEqual(expect.stringMatching(/\/report\.docx$/));
     expect(names).toContainEqual(expect.stringMatching(/\/tickets\.csv$/));
-    expect(names.filter((n) => /\/screenshots\/PRG-.+\.png$/.test(n)).length).toBe(latest.screenshots);
+    expect(names.filter((n) => n.includes('/screenshots/'))).toEqual([]);
   });
 
   it('refuses unknown presets, files and runs that are not finished', async () => {

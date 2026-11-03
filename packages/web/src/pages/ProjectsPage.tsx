@@ -13,6 +13,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { RunStatusBadge } from '@/components/RunStatusBadge';
+import { AuditAssistant } from '@/components/AuditAssistant';
 
 export function ProjectsPage() {
   useTitle('Projects');
@@ -47,10 +48,12 @@ export function ProjectsPage() {
         </Button>
       </div>
 
+      <AuditAssistant />
+
       <Card>
         <CardHeader>
           <CardTitle>All projects</CardTitle>
-          <CardDescription>Accessibility scores are an indicator for comparing audits, not a measure of compliance.</CardDescription>
+          <CardDescription>Accessibility scores show where to focus, not a measure of compliance.</CardDescription>
         </CardHeader>
         <CardContent>
           {projects.isPending && <p>Loading projects…</p>}

@@ -1,9 +1,9 @@
-import { copyFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import type { PregoDb } from '../db/database.js';
 import { runDirectory } from '../audit/run-audit.js';
 import { defaultDataDir } from '../paths.js';
-import { allExported, buildExportPlan, stateMapStates, type ExportPlan } from './plan.js';
+import { buildExportPlan, stateMapStates, type ExportPlan } from './plan.js';
 import { stateMapPng } from './state-map-image.js';
 import { writeCsvFiles } from './csv.js';
 import { writeReportDocx, type ReportBranding } from './docx.js';
@@ -23,13 +23,14 @@ export interface ExportResult {
   /** The export's ID in the exports log. */
   id: number;
   dir: string;
-  files: { report: string; tickets: string; occurrences: string; screenshots: string; runJson: string };
+  files: { report: string; tickets: string; occurrences: string; runJson: string };
   plan: ExportPlan;
 }
 
 /**
- * Write the export bundle for a run: report.docx, tickets.csv, occurrences.csv, screenshots/ and
- * run.json, all in one folder and cross-referenced by ticket ID.
+ * Write the export bundle for a run: report.docx, tickets.csv, occurrences.csv and run.json, all in
+ * one folder and cross-referenced by ticket ID. Screenshots go into the report and nowhere else: once
+ * it's written, the run's screenshots are deleted from Prego.
  */
 export async function exportRun(db: PregoDb, runId: number, options: ExportOptions = {}): Promise<ExportResult> {
   const dataDir = resolve(options.dataDir ?? defaultDataDir());
@@ -40,12 +41,10 @@ export async function exportRun(db: PregoDb, runId: number, options: ExportOptio
     report: join(dir, 'report.docx'),
     tickets: join(dir, 'tickets.csv'),
     occurrences: join(dir, 'occurrences.csv'),
-    screenshots: join(dir, 'screenshots'),
     runJson: join(dir, 'run.json'),
   };
-  mkdirSync(files.screenshots, { recursive: true });
+  mkdirSync(dir, { recursive: true });
 
-  for (const [name, source] of plan.screenshots) copyFileSync(join(runDir, source), join(files.screenshots, name));
   const preset = options.preset ?? getSettings(db).defaults.csvPreset;
   writeCsvFiles(plan, files, preset);
   // Interactive audits get a state map diagram, in the report and as its own file.
@@ -64,9 +63,9 @@ export async function exportRun(db: PregoDb, runId: number, options: ExportOptio
         project: plan.project,
         run: plan.run,
         locations: plan.locations,
-        tickets: allExported(plan).map(({ occurrenceList, ...ticket }) => ({
+        tickets: plan.tickets.map(({ occurrenceList, screenshotFile: _file, ...ticket }) => ({
           ...ticket,
-          occurrences: occurrenceList.map(({ location, ...o }) => ({ ...o, url: location.url })),
+          occurrences: occurrenceList.map(({ location, crop: _crop, screenshotFile: _shot, ...o }) => ({ ...o, url: location.url })),
         })),
         rawFindings: db.getRawFindings(runId),
       },
@@ -75,7 +74,19 @@ export async function exportRun(db: PregoDb, runId: number, options: ExportOptio
     ),
   );
   const record = db.addExport(runId, dir, preset);
+  deleteRunImages(dataDir, runId);
   return { id: record.id, dir, files, plan };
+}
+
+/** Delete a run's screenshots and crops. Exporting does this once the report holds them. */
+export function deleteRunImages(dataDir: string, runId: number) {
+  const runDir = runDirectory(dataDir, runId);
+  for (const folder of ['screenshots', 'crops']) rmSync(join(runDir, folder), { recursive: true, force: true });
+}
+
+/** Whether a run's screenshots have been deleted, which happens when it's first exported. */
+export function runImagesDeleted(db: PregoDb, runId: number): boolean {
+  return db.listExports(runId).length > 0;
 }
 
 /** YYYY-MM-DD-HHmm in local time. */

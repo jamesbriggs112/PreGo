@@ -7,7 +7,8 @@ export function SeverityBadge({ severity }: { severity: Severity }) {
   return <Badge variant={SEVERITY_VARIANTS[severity]}>{severity}</Badge>;
 }
 
+/** Only dismissed tickets and unapproved AI suggestions get a badge; open tickets need none. */
 export function StatusBadge({ status }: { status: TicketStatus }) {
-  const variant = status === 'Dismissed' ? 'secondary' : status === 'New' ? 'brand' : status === 'Fixed' ? 'success' : status === 'Regressed' ? 'critical-soft' : 'outline';
-  return <Badge variant={variant}>{status}</Badge>;
+  if (status === 'Open') return null;
+  return <Badge variant={status === 'Dismissed' ? 'secondary' : 'outline'}>{status}</Badge>;
 }

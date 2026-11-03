@@ -1,10 +1,9 @@
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import JSZip from 'jszip';
 import { parse } from 'csv-parse/sync';
 
 const TICKET_ID = /PRG-[A-Z0-9]+-\d{3,}/g;
-const SCREENSHOT = /PRG-[A-Z0-9]+-\d{3,}_\d{2,}\.png/g;
 
 export interface VerifyResult {
   ok: boolean;
@@ -15,11 +14,11 @@ export interface VerifyResult {
 /**
  * Check an export folder's cross-references (acceptance criterion 6): every ticket ID in report.docx is
  * in tickets.csv exactly once, every ticket in tickets.csv is referenced in the report, and every
- * screenshot named in any file exists in screenshots/.
+ * occurrence belongs to a ticket. Screenshots are embedded in the report, not separate files.
  */
 export async function verifyExport(dir: string): Promise<VerifyResult> {
   const problems: string[] = [];
-  for (const file of ['report.docx', 'tickets.csv', 'occurrences.csv', 'screenshots']) {
+  for (const file of ['report.docx', 'tickets.csv', 'occurrences.csv']) {
     if (!existsSync(join(dir, file))) problems.push(`Missing ${file}`);
   }
   if (problems.length) return { ok: false, problems, ticketIds: [] };
@@ -47,18 +46,6 @@ export async function verifyExport(dir: string): Promise<VerifyResult> {
   }
   for (const o of occurrences) {
     if (!csvIds.includes(o['Ticket ID'])) problems.push(`occurrences.csv refers to ${o['Ticket ID']}, which is not in tickets.csv`);
-  }
-
-  const screenshots = new Set(readdirSync(join(dir, 'screenshots')));
-  const named = new Set([
-    ...(reportText.match(SCREENSHOT) ?? []),
-    ...tickets.map((t) => t.Screenshot).filter(Boolean),
-    ...occurrences.map((o) => o['Screenshot crop']).filter(Boolean),
-  ]);
-  for (const file of named) if (!screenshots.has(file)) problems.push(`${file} is named but missing from screenshots/`);
-  for (const file of screenshots) {
-    const ticketId = file.replace(/_\d+\.png$/, '');
-    if (!csvIds.includes(ticketId)) problems.push(`screenshots/${file} doesn't belong to any ticket in tickets.csv`);
   }
 
   return { ok: problems.length === 0, problems, ticketIds: csvIds };

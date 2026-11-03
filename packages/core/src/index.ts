@@ -18,7 +18,7 @@ export { describeComponent, componentLabel, type ComponentInfo } from './tickets
 export { buildExportPlan, FINDINGS_SECTION, type ExportPlan, type PlannedTicket, type PlannedOccurrence, type ReportSectionPlan } from './export/plan.js';
 export { ticketsCsv, occurrencesCsv, writeCsvFiles, CSV_PRESETS, TICKET_COLUMNS, OCCURRENCE_COLUMNS, type CsvPreset } from './export/csv.js';
 export { reportDocx, writeReportDocx, categoryScore, type ReportBranding } from './export/docx.js';
-export { exportRun, type ExportOptions, type ExportResult } from './export/bundle.js';
+export { exportRun, runImagesDeleted, type ExportOptions, type ExportResult } from './export/bundle.js';
 export { verifyExport, type VerifyResult } from './export/verify.js';
 export { moduleCategories, checkedCategories } from './checks/categories.js';
 export { checkCosts, checkDefinitions, createChecks, defaultChecks, registerCheck, unknownChecks, type CheckDefinition, type CheckFactoryContext } from './checks/registry.js';
@@ -26,6 +26,7 @@ export { updateTicket, mergeTickets, TriageError, type TicketChanges } from './t
 export type { TicketOverride } from './db/database.js';
 export { DEFAULT_SETTINGS, aiSettings, getSettings, saveSettings, logoPath, reportBranding, type PregoSettings } from './settings.js';
 export { AI_ENGINE, HEURISTICS, assertLocalOllama, type AiSettings } from './checks/ai/ai.js';
+export { askOllama, findAddress, readAuditRequest, understandAuditRequest, type AuditRequest } from './assistant/audit-request.js';
 export type { ExportRecord } from './db/database.js';
 export { discoverActions, type Action, type ActionKind } from './explore/actions.js';
 export { exploreApp, openScreen, perform, settle, type ExploreOptions, type ExploreResult, type ExploredState, type ExploreEdge } from './explore/explorer.js';
@@ -46,4 +47,3 @@ export { markupModule } from './checks/markup/markup.js';
 export { brokenLinksModule } from './checks/links/links.js';
 export { ibmModule, dropDuplicates } from './checks/ibm/ibm.js';
 export * from './checks/estimate.js';
-export * from './tickets/compare.js';

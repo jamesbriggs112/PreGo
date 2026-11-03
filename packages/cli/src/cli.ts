@@ -248,25 +248,25 @@ program
         });
         if (!outcome) {
           failed = true;
-          rows.push(`| ${audit.project} | ${audit.target} | Didn’t complete | | | | |`);
+          rows.push(`| ${audit.project} | ${audit.target} | Didn’t complete | | | | | |`);
           continue;
         }
         const tickets = db.getTickets(outcome.run.id);
-        const count = (status: string) => tickets.filter((t) => t.status === status).length;
-        const open = tickets.filter((t) => !['Fixed', 'Dismissed', 'Needs review'].includes(t.status));
+        const open = tickets.filter((t) => t.status === 'Open');
+        const count = (severity: string) => open.filter((t) => t.severity === severity).length;
         const threshold = audit.failOn ? SEVERITIES.indexOf(audit.failOn) : -1;
-        const blocking = threshold < 0 ? [] : open.filter((t) => (t.status === 'New' || t.status === 'Regressed') && SEVERITIES.indexOf(t.severity) <= threshold);
+        const blocking = threshold < 0 ? [] : open.filter((t) => SEVERITIES.indexOf(t.severity) <= threshold);
         if (blocking.length) {
           failed = true;
-          console.error(`✗ ${audit.project}: ${blocking.length} new or returning ${blocking.length === 1 ? 'issue' : 'issues'} at ${audit.failOn} severity or worse:`);
+          console.error(`✗ ${audit.project}: ${blocking.length} ${blocking.length === 1 ? 'issue' : 'issues'} at ${audit.failOn} severity or worse:`);
           for (const t of blocking.slice(0, 20)) console.error(`    ${t.ticketId} ${t.severity}: ${t.title}`);
         }
-        rows.push(`| ${audit.project} | ${audit.target} | ${blocking.length ? `✗ ${blocking.length} blocking` : 'Complete'} | ${open.length} | ${count('New')} | ${count('Fixed')} | ${count('Regressed')} |`);
+        rows.push(`| ${audit.project} | ${audit.target} | ${blocking.length ? `✗ ${blocking.length} blocking` : 'Complete'} | ${open.length} | ${SEVERITIES.map(count).join(' | ')} |`);
       }
     } finally {
       db.close();
     }
-    const summary = ['## Prego audits', '', '| Project | Target | Result | Open | New | Fixed | Back again |', '|---|---|---|---|---|---|---|', ...rows, ''].join('\n');
+    const summary = ['## Prego audits', '', '| Project | Target | Result | Issues | Critical | High | Medium | Low |', '|---|---|---|---|---|---|---|---|', ...rows, ''].join('\n');
     console.log(`\n${summary}`);
     // GitHub Actions shows this on the run's summary page.
     if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${summary}\n`);

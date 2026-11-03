@@ -131,7 +131,11 @@ function MapView({ runId, data }: { runId: number; data: StateMapData }) {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4 text-sm">
-            {current.screenshot && <img src={fileUrl(runId, current.screenshot)} alt={`Screenshot of the ${current.title} screen`} className="w-full rounded border" />}
+            {current.screenshot ? (
+              <img src={fileUrl(runId, current.screenshot)} alt={`Screenshot of the ${current.title} screen`} className="w-full rounded border" />
+            ) : (
+              data.screenshotsDeleted && <p className="text-muted-foreground">Screenshots are deleted once an audit is exported. They’re in the Word report.</p>
+            )}
             <div>
               <h3 className="mb-1 font-medium">Issues on this screen</h3>
               {current.tickets.length === 0 ? (

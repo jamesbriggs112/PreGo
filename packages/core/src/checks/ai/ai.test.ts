@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import type { AddressInfo } from 'node:net';
 import { PregoDb } from '../../db/database.js';
 import { runAudit } from '../../audit/run-audit.js';
-import { buildExportPlan, allExported } from '../../export/plan.js';
+import { buildExportPlan } from '../../export/plan.js';
 import { updateTicket } from '../../tickets/triage.js';
 import { assertLocalOllama } from './ai.js';
 
@@ -56,13 +56,13 @@ describe('AI heuristic review (T31)', () => {
       expect(t.title).toMatch(/^AI-suggested: Buttons on this screen use three different styles/);
       expect(t.actual).toMatch(/Suggested fix: Use one primary/);
     }
-    expect(allExported(buildExportPlan(db, run.id))).toEqual([]);
+    expect(buildExportPlan(db, run.id).tickets).toEqual([]);
 
     // Approving one brings it into the export like any other ticket.
     updateTicket(db, run.id, tickets[0].ticketId, { approved: true });
     const approved = db.getTicket(run.id, tickets[0].ticketId)!;
-    expect(approved.status).toBe('New');
-    expect(allExported(buildExportPlan(db, run.id)).map((t) => t.ticketId)).toEqual([approved.ticketId]);
+    expect(approved.status).toBe('Open');
+    expect(buildExportPlan(db, run.id).tickets.map((t) => t.ticketId)).toEqual([approved.ticketId]);
   }, 120_000);
 
   it('with it off, nothing changes: no requests to Ollama and no AI tickets', async () => {

@@ -1,4 +1,4 @@
-import type { Category, Location } from '../types.js';
+import type { Category } from '../types.js';
 import type { FailedPage } from '../crawl/crawler.js';
 import type { CheckModule } from './types.js';
 import type { CheckCost } from './estimate.js';
@@ -18,7 +18,6 @@ import { librariesModule } from './libraries/libraries.js';
 import { privacyModule } from './privacy/privacy.js';
 import { spellingModule } from './spelling/spelling.js';
 import { browsersModule } from './browsers/browsers.js';
-import { visualModule } from './visual/visual.js';
 import { aiModule, type AiSettings } from './ai/ai.js';
 
 /** Everything a check factory may need from the audit. */
@@ -27,8 +26,6 @@ export interface CheckFactoryContext {
   /** Crawl only: pages that returned errors, with the page linking to them. */
   failedPages: FailedPage[];
   basicAuth?: BasicAuth;
-  /** The project's previous audit's screenshot of the same page and viewport, if there is one. */
-  previousScreenshot?: (location: Location, viewport: string) => { path: string; runId: number; date: string } | null;
   /** Ollama on this computer, when AI review is switched on in Settings. */
   ai?: AiSettings;
   /** Told about requests made by browsers that Prego doesn't open through BrowserSession. */
@@ -104,16 +101,6 @@ const definitions: CheckDefinition[] = [
     defaultOn: false,
     cost: { seconds: [3, 8], perPage: true, setupSeconds: [2, 5] },
     create: (context) => browsersModule({ basicAuth: context.basicAuth, onRequest: context.onRequest }),
-  },
-  {
-    id: 'visual',
-    name: 'Changes since the last audit',
-    description: 'Each page’s screenshot compared with the same page in this project’s previous audit, with the changes highlighted. Nothing to compare on a project’s first audit.',
-    // Doesn't count towards the UI score: it reports change, not quality.
-    categories: [],
-    defaultOn: false,
-    cost: { seconds: [0.2, 0.8] },
-    create: (context) => visualModule(context),
   },
   {
     id: 'lighthouse',

@@ -34,8 +34,7 @@ describe('report.docx', () => {
       '4. Findings by category',
       '4.1 Accessibility',
       '5. Site map summary',
-      '6. Comparison with the previous audit',
-      '7. Limitations and manual testing',
+      '6. Limitations and manual testing',
       'Appendix A: Ticket index',
     ];
     const positions = headings.map((h) => text.indexOf(h));
@@ -51,11 +50,11 @@ describe('report.docx', () => {
     }
   });
 
-  it('embeds example screenshots with alt text and names the file', async () => {
+  it('embeds example screenshots with alt text', async () => {
     const media = Object.keys(zip.files).filter((f) => f.startsWith('word/media/'));
     expect(media.length).toBeGreaterThanOrEqual(4);
     expect(xml).toMatch(/descr="[^"]*problem outlined"/);
-    expect(text).toMatch(/Screenshot: PRG-A11Y-\d{3}_\d{2}\.png/);
+    expect(text).toMatch(/problem outlined in pink\./);
   });
 
   it('links every image to an embedded PNG (Word refuses files with broken image links)', async () => {

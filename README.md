@@ -104,13 +104,13 @@ the same audit again gives a report without them, so keep the first report.
 ### Setting up an audit by typing
 
 The Projects page has a box for describing an audit in plain English, such as *"run an accessibility
-audit on fcn.com, desktop and mobile"*. Prego reads it into the site, test groups, screen sizes and
+audit on example.org, desktop and mobile"*. Prego reads it into the site, test groups, screen sizes and
 page limit, matches it to an existing project where it can, and shows the settings with a time
 estimate. Nothing starts until you press **Start audit**; **Change settings** opens the full form
 filled in. Anything the request doesn't mention comes from the defaults in Settings.
 
 A built-in reader handles requests phrased like the example. With AI review switched on (below), the
-local Ollama model also reads looser wording, such as *"check fcn.com works for screen reader users
+local Ollama model also reads looser wording, such as *"check example.org works for screen reader users
 on phones"*. The site's address is always taken from what you typed, never made up by the model.
 
 ### AI review (optional)

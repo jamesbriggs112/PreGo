@@ -13,7 +13,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { RunStatusBadge } from '@/components/RunStatusBadge';
-import { AuditAssistant } from '@/components/AuditAssistant';
 
 export function ProjectsPage() {
   useTitle('Projects');
@@ -47,8 +46,6 @@ export function ProjectsPage() {
           </Link>
         </Button>
       </div>
-
-      <AuditAssistant />
 
       <Card>
         <CardHeader>

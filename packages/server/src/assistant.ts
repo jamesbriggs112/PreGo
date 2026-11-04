@@ -35,7 +35,7 @@ export async function planAudit(db: PregoDb, text: string) {
   const ai = aiSettings(settings);
   const { request, source, note } = await understandAuditRequest(text, ai);
   const problems: string[] = [];
-  if (!request.target) problems.push('Say which site to audit, for example “fcn.com” or “https://staging.fcn.com”.');
+  if (!request.target) problems.push('Say which site to audit, for example “example.org” or “https://staging.example.org”.');
 
   // An existing project by name, then by an earlier audit of the same site, then the site's name.
   const projects = db.listProjects();

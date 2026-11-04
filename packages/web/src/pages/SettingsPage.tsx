@@ -1,4 +1,5 @@
 import { useState, type ChangeEvent, type FormEvent } from 'react';
+import { Link, useSearchParams } from 'react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { PROFILES } from '@prego/core/profiles';
 import { api, type Settings } from '@/lib/api';
@@ -11,29 +12,64 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { NativeSelect } from '@/components/ui/native-select';
 import { Alert } from '@/components/ui/alert';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { cn } from '@/lib/utils';
+
+// Settings are split into sections, so each screen shows only one area. One form holds them all,
+// so changes in several sections are kept until Save settings.
+const SECTIONS = [
+  { id: 'report', label: 'Report branding', hint: 'Company name, colour and logo' },
+  { id: 'audits', label: 'New audit defaults', hint: 'Screen sizes, crawl and checks' },
+  { id: 'exports', label: 'Exports', hint: 'tickets.csv columns' },
+  { id: 'ai', label: 'AI review', hint: 'Ollama on this computer' },
+] as const;
+type SectionId = (typeof SECTIONS)[number]['id'];
 
 export function SettingsPage() {
   useTitle('Settings');
   const settings = useQuery({ queryKey: ['settings'], queryFn: api.settings });
+  const [params] = useSearchParams();
+  const section: SectionId = SECTIONS.find((s) => s.id === params.get('section'))?.id ?? 'report';
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold">Settings</h1>
         <p className="text-muted-foreground">Branding for reports, and defaults for new audits. Saved on this computer.</p>
       </div>
-      {settings.isPending && <p>Loading settings…</p>}
-      {settings.isError && (
-        <Alert variant="destructive" role="alert">
-          {settings.error.message}
-        </Alert>
-      )}
-      {settings.data && <SettingsForm initial={settings.data} />}
-      <LogoCard hasLogo={!!settings.data?.hasLogo} />
+      <div className="grid gap-6 md:grid-cols-[14rem_1fr]">
+        <nav aria-label="Settings sections" className="md:sticky md:top-6 md:self-start">
+          <ul className="flex gap-1 overflow-x-auto md:flex-col">
+            {SECTIONS.map((s) => (
+              <li key={s.id} className="shrink-0">
+                <Link
+                  to={`?section=${s.id}`}
+                  aria-current={section === s.id ? 'page' : undefined}
+                  className={cn(
+                    'grid rounded-lg px-3 py-2 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring',
+                    section === s.id ? 'bg-secondary font-medium text-secondary-foreground' : 'hover:bg-muted',
+                  )}
+                >
+                  {s.label}
+                  <span className="hidden text-xs font-normal text-muted-foreground md:block">{s.hint}</span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </nav>
+        <div className="min-w-0 space-y-6">
+          {settings.isPending && <p>Loading settings…</p>}
+          {settings.isError && (
+            <Alert variant="destructive" role="alert">
+              {settings.error.message}
+            </Alert>
+          )}
+          {settings.data && <SettingsForm initial={settings.data} section={section} />}
+        </div>
+      </div>
     </div>
   );
 }
 
-function SettingsForm({ initial }: { initial: Settings }) {
+function SettingsForm({ initial, section }: { initial: Settings & { hasLogo: boolean }; section: SectionId }) {
   const queryClient = useQueryClient();
   const [companyName, setCompanyName] = useState(initial.branding.companyName);
   const [accent, setAccent] = useState(`#${initial.branding.accentColour}`);
@@ -53,7 +89,8 @@ function SettingsForm({ initial }: { initial: Settings }) {
   const save = useMutation({
     mutationFn: api.saveSettings,
     onSuccess: (saved) => {
-      queryClient.setQueryData(['settings'], saved);
+      // The saved settings don't include read-only extras such as the explorer's defaults, so keep those.
+      queryClient.setQueryData(['settings'], (current: object | undefined) => ({ ...current, ...saved }));
       // Whether AI review can be chosen on the New audit form.
       return queryClient.invalidateQueries({ queryKey: ['checks'] });
     },
@@ -71,6 +108,8 @@ function SettingsForm({ initial }: { initial: Settings }) {
   const order = Object.keys(PROFILES);
   return (
     <form onSubmit={onSubmit} className="space-y-6">
+      {section === 'report' && (
+      <>
       <Card>
         <CardHeader>
           <CardTitle>Report branding</CardTitle>
@@ -98,7 +137,11 @@ function SettingsForm({ initial }: { initial: Settings }) {
           </div>
         </CardContent>
       </Card>
+      <LogoCard hasLogo={initial.hasLogo} />
+      </>
+      )}
 
+      {section === 'audits' && (
       <Card>
         <CardHeader>
           <CardTitle>New audit defaults</CardTitle>
@@ -141,16 +184,6 @@ function SettingsForm({ initial }: { initial: Settings }) {
             <Label htmlFor="default-delay">Delay between pages (milliseconds)</Label>
             <Input id="default-delay" type="number" min={0} value={delay} onChange={(e) => setDelay(e.target.value)} required />
           </div>
-          <div className="grid gap-2">
-            <Label htmlFor="default-preset">tickets.csv columns</Label>
-            <NativeSelect id="default-preset" value={csvPreset} onChange={(e) => setCsvPreset(e.target.value)}>
-              {CSV_PRESET_OPTIONS.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.label}
-                </option>
-              ))}
-            </NativeSelect>
-          </div>
           <fieldset className="grid gap-2 sm:col-span-2">
             <legend className="mb-1 text-sm font-medium">Checks ticked by default</legend>
             {checkList.data?.map((check) => (
@@ -174,7 +207,30 @@ function SettingsForm({ initial }: { initial: Settings }) {
           </div>
         </CardContent>
       </Card>
+      )}
 
+      {section === 'exports' && (
+      <Card>
+        <CardHeader>
+          <CardTitle>Exports</CardTitle>
+          <CardDescription>The starting choice on the Export page. You can still pick another per export.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid max-w-sm gap-2">
+            <Label htmlFor="default-preset">tickets.csv columns</Label>
+            <NativeSelect id="default-preset" value={csvPreset} onChange={(e) => setCsvPreset(e.target.value)}>
+              {CSV_PRESET_OPTIONS.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.label}
+                </option>
+              ))}
+            </NativeSelect>
+          </div>
+        </CardContent>
+      </Card>
+      )}
+
+      {section === 'ai' && (
       <Card>
         <CardHeader>
           <CardTitle>AI review (optional)</CardTitle>
@@ -227,6 +283,7 @@ function SettingsForm({ initial }: { initial: Settings }) {
           )}
         </CardContent>
       </Card>
+      )}
 
       {save.isError && (
         <Alert variant="destructive" role="alert">
@@ -241,6 +298,7 @@ function SettingsForm({ initial }: { initial: Settings }) {
           {save.isSuccess && 'Settings saved.'}
         </p>
       </div>
+      <p className="text-sm text-muted-foreground">Save settings saves every section. Logo changes are saved straight away.</p>
     </form>
   );
 }
@@ -278,7 +336,7 @@ function LogoCard({ hasLogo }: { hasLogo: boolean }) {
             <Input id="logo-file" type="file" accept="image/png" onChange={onFile} className="max-w-xs" />
           </div>
           {hasLogo && (
-            <Button variant="outline" onClick={() => remove.mutate()} disabled={remove.isPending}>
+            <Button type="button" variant="outline" onClick={() => remove.mutate()} disabled={remove.isPending}>
               Remove logo
             </Button>
           )}

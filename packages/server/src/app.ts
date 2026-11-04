@@ -187,7 +187,7 @@ export async function buildApp(options: AppOptions): Promise<PregoApp> {
   // Test groups, and how long checks took in the last 20 audits on this machine, for time estimates.
   app.get('/api/check-groups', async () => ({ groups: CHECK_GROUPS, calibration: recentCalibration(db) }));
 
-  // Read a typed request ("an accessibility audit of fcn.com") into audit settings, for the person
+  // Read a typed request ("an accessibility audit of example.org") into audit settings, for the person
   // to confirm. It never starts an audit itself.
   app.post<{ Body: { text: string } }>(
     '/api/assistant/plan',
@@ -701,7 +701,8 @@ export async function buildApp(options: AppOptions): Promise<PregoApp> {
   });
 
   if (options.webDist && existsSync(join(options.webDist, 'index.html'))) {
-    await app.register(fastifyStatic, { root: resolve(options.webDist), wildcard: false });
+    // Serve whatever is in the build folder now, so a rebuild doesn't need a restart.
+    await app.register(fastifyStatic, { root: resolve(options.webDist) });
     // Client-side routes (e.g. /runs/3) all load the app.
     app.setNotFoundHandler((request, reply) => {
       if (request.method === 'GET' && !request.url.startsWith('/api/')) return reply.sendFile('index.html');

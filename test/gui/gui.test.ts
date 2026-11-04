@@ -22,6 +22,9 @@ function fakeRecorder({ outputFile }: { url: string; outputFile: string }): Chil
   return child;
 }
 
+/** Jump to a step of the New audit form. */
+const goToStep = (name: string) => gui.page.getByRole('navigation', { name: 'Audit set-up steps' }).getByRole('button', { name: new RegExp(name) }).click();
+
 beforeAll(async () => {
   journeySite = await serveFolder('fixtures/bad-site', { substituteOrigin: true });
   gui = await startGui({ recorder: fakeRecorder });
@@ -36,12 +39,18 @@ describe('Projects screen', () => {
   it('starts empty and lets you add a project', async () => {
     const { page } = gui;
     await page.goto(gui.url);
+    await page.getByRole('heading', { name: 'What would you like to test?', level: 1 }).waitFor();
+    await page.getByRole('navigation', { name: 'Projects' }).getByText('No projects yet').waitFor();
+    await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Projects' }).click();
+    await page.getByRole('heading', { name: 'Projects', level: 1 }).waitFor();
     await expect(page.title()).resolves.toBe('Projects · Prego');
-    await page.getByText('No projects yet').waitFor();
+    await page.getByRole('main').getByText('No projects yet').waitFor();
     await page.getByLabel('Project name').fill('Acme Widgets');
     await page.getByRole('button', { name: 'Add project' }).click();
     await page.getByRole('cell', { name: 'Acme Widgets', exact: true }).waitFor();
     expect(gui.db.listProjects().map((p) => p.name)).toEqual(['Acme Widgets']);
+    // The sidebar lists it, linking to a new audit until it has one.
+    await page.getByRole('navigation', { name: 'Projects' }).getByRole('link', { name: /Acme Widgets\s*No audits yet/ }).waitFor();
   });
 
   it('has no axe violations', async () => {
@@ -62,15 +71,24 @@ describe('New audit screen', () => {
   it('shows the server’s message for a target it can’t audit', async () => {
     const { page } = gui;
     await page.getByLabel('Web address or folder').fill('not a site');
+    await goToStep('Review and start');
     await page.getByRole('button', { name: 'Start audit' }).click();
     await expect(page.getByRole('alert').textContent()).resolves.toMatch(/web address starting with http/);
   });
 
   it('starts a crawl and moves to the run', async () => {
     const { page } = gui;
+    await goToStep('Site');
     await page.getByLabel('Web address or folder').fill(fixture);
-    await page.getByLabel('Delay between pages (milliseconds)').fill('0');
+    await page.getByRole('button', { name: 'Next: Screen sizes' }).click();
+    await page.getByRole('heading', { name: 'Step 2 of 5: Screen sizes' }).waitFor();
     await page.getByLabel(/Mobile/).check();
+    expect(await axeViolations(page)).toEqual([]);
+    await goToStep('Scope and login');
+    await page.getByLabel('Delay between pages (milliseconds)').fill('0');
+    await goToStep('Review and start');
+    await page.getByText(fixture, { exact: true }).waitFor();
+    expect(await axeViolations(page)).toEqual([]);
     await page.getByRole('button', { name: 'Start audit' }).click();
     await page.waitForURL(/\/runs\/\d+$/);
     runId = Number(page.url().split('/').pop());
@@ -200,15 +218,22 @@ describe('Settings and Export screens', () => {
     await page.getByRole('heading', { name: 'Settings', level: 1 }).waitFor();
     expect(await axeViolations(page)).toEqual([]);
     await page.getByLabel('Company name').fill('Four Agency');
+    // Each section shows on its own; changes in all of them are kept until Save.
+    const sections = page.getByRole('navigation', { name: 'Settings sections' });
+    await sections.getByRole('link', { name: /^Exports/ }).click();
     await page.getByLabel('tickets.csv columns').selectOption('jira');
+    await expect(page.getByLabel('Company name').count()).resolves.toBe(0);
+    await sections.getByRole('link', { name: /^New audit defaults/ }).click();
     await page.getByLabel('Pages audited per template').fill('2');
+    expect(await axeViolations(page)).toEqual([]);
     await page.getByRole('button', { name: 'Save settings' }).click();
     await page.getByRole('status').getByText('Settings saved.').waitFor();
 
     // The New audit form starts from the saved defaults.
-    await page.getByRole('link', { name: 'New audit' }).click();
+    await page.getByRole('link', { name: 'New audit', exact: true }).click();
+    await goToStep('Scope and login');
     await expect(page.getByLabel('Pages audited per template').inputValue()).resolves.toBe('2');
-  });
+  }, 60_000);
 
   it('creates an export, downloads each file and the zip, with branding in the report', async () => {
     const { page } = gui;
@@ -259,9 +284,11 @@ describe('Interactive exploration', () => {
     await page.getByLabel('Project', { exact: true }).fill('Museum of Making');
     await page.getByLabel('Web address or folder').fill(resolve('fixtures/kiosk-app'));
     await page.getByLabel('Interactive exploration').check();
+    await goToStep('Scope and login');
     await expect(page.getByLabel('Never press controls labelled').inputValue()).resolves.toMatch(/^delete\nremove\n.*send/s);
     await page.getByLabel('Ignore when telling screens apart').fill('.attract-hint');
     expect(await axeViolations(page)).toEqual([]);
+    await goToStep('Review and start');
     await page.getByRole('button', { name: 'Start audit' }).click();
     await page.waitForURL(/\/runs\/\d+$/);
     exploreRun = Number(page.url().split('/').pop());
@@ -299,6 +326,7 @@ describe('Interactive exploration', () => {
     const { page } = gui;
     await page.goto(`${gui.url}audits/new?project=${encodeURIComponent('Museum of Making')}`);
     await page.getByLabel('Interactive exploration').check();
+    await goToStep('Scope and login');
     await expect(page.getByLabel('Ignore when telling screens apart').inputValue()).resolves.toBe('.attract-hint');
   });
 });
@@ -324,7 +352,10 @@ describe('Scripted journeys (criterion 4)', () => {
   it('replays it with checks at every step', async () => {
     const { page } = gui;
     await page.getByRole('radio', { name: 'contact-form' }).check();
-    await page.getByLabel('Delay between pages (milliseconds)').waitFor({ state: 'detached' });
+    await goToStep('Scope and login');
+    await page.getByText('A journey follows its recorded steps').waitFor();
+    await expect(page.getByLabel('Delay between pages (milliseconds)').count()).resolves.toBe(0);
+    await goToStep('Review and start');
     await page.getByRole('button', { name: 'Start audit' }).click();
     await page.waitForURL(/\/runs\/\d+$/);
     journeyRun = Number(page.url().split('/').pop());
@@ -350,7 +381,7 @@ describe('Deleting a project', () => {
   it('asks first, and Cancel keeps the project', async () => {
     const { page } = gui;
     gui.db.createProject('Throwaway');
-    await page.goto(gui.url);
+    await page.goto(`${gui.url}projects`);
     await page.getByRole('button', { name: 'Delete Throwaway' }).click();
     const dialog = page.getByRole('dialog', { name: 'Delete Throwaway?' });
     await dialog.getByText('its 0 audits').waitFor();
@@ -380,10 +411,12 @@ describe('Dark mode', () => {
     await expect(toggle.getAttribute('aria-pressed')).resolves.toBe('true');
     await page.reload();
     await expect(page.locator('html').getAttribute('data-theme')).resolves.toBe('dark');
-    await page.getByRole('cell', { name: 'Acme Widgets', exact: true }).waitFor();
+    // The sidebar links each project to its latest audit.
+    const acme = page.getByRole('navigation', { name: 'Projects' }).getByRole('link', { name: /^Acme Widgets/ });
+    await expect(acme.getAttribute('href')).resolves.toMatch(/^\/runs\/\d+$/);
     expect(await axeViolations(page)).toEqual([]);
 
-    for (const path of [`runs/${runId}`, 'audits/new', 'settings']) {
+    for (const path of ['projects', `runs/${runId}`, 'audits/new', 'settings', 'about']) {
       await page.goto(gui.url + path);
       await page.getByRole('heading', { level: 1 }).waitFor();
       await page.waitForLoadState('networkidle');
@@ -399,6 +432,7 @@ describe('Test groups', () => {
   it('picks a group’s checks and estimates how long the audit takes', async () => {
     const { page } = gui;
     await page.goto(`${gui.url}audits/new`);
+    await goToStep('Tests');
     await page.getByRole('radio', { name: 'Performance' }).check({ force: true });
     await expect(page.getByLabel('Performance and best practice (Lighthouse)').isChecked()).resolves.toBe(true);
     await expect(page.getByLabel('Accessibility (axe-core)').isChecked()).resolves.toBe(false);
@@ -435,9 +469,14 @@ describe('Setting up an audit by typing', () => {
     // Change settings opens the full form with everything filled in.
     await page.getByRole('button', { name: 'Change settings' }).click();
     await page.waitForURL(/\/audits\/new\?/);
+    await page.getByRole('heading', { name: 'Step 5 of 5: Review and start' }).waitFor();
+    await page.getByText('Quick check (4 checks)').waitFor();
+    await goToStep('Site');
     await expect(page.getByLabel('Web address or folder').inputValue()).resolves.toBe(`${journeySite.origin}/`);
+    await goToStep('Screen sizes');
     await expect(page.getByLabel(/^Mobile/).isChecked()).resolves.toBe(true);
     await expect(page.getByLabel(/^Desktop/).isChecked()).resolves.toBe(false);
+    await goToStep('Tests');
     await expect(page.getByRole('radio', { name: /Quick check/ }).isChecked()).resolves.toBe(true);
 
     await page.goBack();

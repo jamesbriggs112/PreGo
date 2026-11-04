@@ -1,14 +1,13 @@
 import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router';
 import { useMutation } from '@tanstack/react-query';
-import { Clock, Sparkles } from 'lucide-react';
+import { Clock } from 'lucide-react';
 import { PROFILES, type ProfileName } from '@prego/core/profiles';
 import { api, type AuditPlan } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Alert } from '@/components/ui/alert';
 import { Textarea } from '@/components/ui/textarea';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
 /**
  * Describe an audit in plain English. Prego reads it into settings and shows them for confirmation;
@@ -36,52 +35,47 @@ export function AuditAssistant() {
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle as="h2" className="flex items-center gap-2">
-          <Sparkles aria-hidden="true" className="size-5 text-primary" /> What would you like to test?
-        </CardTitle>
-        <CardDescription>Describe the audit and Prego sets it up. You check the settings before anything starts.</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <form onSubmit={onSubmit} className="grid gap-3">
-          <Label htmlFor="assistant-request" className="sr-only">
-            Describe the audit
-          </Label>
-          <Textarea
-            id="assistant-request"
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                e.currentTarget.form?.requestSubmit();
-              }
-            }}
-            placeholder="For example: run an accessibility audit on fcn.com, desktop and mobile"
-            maxLength={1000}
-            rows={2}
-          />
-          <div>
-            <Button type="submit" disabled={plan.isPending || !text.trim()}>
-              {plan.isPending ? 'Reading…' : 'Set up audit'}
-            </Button>
-          </div>
-        </form>
+    <div className="space-y-6">
+      <h1 className="text-center text-3xl font-bold tracking-tight">What would you like to test?</h1>
 
-        {plan.isError && (
-          <Alert variant="destructive" role="alert">
-            {plan.error.message}
-          </Alert>
-        )}
-        <div aria-live="polite">{plan.data && <Confirmation plan={plan.data} onChange={() => changeSettings(plan.data.run)} onStart={() => start.mutate(plan.data.run)} starting={start.isPending} />}</div>
-        {start.isError && (
-          <Alert variant="destructive" role="alert">
-            {start.error.message}
-          </Alert>
-        )}
-      </CardContent>
-    </Card>
+      <form onSubmit={onSubmit} className="relative grid gap-3">
+        <Label htmlFor="assistant-request" className="sr-only">
+          Describe the audit
+        </Label>
+        <Textarea
+          id="assistant-request"
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault();
+              e.currentTarget.form?.requestSubmit();
+            }
+          }}
+          placeholder="Run an accessibility audit on example.org"
+          maxLength={1000}
+          rows={1}
+          className="min-h-0 resize-none rounded-2xl px-4 py-3.5 text-base shadow-[var(--shadow-card)] sm:pr-36"
+        />
+        <Button type="submit" className="justify-self-end sm:absolute sm:top-2 sm:right-2" disabled={plan.isPending || !text.trim()}>
+          {plan.isPending ? 'Reading…' : 'Set up audit'}
+        </Button>
+        <p className="text-center text-xs text-muted-foreground">Describe the audit and Prego sets it up. You check the settings before anything starts.</p>
+      </form>
+
+
+      {plan.isError && (
+        <Alert variant="destructive" role="alert">
+          {plan.error.message}
+        </Alert>
+      )}
+      <div aria-live="polite">{plan.data && <Confirmation plan={plan.data} onChange={() => changeSettings(plan.data.run)} onStart={() => start.mutate(plan.data.run)} starting={start.isPending} />}</div>
+      {start.isError && (
+        <Alert variant="destructive" role="alert">
+          {start.error.message}
+        </Alert>
+      )}
+    </div>
   );
 }
 
@@ -92,10 +86,10 @@ function Confirmation({ plan, onStart, onChange, starting }: { plan: AuditPlan; 
   const sizes = run.viewports.map((v) => PROFILES[v as ProfileName]?.label ?? v).join(', ');
 
   return (
-    <section aria-labelledby="confirm-heading" className="space-y-4 rounded-xl border bg-muted/40 p-4">
-      <h3 id="confirm-heading" className="font-semibold">
+    <section aria-labelledby="confirm-heading" className="space-y-4 rounded-2xl border bg-card p-5 shadow-[var(--shadow-card)]">
+      <h2 id="confirm-heading" className="font-semibold">
         {plan.problems.length ? 'A bit more detail needed' : 'Check these settings'}
-      </h3>
+      </h2>
       {plan.problems.length > 0 && (
         <ul className="list-disc space-y-1 pl-5 text-sm">
           {plan.problems.map((p) => (

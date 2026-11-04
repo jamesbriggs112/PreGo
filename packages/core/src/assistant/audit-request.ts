@@ -2,7 +2,7 @@ import { CHECK_GROUPS } from '../checks/estimate.js';
 import { isProfileName, type ProfileName } from '../browser/profiles.js';
 import { assertLocalOllama, type AiSettings } from '../checks/ai/ai.js';
 
-// Turns a plain-English request ("run an accessibility audit on fcn.com on mobile") into audit
+// Turns a plain-English request ("run an accessibility audit on example.org on mobile") into audit
 // settings. A built-in reader handles the usual phrasing; with AI review switched on, a local Ollama
 // model reads looser wording. Either way nothing starts until someone confirms the settings.
 

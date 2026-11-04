@@ -1,4 +1,4 @@
-import { Children, cloneElement, isValidElement, useState, type FormEvent, type ReactNode } from 'react';
+import { Children, cloneElement, isValidElement, useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { PROFILES, isProfileName, type ProfileName } from '@prego/core/profiles';
@@ -30,6 +30,16 @@ const MODES = [
 ];
 
 
+// The form is split into steps so it isn't one long page. Every step can be revisited.
+const STEPS = [
+  { id: 'site', label: 'Site' },
+  { id: 'sizes', label: 'Screen sizes' },
+  { id: 'tests', label: 'Tests' },
+  { id: 'scope', label: 'Scope and login' },
+  { id: 'review', label: 'Review and start' },
+] as const;
+type StepId = (typeof STEPS)[number]['id'];
+
 const lines = (text: string) =>
   text
     .split('\n')
@@ -41,7 +51,7 @@ export function NewAuditPage() {
   const settings = useQuery({ queryKey: ['settings'], queryFn: api.settings });
   if (settings.isPending) return <p>Loading…</p>;
   // Fall back to built-in defaults if settings can't be loaded; the form still works.
-  return <NewAuditForm defaults={settings.data?.defaults} defaultDenyLabels={settings.data?.exploreDefaults.denyLabels ?? []} />;
+  return <NewAuditForm defaults={settings.data?.defaults} defaultDenyLabels={settings.data?.exploreDefaults?.denyLabels ?? []} />;
 }
 
 function NewAuditForm({ defaults, defaultDenyLabels }: { defaults?: Settings['defaults']; defaultDenyLabels: string[] }) {
@@ -82,6 +92,16 @@ function NewAuditForm({ defaults, defaultDenyLabels }: { defaults?: Settings['de
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
 
+  // Settings handed over from the audit assistant open on the review step.
+  const [step, setStep] = useState<StepId>(params.get('target') ? 'review' : 'site');
+  const stepHeading = useRef<HTMLHeadingElement>(null);
+  const firstRender = useRef(true);
+  useEffect(() => {
+    if (firstRender.current) firstRender.current = false;
+    else stepHeading.current?.focus();
+  }, [step]);
+  const stepIndex = STEPS.findIndex((s) => s.id === step);
+
   const start = useMutation({
     mutationFn: api.startRun,
     onSuccess: ({ runId }) => navigate(`/runs/${runId}`),
@@ -96,8 +116,23 @@ function NewAuditForm({ defaults, defaultDenyLabels }: { defaults?: Settings['de
     setMasks((saved?.maskSelectors ?? []).join('\n'));
   }
 
+  const problems: Partial<Record<StepId, string[]>> = {
+    site: [
+      ...(project.trim() ? [] : ['Enter a project name.']),
+      ...(mode !== 'journey' && !target.trim() ? ['Enter the web address or folder to audit.'] : []),
+      ...(mode === 'journey' && !journey ? ['Choose a recorded journey.'] : []),
+    ],
+    sizes: viewports.length ? [] : ['Choose at least one screen size.'],
+    tests: checks.length ? [] : ['Choose at least one check.'],
+  };
+  const allProblems = STEPS.flatMap((s) => problems[s.id] ?? []);
+
   function onSubmit(event: FormEvent) {
     event.preventDefault();
+    // Enter or Next moves on a step; only the last step starts the audit.
+    if (step !== 'review') return setStep(STEPS[stepIndex + 1].id);
+    const firstProblem = STEPS.find((s) => problems[s.id]?.length);
+    if (firstProblem) return setStep(firstProblem.id);
     const explore = mode === 'explore';
     const body: StartRunBody = {
       project: project.trim(),
@@ -137,6 +172,36 @@ function NewAuditForm({ defaults, defaultDenyLabels }: { defaults?: Settings['de
         <h1 className="text-2xl font-bold">New audit</h1>
         <p className="text-muted-foreground">Prego explores the target, checks every page it reaches and builds a report and tickets.</p>
       </div>
+
+      <nav aria-label="Audit set-up steps">
+        <ol className="flex flex-wrap gap-2">
+          {STEPS.map((s, i) => (
+            <li key={s.id}>
+              <button
+                type="button"
+                onClick={() => setStep(s.id)}
+                aria-current={step === s.id ? 'step' : undefined}
+                className={cn(
+                  'inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring',
+                  step === s.id ? 'border-primary bg-primary text-primary-foreground' : 'bg-card hover:bg-muted',
+                )}
+              >
+                <span aria-hidden="true" className="tabular-nums">{i + 1}</span>
+                {s.label}
+                {s.id !== step && problems[s.id]?.length ? <span className="sr-only"> (needs attention)</span> : null}
+                {s.id !== step && problems[s.id]?.length ? <span aria-hidden="true" className="size-2 rounded-full bg-destructive" /> : null}
+              </button>
+            </li>
+          ))}
+        </ol>
+      </nav>
+
+      <h2 ref={stepHeading} tabIndex={-1} className="text-lg font-semibold outline-none">
+        Step {stepIndex + 1} of {STEPS.length}: {STEPS[stepIndex].label}
+      </h2>
+
+      {step === 'site' && (
+      <>
 
       <Card>
         <CardHeader>
@@ -196,6 +261,21 @@ function NewAuditForm({ defaults, defaultDenyLabels }: { defaults?: Settings['de
         </CardContent>
       </Card>
 
+      {mode === 'journey' && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Journey</CardTitle>
+            <CardDescription>Prego replays the journey step by step and checks the page after every step, at each viewport.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <JourneyPicker projectName={project} projects={projects.data} value={journey?.name ?? ''} onChange={setJourney} defaultUrl={target} legend="Journey to replay" />
+          </CardContent>
+        </Card>
+      )}
+      </>
+      )}
+
+      {step === 'sizes' && (
       <Card>
         <CardHeader>
           <CardTitle>Viewports</CardTitle>
@@ -233,18 +313,11 @@ function NewAuditForm({ defaults, defaultDenyLabels }: { defaults?: Settings['de
           )}
         </CardContent>
       </Card>
-
-      {mode === 'journey' && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Journey</CardTitle>
-            <CardDescription>Prego replays the journey step by step and checks the page after every step, at each viewport.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <JourneyPicker projectName={project} projects={projects.data} value={journey?.name ?? ''} onChange={setJourney} defaultUrl={target} legend="Journey to replay" />
-          </CardContent>
-        </Card>
       )}
+
+      {step === 'scope' && (
+      <>
+      {mode === 'journey' && <p className="text-muted-foreground">A journey follows its recorded steps, so there are no page limits to set.</p>}
 
       {mode === 'explore' && (
         <>
@@ -365,6 +438,10 @@ function NewAuditForm({ defaults, defaultDenyLabels }: { defaults?: Settings['de
           </Field>
         </CardContent>
       </Card>
+      </>
+      )}
+
+      {step === 'tests' && (
 
       <Card>
         <CardHeader>
@@ -451,8 +528,76 @@ function NewAuditForm({ defaults, defaultDenyLabels }: { defaults?: Settings['de
           )}
         </CardContent>
       </Card>
+      )}
 
-      {start.isError && (
+      {step === 'review' && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Check and start</CardTitle>
+            <CardDescription>Nothing runs until you press Start audit.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-5">
+            {allProblems.length > 0 && (
+              <Alert variant="destructive" role="alert">
+                <ul className="list-disc space-y-1 pl-5">
+                  {allProblems.map((p) => (
+                    <li key={p}>{p}</li>
+                  ))}
+                </ul>
+              </Alert>
+            )}
+            <dl className="divide-y rounded-xl border text-sm">
+              {[
+                { to: 'site' as const, term: 'Project', value: project.trim() || 'Not set' },
+                { to: 'site' as const, term: mode === 'journey' ? 'Journey' : 'Site', value: mode === 'journey' ? (journey?.name ?? 'Not chosen') : target.trim() || 'Not set' },
+                { to: 'site' as const, term: 'Mode', value: MODES.find((m) => m.value === mode)!.label },
+                {
+                  to: 'sizes' as const,
+                  term: 'Screen sizes',
+                  value: [viewports.map((v) => PROFILES[v].label).join(', ') || 'None', ...EMULATION.filter((e) => emulation[e.key]).map((e) => e.label.toLowerCase())].join('; '),
+                },
+                { to: 'tests' as const, term: 'Tests', value: testsSummary(checks, checkGroups.data?.groups ?? [], checkList.data ?? []) },
+                {
+                  to: 'scope' as const,
+                  term: 'Scope',
+                  value:
+                    mode === 'explore'
+                      ? `Up to ${maxStates} screens, ${exploreDepth} taps deep`
+                      : mode === 'journey'
+                        ? 'The recorded steps'
+                        : `Up to ${maxPages} pages, ${auditAll ? 'every page audited' : `${perTemplate} per template audited`}, ${delay} ms between pages${respectRobots ? '' : ', ignoring robots.txt'}`,
+                },
+                { to: 'scope' as const, term: 'Login', value: loginJourney ? `Recorded journey “${loginJourney.name}”` : username ? `Basic auth as ${username}` : 'None' },
+              ].map((row) => (
+                <div key={row.term} className="flex flex-wrap items-baseline gap-x-4 gap-y-1 px-4 py-3">
+                  <dt className="w-32 shrink-0 font-medium">{row.term}</dt>
+                  <dd className="min-w-0 flex-1 break-words">{row.value}</dd>
+                  <dd>
+                    <Button type="button" variant="link" size="sm" className="h-auto p-0" onClick={() => setStep(row.to)}>
+                      Change<span className="sr-only"> {row.term.toLowerCase()}</span>
+                    </Button>
+                  </dd>
+                </div>
+              ))}
+            </dl>
+            {checkList.data && checks.length > 0 && (
+              <TimeEstimate
+                mode={mode}
+                pages={mode === 'explore' ? Number(maxStates) : mode === 'journey' ? (journey?.steps.length ?? 5) : Number(maxPages)}
+                viewports={Math.max(1, viewports.length)}
+                auditAll={auditAll}
+                perTemplate={Number(perTemplate) || 3}
+                delayMs={Number(delay) || 0}
+                concurrency={Number(concurrency) || 1}
+                costs={checkList.data.filter((c) => checks.includes(c.id)).map((c) => c.cost)}
+                calibration={checkGroups.data?.calibration ?? null}
+              />
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {step === 'review' && start.isError && (
         <Alert variant="destructive" role="alert">
           {start.error.message}{' '}
           {busyRunId && (
@@ -463,16 +608,39 @@ function NewAuditForm({ defaults, defaultDenyLabels }: { defaults?: Settings['de
         </Alert>
       )}
 
-      <div className="flex gap-3">
-        <Button type="submit" size="lg" disabled={start.isPending || viewports.length === 0 || checks.length === 0 || (mode === 'journey' && !journey)}>
-          {start.isPending ? 'Starting…' : 'Start audit'}
-        </Button>
+      <div className="flex flex-wrap gap-3">
+        {stepIndex > 0 && (
+          <Button type="button" variant="outline" size="lg" onClick={() => setStep(STEPS[stepIndex - 1].id)}>
+            Back
+          </Button>
+        )}
+        {step === 'review' ? (
+          <Button type="submit" size="lg" disabled={start.isPending || allProblems.length > 0}>
+            {start.isPending ? 'Starting…' : 'Start audit'}
+          </Button>
+        ) : (
+          <Button type="submit" size="lg">
+            Next: {STEPS[stepIndex + 1].label}
+          </Button>
+        )}
         <Button asChild variant="ghost" size="lg">
           <Link to="/">Cancel</Link>
         </Button>
       </div>
     </form>
   );
+}
+
+/** The test group's name when the checks match one exactly, otherwise the checks by name. */
+function testsSummary(checks: string[], groups: { id: string; name: string }[], available: { id: string; name: string; available: boolean }[]): string {
+  if (!checks.length) return 'None';
+  const usable = available.filter((c) => c.available);
+  const group = groups.find((g) => {
+    const ids = groupChecks(g as Parameters<typeof groupChecks>[0], usable);
+    return ids.length === checks.length && ids.every((id) => checks.includes(id));
+  });
+  if (group) return `${group.name} (${checks.length} ${checks.length === 1 ? 'check' : 'checks'})`;
+  return available.filter((c) => checks.includes(c.id)).map((c) => c.name).join(', ');
 }
 
 function Field({ id, label, hint, children }: { id: string; label: string; hint?: string; children: ReactNode }) {

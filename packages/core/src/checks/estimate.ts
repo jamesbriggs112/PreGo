@@ -16,7 +16,7 @@ export const CHECK_GROUPS: CheckGroup[] = [
   { id: 'content', name: 'Content and SEO', description: 'Titles, descriptions, alt text, HTML validity, spelling and go-live mistakes.', checks: ['content', 'html', 'spelling', 'golive'] },
   { id: 'design', name: 'Design and browsers', description: 'Visual consistency, and Firefox and Safari rendering.', checks: ['ui', 'browsers'] },
   { id: 'performance', name: 'Performance', description: 'Lighthouse performance, best-practice and SEO scores.', checks: ['lighthouse'] },
-  { id: 'security', name: 'Security', description: 'Passive checks only: headers, certificate, cookies, CSP, outdated libraries, tracking before consent, and the optional ZAP passive scan. Nothing is attacked.', checks: ['security', 'libraries', 'privacy', 'zap'] },
+  { id: 'security', name: 'Security', description: 'Passive checks only: headers, certificate, cookies, CSP, outdated libraries and tracking before consent. Nothing is attacked.', checks: ['security', 'libraries', 'privacy'] },
   { id: 'full', name: 'Full audit', description: 'Every check.', checks: [] },
 ];
 

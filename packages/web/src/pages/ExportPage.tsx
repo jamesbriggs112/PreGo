@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Alert } from '@/components/ui/alert';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { ReportContents } from '@/components/ReportContents';
 
 const FILE_LABELS: Record<string, string> = {
   'report.docx': 'Word report',
@@ -57,6 +58,8 @@ export function ExportPage() {
             : 'Exporting puts the screenshots into the Word report and then deletes them from Prego. To keep them, keep the report.'}
         </Alert>
       )}
+
+      {run.data && <ReportContents run={run.data} />}
 
       <Card>
         <CardHeader>

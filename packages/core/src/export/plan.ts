@@ -1,6 +1,7 @@
 import type { PregoDb } from '../db/database.js';
 import { CATEGORIES, CATEGORY_NAMES, type Category, type Location, type Occurrence, type Project, type Run, type StateEdge, type Ticket } from '../types.js';
 import type { ImageState } from './state-map-image.js';
+import { DEFAULT_REPORT_OPTIONS, type OptionalSection, type ReportOptions } from './report-options.js';
 
 /** Statuses left out of exports: dismissed false positives, and AI suggestions nobody has approved. */
 const NOT_EXPORTED = new Set<Ticket['status']>(['Dismissed', 'Needs review']);
@@ -31,9 +32,22 @@ export interface ReportSectionPlan {
  * one sits in, and the file name of every screenshot. The CSV and Word exporters both read this, so
  * their cross-references always agree.
  */
+/** A numbered top-level section of report.docx. */
+export type ReportSectionId = 'summary' | 'method' | OptionalSection | 'findings' | 'map' | 'conclusion' | 'limitations';
+export interface OutlineEntry {
+  id: ReportSectionId;
+  number: number;
+  title: string;
+}
+
 export interface ExportPlan {
   project: Project;
   run: Run;
+  options: ReportOptions;
+  /** The report's numbered sections, in order. */
+  outline: OutlineEntry[];
+  /** Optional sections with something to show. A section that's switched on but has nothing is left out. */
+  available: Record<OptionalSection, boolean>;
   locations: Location[];
   /** For interactive audits: what each action did. */
   edges: StateEdge[];
@@ -60,13 +74,57 @@ export function stateMapStates(plan: ExportPlan): ImageState[] {
     }));
 }
 
-/** Section 4 of the report holds findings; each category with tickets gets a subsection. */
-export const FINDINGS_SECTION = 4;
-export function buildExportPlan(db: PregoDb, runId: number): ExportPlan {
+/** Which optional sections have data for this audit. */
+export function availableSections(project: Project, run: Run, locations: Location[]): Record<OptionalSection, boolean> {
+  return {
+    analytics: !!project.settings.analytics,
+    content: locations.some((l) => l.metrics.content),
+    ia: run.mode === 'crawl' && locations.length > 1,
+    competitors: ((run.summary.competitors as unknown[] | undefined) ?? []).length > 0,
+  };
+}
+
+/** The report's sections, numbered in order. Findings come after the scene-setting sections. */
+export function reportOutline(run: Pick<Run, 'mode'>, options: ReportOptions, available: Record<OptionalSection, boolean>): OutlineEntry[] {
+  const on = (id: OptionalSection) => options.include[id] && available[id];
+  const ids: (ReportSectionId | false)[] = [
+    'summary',
+    'method',
+    on('analytics') && 'analytics',
+    'findings',
+    on('content') && 'content',
+    on('ia') && 'ia',
+    'map',
+    on('competitors') && 'competitors',
+    options.clientFacing && !!options.text.conclusion && 'conclusion',
+    'limitations',
+  ];
+  const titles: Record<ReportSectionId, string> = {
+    summary: 'Executive summary',
+    method: options.clientFacing ? 'Methodology' : 'Scope and method',
+    analytics: 'Analytics',
+    findings: 'Findings by category',
+    content: 'Content and tone',
+    ia: 'Information architecture',
+    map: run.mode === 'explore' ? 'State map summary' : run.mode === 'journey' ? 'Journey steps' : 'Site map summary',
+    competitors: 'Competitor analysis',
+    conclusion: 'Conclusion',
+    limitations: 'Limitations and manual testing',
+  };
+  // The technical report counts its cover as section 1 (the spec's numbering); a client-facing report
+  // starts at 1 after its contents page.
+  const first = options.clientFacing ? 1 : 2;
+  return ids.filter((id): id is ReportSectionId => !!id).map((id, i) => ({ id, number: i + first, title: titles[id] }));
+}
+
+export function buildExportPlan(db: PregoDb, runId: number, options: ReportOptions = db.getReportOptions(runId) ?? DEFAULT_REPORT_OPTIONS): ExportPlan {
   const run = db.getRun(runId);
   if (!run) throw new Error(`Run ${runId} not found`);
   const project = db.getProject(run.projectId)!;
   const locations = db.getLocations(runId);
+  const available = availableSections(project, run, locations);
+  const outline = reportOutline(run, options, available);
+  const findingsNumber = outline.find((o) => o.id === 'findings')!.number;
   const locationById = new Map(locations.map((l) => [l.id, l]));
 
   const exported = db
@@ -78,7 +136,7 @@ export function buildExportPlan(db: PregoDb, runId: number): ExportPlan {
   for (const category of CATEGORIES) {
     const inCategory = exported.filter((t) => t.category === category);
     if (inCategory.length === 0) continue;
-    const number = `${FINDINGS_SECTION}.${sections.length + 1}`;
+    const number = `${findingsNumber}.${sections.length + 1}`;
     const planned = inCategory.map((ticket): PlannedTicket => {
       let n = 0;
       const occurrenceList = db.getOccurrences(runId, ticket.ticketId).map((occurrence): PlannedOccurrence => {
@@ -99,6 +157,9 @@ export function buildExportPlan(db: PregoDb, runId: number): ExportPlan {
   return {
     project,
     run,
+    options,
+    outline,
+    available,
     locations,
     edges: db.getEdges(runId),
     sections,

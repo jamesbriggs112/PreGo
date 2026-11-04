@@ -27,6 +27,11 @@ import {
   stateMapStates,
   exportRun,
   runImagesDeleted,
+  reportCharts,
+  parseReportOptions,
+  parseAnalyticsCsv,
+  AnalyticsImportError,
+  suggestReportText,
   getSettings,
   logoPath,
   reportBranding,
@@ -76,6 +81,7 @@ const IMAGE_TYPES: Record<string, string> = { '.png': 'image/png', '.jpg': 'imag
 interface StartRunBody {
   project: string;
   target: string;
+  competitors?: string[];
   mode?: 'crawl' | 'explore' | 'journey';
   /** Checks to run, by ID (GET /api/checks). Default: the defaults in Settings. */
   checks?: string[];
@@ -138,6 +144,7 @@ const startRunSchema = {
       auditAll: { type: 'boolean' },
       concurrency: { type: 'integer', minimum: 1, maximum: 8 },
       delayMs: positiveInt,
+      competitors: { type: 'array', items: { type: 'string', maxLength: 300 }, maxItems: 20 },
       basicAuth: {
         type: 'object',
         required: ['username', 'password'],
@@ -348,6 +355,7 @@ export async function buildApp(options: AppOptions): Promise<PregoApp> {
         concurrency: body.concurrency,
         delayMs: body.delayMs,
         basicAuth: body.basicAuth?.username ? body.basicAuth : undefined,
+        competitors: body.competitors,
       });
       // Remember the explorer's denylist and masks for this project's next audit.
       if (explore) {
@@ -591,6 +599,72 @@ export async function buildApp(options: AppOptions): Promise<PregoApp> {
     return reply.type('image/png').header('Cache-Control', 'no-cache').send(createReadStream(path));
   });
 
+  // Report contents: the client-facing layout, optional sections and written text, per audit.
+
+  const reportState = (runId: number) => {
+    const plan = buildExportPlan(db, runId);
+    return { options: plan.options, available: plan.available, outline: plan.outline, suggestions: suggestReportText(plan) };
+  };
+
+  app.get<{ Params: { id: string } }>('/api/runs/:id/report', async (request, reply) => {
+    const run = db.getRun(Number(request.params.id));
+    if (!run) return reply.code(404).send({ error: 'Run not found' });
+    return reportState(run.id);
+  });
+
+  app.put<{ Params: { id: string }; Body: unknown }>(
+    '/api/runs/:id/report',
+    { schema: { body: { type: 'object' } }, bodyLimit: 512 * 1024 },
+    async (request, reply) => {
+      const run = db.getRun(Number(request.params.id));
+      if (!run) return reply.code(404).send({ error: 'Run not found' });
+      db.saveReportOptions(run.id, parseReportOptions(request.body));
+      return reportState(run.id);
+    },
+  );
+
+  // Google Analytics figures for a project's reports, from GA's own CSV exports.
+  app.put<{ Params: { id: string }; Body: { files: { name: string; text: string }[] } }>(
+    '/api/projects/:id/analytics',
+    {
+      bodyLimit: 5 * 1024 * 1024,
+      schema: {
+        body: {
+          type: 'object',
+          required: ['files'],
+          additionalProperties: false,
+          properties: {
+            files: {
+              type: 'array',
+              minItems: 1,
+              maxItems: 10,
+              items: { type: 'object', required: ['name', 'text'], additionalProperties: false, properties: { name: { type: 'string', maxLength: 200 }, text: { type: 'string' } } },
+            },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const project = db.getProject(Number(request.params.id));
+      if (!project) return reply.code(404).send({ error: 'Project not found' });
+      try {
+        const analytics = parseAnalyticsCsv(request.body.files);
+        db.saveProjectSettings(project.id, { analytics });
+        return { analytics };
+      } catch (error) {
+        if (error instanceof AnalyticsImportError) return reply.code(400).send({ error: error.message });
+        throw error;
+      }
+    },
+  );
+
+  app.delete<{ Params: { id: string } }>('/api/projects/:id/analytics', async (request, reply) => {
+    const project = db.getProject(Number(request.params.id));
+    if (!project) return reply.code(404).send({ error: 'Project not found' });
+    db.saveProjectSettings(project.id, { analytics: undefined });
+    return { analytics: null };
+  });
+
   // Exports
 
   app.get<{ Params: { id: string } }>('/api/runs/:id/exports', async (request, reply) => {
@@ -648,7 +722,7 @@ export async function buildApp(options: AppOptions): Promise<PregoApp> {
       run.mode === 'explore'
         ? await stateMapPng(stateMapStates(plan), plan.edges.map((e) => ({ from: e.fromLocationId, to: e.toLocationId, label: e.step.label, outcome: e.outcome })))
         : undefined;
-    const docx = await reportDocx(plan, runDirectory(dataDir, runId), reportBranding(db, dataDir), { stateMap });
+    const docx = await reportDocx(plan, runDirectory(dataDir, runId), reportBranding(db, dataDir), { stateMap, charts: await reportCharts(plan) });
     const { value } = await mammoth.convertToHtml({ buffer: docx });
     return { html: value };
   });

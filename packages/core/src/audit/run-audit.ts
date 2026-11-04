@@ -20,6 +20,8 @@ import { checkDefinitions, createChecks, defaultChecks, unknownChecks } from '..
 import type { CheckModule } from '../checks/types.js';
 import type { AiSettings } from '../checks/ai/ai.js';
 import { defaultDataDir } from '../paths.js';
+import { competitorUrls, scoreSites } from './competitors.js';
+import type { CompetitorResult } from '../export/sections.js';
 import type { Location, Run } from '../types.js';
 
 export interface AuditOptions {
@@ -79,12 +81,14 @@ export interface AuditOptions {
   onRequest?: (url: string) => void;
   /** Ollama on this computer, for the optional AI review check. */
   ai?: AiSettings;
+  /** Competitor sites whose home pages are scored alongside this one, for the report's comparison. */
+  competitors?: string[];
   onEvent?: (event: AuditEvent) => void;
 }
 
 export type AuditEvent =
   | { type: 'started'; runId: number; projectId: number }
-  | { type: 'phase'; phase: 'login' | 'crawl' | 'group' | 'explore' | 'journey' | 'audit' | 'tickets' | 'done'; message: string }
+  | { type: 'phase'; phase: 'login' | 'crawl' | 'group' | 'explore' | 'journey' | 'audit' | 'tickets' | 'competitors' | 'done'; message: string }
   | { type: 'page-found'; url: string; count: number }
   | { type: 'state-found'; stateId: string; title: string; depth: number; count: number; fromStateId: string | null; action: string | null }
   | { type: 'journey-step'; index: number; total: number; description: string; ok: boolean; error?: string }
@@ -183,6 +187,7 @@ export async function runAudit(db: PregoDb, options: AuditOptions): Promise<Audi
       maxTaps: options.maxTaps ?? 4,
       journey: options.journey ? { name: options.journey.name, steps: options.journey.steps.length } : null,
       loginJourney: options.loginJourney?.name ?? null,
+      competitors: competitorUrls(options.competitors ?? []),
     },
   });
   emit({ type: 'started', runId: run.id, projectId: project.id });
@@ -279,8 +284,23 @@ export async function runAudit(db: PregoDb, options: AuditOptions): Promise<Audi
     emit({ type: 'phase', phase: 'tickets', message: 'Grouping findings into tickets' });
     buildTickets(db, run.id, { keyJourneyUrls: options.keyJourneyUrls });
 
+    // The competitor comparison scores this site's home page and each competitor's.
+    const competitors = competitorUrls(options.competitors ?? []);
+    let compared: CompetitorResult[] | undefined;
+    if (competitors.length) {
+      const started = Date.now();
+      const sites = [{ url: new URL('/', startUrl).href, own: true }, ...competitors.map((url) => ({ url, own: false }))];
+      compared = await scoreSites(sites, runDir, {
+        respectRobots: options.respectRobots,
+        signal: options.signal,
+        onSite: (url, i) => emit({ type: 'phase', phase: 'competitors', message: `Comparing with competitors: scoring ${new URL(url).hostname} (${i + 1} of ${sites.length})` }),
+      });
+      timings.checks.competitors = Date.now() - started;
+    }
+
     db.finishRun(run.id, 'complete', {
       ...discovery.summary,
+      ...(compared && { competitors: compared }),
       findings: db.getRawFindings(run.id).length,
       tickets: db.getTickets(run.id).length,
       timings: { ...timings, totalMs: Date.now() - new Date(run.startedAt).getTime(), locations: toAudit.length, viewports: viewports.length },

@@ -95,6 +95,26 @@ Before exporting you can still edit a ticket's title, severity, priority and not
 dismiss false positives, and those changes carry over to the project's later audits. A problem keeps
 the same ticket ID every time it's found.
 
+### Report contents
+
+The Export page chooses what goes into report.docx, saved per audit:
+
+- **Client-facing report** adds a contents page and your own executive summary, key findings, top
+  recommendations, methodology and conclusion. Prego suggests key findings, recommendations and
+  methodology from the results, so a blank section is never empty. Off gives the technical report.
+- **Optional sections**, each with figures from Prego and room for your observations:
+  - **Analytics**: traffic sources, devices, popular pages and countries from Google Analytics CSV
+    exports, imported on the Export page and kept for the project. Prego keeps only the figures.
+  - **Content and tone**: reading ease, sentence length and whether the copy talks to the reader,
+    from the *Content and structure (for reports)* check.
+  - **Information architecture**: how deep and flat the site is, its top-level sections and the main
+    navigation. Site crawls only.
+  - **Competitor analysis**: add competitor sites in the Scope and login step of the New audit form.
+    Prego loads each public home page, as any visitor would, and scores it with Lighthouse at desktop
+    and mobile settings alongside this site. Sites whose robots.txt asks not to are skipped.
+
+Sections are numbered in order, and ticket section numbers in tickets.csv follow them.
+
 ### Screenshots
 
 Exporting puts the outlined screenshots into the Word report, then deletes them from Prego. The

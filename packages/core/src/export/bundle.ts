@@ -5,6 +5,7 @@ import { runDirectory } from '../audit/run-audit.js';
 import { defaultDataDir } from '../paths.js';
 import { buildExportPlan, stateMapStates, type ExportPlan } from './plan.js';
 import { stateMapPng } from './state-map-image.js';
+import { reportCharts } from './charts.js';
 import { writeCsvFiles } from './csv.js';
 import { writeReportDocx, type ReportBranding } from './docx.js';
 import { getSettings, reportBranding } from '../settings.js';
@@ -53,7 +54,7 @@ export async function exportRun(db: PregoDb, runId: number, options: ExportOptio
     stateMap = await stateMapPng(stateMapStates(plan), plan.edges.map((e) => ({ from: e.fromLocationId, to: e.toLocationId, label: e.step.label, outcome: e.outcome })));
     writeFileSync(join(dir, 'state-map.png'), stateMap);
   }
-  await writeReportDocx(plan, runDir, files.report, options.branding ?? reportBranding(db, dataDir), { stateMap });
+  await writeReportDocx(plan, runDir, files.report, options.branding ?? reportBranding(db, dataDir), { stateMap, charts: await reportCharts(plan) });
   writeFileSync(
     files.runJson,
     JSON.stringify(
@@ -78,10 +79,10 @@ export async function exportRun(db: PregoDb, runId: number, options: ExportOptio
   return { id: record.id, dir, files, plan };
 }
 
-/** Delete a run's screenshots and crops. Exporting does this once the report holds them. */
+/** Delete a run's screenshots, crops and competitor screenshots. Exporting does this once the report holds them. */
 export function deleteRunImages(dataDir: string, runId: number) {
   const runDir = runDirectory(dataDir, runId);
-  for (const folder of ['screenshots', 'crops']) rmSync(join(runDir, folder), { recursive: true, force: true });
+  for (const folder of ['screenshots', 'crops', 'competitors']) rmSync(join(runDir, folder), { recursive: true, force: true });
 }
 
 /** Whether a run's screenshots have been deleted, which happens when it's first exported. */

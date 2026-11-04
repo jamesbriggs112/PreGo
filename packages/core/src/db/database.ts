@@ -1,6 +1,7 @@
 import Database from 'better-sqlite3';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
+import { parseReportOptions, type ReportOptions } from '../export/report-options.js';
 import type {
   AuditMode,
   Category,
@@ -215,6 +216,13 @@ const MIGRATIONS: string[] = [
   UPDATE tickets SET status = 'Open' WHERE status IN ('New', 'Recurring', 'Regressed');
   ALTER TABLE tickets DROP COLUMN firstSeen;
   ALTER TABLE tickets DROP COLUMN lastSeen;
+  `,
+  // 10: report contents chosen on the Export page (client-facing layout, optional sections, written text).
+  `
+  CREATE TABLE report_options (
+    runId INTEGER PRIMARY KEY REFERENCES runs(id) ON DELETE CASCADE,
+    options TEXT NOT NULL
+  );
   `,
 ];
 
@@ -522,6 +530,15 @@ export class PregoDb {
   }
 
   // Exports
+
+  getReportOptions(runId: number): ReportOptions {
+    const row = this.sqlite.prepare('SELECT options FROM report_options WHERE runId = ?').get(runId) as { options: string } | undefined;
+    return parseReportOptions(row ? JSON.parse(row.options) : undefined);
+  }
+
+  saveReportOptions(runId: number, options: ReportOptions) {
+    this.sqlite.prepare('INSERT OR REPLACE INTO report_options (runId, options) VALUES (?, ?)').run(runId, JSON.stringify(parseReportOptions(options)));
+  }
 
   addExport(runId: number, dir: string, preset: string): ExportRecord {
     const createdAt = now();

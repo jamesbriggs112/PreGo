@@ -8,7 +8,7 @@ import { Alert } from '@/components/ui/alert';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { StateMapDiagram } from '@/components/StateMapDiagram';
 
-type Phase = 'login' | 'crawl' | 'group' | 'explore' | 'journey' | 'audit' | 'tickets';
+type Phase = 'login' | 'crawl' | 'group' | 'explore' | 'journey' | 'audit' | 'tickets' | 'competitors';
 const CRAWL_PHASES: Phase[] = ['crawl', 'group', 'audit', 'tickets'];
 const EXPLORE_PHASES: Phase[] = ['explore', 'audit', 'tickets'];
 const JOURNEY_PHASES: Phase[] = ['journey', 'audit', 'tickets'];
@@ -20,6 +20,7 @@ const PHASE_LABELS: Record<Phase, string> = {
   explore: 'Exploring screens',
   audit: 'Checking',
   tickets: 'Building tickets',
+  competitors: 'Scoring competitors',
 };
 type Found = Extract<RunEvent, { type: 'state-found' }>;
 type JourneyStep = Extract<RunEvent, { type: 'journey-step' }>;
@@ -36,6 +37,7 @@ export function LiveRun({ run }: { run: RunDetail }) {
   const PHASES = [
     ...(run.settings.loginJourney ? (['login'] as Phase[]) : []),
     ...(explore ? EXPLORE_PHASES : journey ? JOURNEY_PHASES : CRAWL_PHASES),
+    ...(((run.settings.competitors as string[] | undefined) ?? []).length ? (['competitors'] as Phase[]) : []),
   ];
   const phases = events.filter((e) => e.type === 'phase');
   const phase = phases.at(-1);

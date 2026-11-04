@@ -32,6 +32,21 @@ export interface ProjectSettings {
   denyLabels?: string[];
   denySelectors?: string[];
   maskSelectors?: string[];
+  /** Figures from a Google Analytics export, for the report's Analytics section. */
+  analytics?: AnalyticsSummary;
+}
+
+/** What Prego keeps from Google Analytics CSV exports. Figures only; nothing about individual people. */
+export interface AnalyticsSummary {
+  importedAt: string;
+  /** The files the figures came from. */
+  files: string[];
+  /** The date range the export covers, as GA writes it, if given. */
+  period: string | null;
+  /** Rows of each report found, largest first: label, users (or sessions) and, where given, engagement. */
+  tables: { id: 'channels' | 'devices' | 'pages' | 'countries'; title: string; measure: string; rows: { label: string; value: number; engagementSeconds?: number }[] }[];
+  /** Average engagement time per active user, in seconds, if any report gave it. */
+  engagementSeconds: number | null;
 }
 
 export interface Project {

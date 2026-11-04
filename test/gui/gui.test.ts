@@ -273,6 +273,28 @@ describe('Settings and Export screens', () => {
     await frame.getByText('Executive summary').first().waitFor({ timeout: 30_000 });
     await expect(frame.getByText('Four Agency').count()).resolves.toBeGreaterThan(0);
   });
+
+  it('switches to a client-facing report with written sections and optional sections', async () => {
+    const { page } = gui;
+    await page.getByLabel('Client-facing report').check();
+    await page.getByRole('group', { name: 'Written sections' }).waitFor();
+    await page.getByLabel('Executive summary').fill('Acme is launching a new widget shop.');
+    await page.getByRole('button', { name: 'Fill in the suggestion for key findings' }).click();
+    await expect(page.getByLabel('Key findings').inputValue()).resolves.toMatch(/^- Accessibility: \d+ issues/);
+    await page.getByLabel('Information architecture').check();
+    await page.getByLabel('Your observations').fill('The structure is flat.');
+    await page.getByRole('status').getByText('Saved.').waitFor();
+    await page.getByText(/Sections in the report.*Information architecture/s).waitFor();
+    expect(gui.db.getReportOptions(runId)).toMatchObject({ clientFacing: true, include: { ia: true }, text: { summary: 'Acme is launching a new widget shop.', ia: 'The structure is flat.' } });
+    // axe can't look inside the sandboxed preview, so check the page with it closed.
+    await page.getByRole('button', { name: 'Hide report preview' }).click();
+    expect(await axeViolations(page)).toEqual([]);
+
+    await page.getByRole('button', { name: 'Preview the report' }).click();
+    const frame = page.frameLocator('iframe[title="Report preview"]');
+    await frame.getByText('Acme is launching a new widget shop.').waitFor({ timeout: 30_000 });
+    await frame.getByRole('heading', { name: /^\d+\. Information architecture$/ }).waitFor();
+  }, 60_000);
 });
 
 describe('Interactive exploration', () => {

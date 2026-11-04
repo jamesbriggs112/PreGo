@@ -19,6 +19,7 @@ import { privacyModule } from './privacy/privacy.js';
 import { spellingModule } from './spelling/spelling.js';
 import { browsersModule } from './browsers/browsers.js';
 import { aiModule, type AiSettings } from './ai/ai.js';
+import { structureModule } from './structure/structure.js';
 
 /** Everything a check factory may need from the audit. */
 export interface CheckFactoryContext {
@@ -156,6 +157,16 @@ const definitions: CheckDefinition[] = [
     defaultOn: true,
     cost: { seconds: [0, 0.01], perPage: true },
     create: (context) => brokenLinksModule(context.failedPages),
+  },
+  {
+    id: 'structure',
+    name: 'Content and structure (for reports)',
+    description: 'Measures how each page’s copy reads (reading ease, sentence length, whether it talks to the reader) and records the main navigation, for the report’s Content and tone and Information architecture sections. Raises no tickets.',
+    // Measurements only, so it doesn't count towards any score.
+    categories: [],
+    defaultOn: true,
+    cost: { seconds: [0.05, 0.15], perPage: true },
+    create: (context) => structureModule(context.startUrl),
   },
   {
     id: 'golive',

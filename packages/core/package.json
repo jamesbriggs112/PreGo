@@ -32,6 +32,11 @@
       "types": "./dist/checks/estimate.d.ts",
       "development": "./src/checks/estimate.ts",
       "default": "./dist/checks/estimate.js"
+    },
+    "./report-options": {
+      "types": "./dist/export/report-options.d.ts",
+      "development": "./src/export/report-options.ts",
+      "default": "./dist/export/report-options.js"
     }
   },
   "dependencies": {

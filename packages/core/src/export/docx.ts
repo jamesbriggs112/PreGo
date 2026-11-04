@@ -21,7 +21,10 @@ import { join } from 'node:path';
 import { CATEGORIES, CATEGORY_NAMES, SEVERITIES, type Severity } from '../types.js';
 import { checkedCategories } from '../checks/categories.js';
 import { averagePerformance, type LighthouseScores } from '../checks/lighthouse/lighthouse.js';
-import { stateMapStates, type ExportPlan, type PlannedTicket, type ReportSectionPlan } from './plan.js';
+import { stateMapStates, type ExportPlan, type OutlineEntry, type PlannedTicket, type ReportSectionId, type ReportSectionPlan } from './plan.js';
+import { listItems } from './report-options.js';
+import { suggestReportText } from './suggest.js';
+import { analyticsSection, competitorSection, contentSection, iaSection, type SectionContext } from './sections.js';
 
 export interface ReportBranding {
   /** Company shown on the cover and in the footer. */
@@ -49,22 +52,34 @@ const MAX_IMAGE_HEIGHT = 420;
 export interface ReportExtras {
   /** State map diagram (PNG) for interactive audits. */
   stateMap?: Buffer;
+  /** Charts for the optional sections, already drawn (PNG). */
+  charts?: Partial<Record<'analytics' | 'competitors', Buffer>>;
 }
 
 export async function reportDocx(plan: ExportPlan, runDir: string, branding: ReportBranding = {}, extras: ReportExtras = {}): Promise<Buffer> {
   const brand = { ...DEFAULT_BRANDING, ...branding };
+  const context: SectionContext = { plan, runDir, charts: extras.charts ?? {}, helpers: { heading, para, table, pngImage, writtenText, plural } };
+  const builders: Record<ReportSectionId, (entry: OutlineEntry) => (Paragraph | Table)[]> = {
+    summary: (e) => executiveSummary(plan, e),
+    method: (e) => scopeAndMethod(plan, e),
+    analytics: (e) => analyticsSection(context, e),
+    findings: (e) => findings(plan, runDir, e),
+    content: (e) => contentSection(context, e),
+    ia: (e) => iaSection(context, e),
+    map: (e) => (plan.run.mode === 'explore' ? stateMapSection(plan, extras.stateMap, e) : plan.run.mode === 'journey' ? journeySection(plan, e) : siteMap(plan, e)),
+    competitors: (e) => competitorSection(context, e),
+    conclusion: (e) => [heading(`${e.number}. ${e.title}`, HeadingLevel.HEADING_1), ...writtenText(plan.options.text.conclusion ?? '')],
+    limitations: (e) => limitations(plan, e),
+  };
   const children = [
     ...cover(plan, brand),
-    ...executiveSummary(plan),
-    ...scopeAndMethod(plan),
-    ...findings(plan, runDir),
-    ...(plan.run.mode === 'explore' ? stateMapSection(plan, extras.stateMap) : plan.run.mode === 'journey' ? journeySection(plan) : siteMap(plan)),
-    ...limitations(plan),
+    ...(plan.options.clientFacing ? contents(plan) : []),
+    ...plan.outline.flatMap((entry) => builders[entry.id](entry)),
     ...appendix(plan),
   ];
   const doc = new Document({
     creator: brand.companyName,
-    title: `${plan.project.name}: UX, UI and accessibility audit`,
+    title: `${plan.project.name}: ${reportTitle(plan)}`,
     description: 'Automated audit report produced by Prego',
     styles: {
       default: { document: { run: { font: 'Arial', size: 22 } } },
@@ -108,25 +123,51 @@ function cover(plan: ExportPlan, brand: typeof DEFAULT_BRANDING & ReportBranding
   }
   out.push(
     new Paragraph({ spacing: { before: 1600, after: 200 }, children: [new TextRun({ text: plan.project.name, size: 56, bold: true, color: brand.accentColour })] }),
-    new Paragraph({ spacing: { after: 600 }, children: [new TextRun({ text: 'UX, UI and accessibility audit', size: 36 })] }),
+    new Paragraph({ spacing: { after: 600 }, children: [new TextRun({ text: reportTitle(plan), size: 36 })] }),
     labelled('Product', productName(plan)),
     labelled('Date', formatDate(plan.run.startedAt)),
     labelled('Audit scope', scopeSentence(plan)),
-    labelled('Prepared by', `${brand.companyName}, using Prego automated checks`),
+    labelled('Prepared by', plan.options.clientFacing ? brand.companyName : `${brand.companyName}, using Prego automated checks`),
     new Paragraph({ children: [new PageBreak()] }),
   );
   return out;
 }
 
-function executiveSummary(plan: ExportPlan): (Paragraph | Table)[] {
+function reportTitle(plan: ExportPlan): string {
+  return plan.options.clientFacing ? 'Website UX audit' : 'UX, UI and accessibility audit';
+}
+
+/** A contents list of the numbered sections. Plain text, so it needs no updating when the report opens. */
+function contents(plan: ExportPlan): Paragraph[] {
+  return [
+    heading('Contents', HeadingLevel.HEADING_1),
+    ...plan.outline.map((e) => new Paragraph({ spacing: { after: 100 }, children: [new TextRun({ text: `${e.number}.`, bold: true }), new TextRun(` ${e.title}`)] })),
+    new Paragraph({ spacing: { after: 100 }, children: [new TextRun({ text: 'Appendix A.', bold: true }), new TextRun(' Ticket index')] }),
+    new Paragraph({ children: [new PageBreak()] }),
+  ];
+}
+
+function executiveSummary(plan: ExportPlan, entry: OutlineEntry): (Paragraph | Table)[] {
   const checked = checkedCategories(plan.run.settings);
   const top = [...plan.tickets].sort((a, b) => a.priority.localeCompare(b.priority) || SEVERITIES.indexOf(a.severity) - SEVERITIES.indexOf(b.severity) || b.locationsAffected - a.locationsAffected).slice(0, 5);
-  const out: (Paragraph | Table)[] = [
-    heading('2. Executive summary', HeadingLevel.HEADING_1),
-    para(
-      `Automated checks found ${plan.tickets.length} distinct ${plural(plan.tickets.length, 'issue')} across ${auditedCount(plan)} audited ${plural(auditedCount(plan), plan.run.mode === 'explore' ? 'screen' : plan.run.mode === 'journey' ? 'journey step' : 'page')}. ` +
-        'Each issue has a ticket ID (for example PRG-A11Y-001) that matches a row in tickets.csv, so the development team can pick it up directly.',
-    ),
+  const { text, clientFacing } = plan.options;
+  const suggested = suggestReportText(plan);
+  const counts =
+    `Automated checks found ${plan.tickets.length} distinct ${plural(plan.tickets.length, 'issue')} across ${auditedCount(plan)} audited ${plural(auditedCount(plan), plan.run.mode === 'explore' ? 'screen' : plan.run.mode === 'journey' ? 'journey step' : 'page')}. ` +
+    'Each issue has a ticket ID (for example PRG-A11Y-001) that matches a row in tickets.csv, so the development team can pick it up directly.';
+  const out: (Paragraph | Table)[] = [heading(`${entry.number}. ${entry.title}`, HeadingLevel.HEADING_1)];
+  if (clientFacing) {
+    out.push(...(text.summary ? writtenText(text.summary) : [para(counts)]));
+    out.push(heading('Key findings', HeadingLevel.HEADING_2));
+    for (const item of listItems(text.keyFindings ?? suggested.keyFindings)) out.push(new Paragraph({ bullet: { level: 0 }, children: [new TextRun(item)] }));
+    out.push(heading('Top recommendations', HeadingLevel.HEADING_2));
+    listItems(text.recommendations ?? suggested.recommendations).forEach((item, i) =>
+      out.push(new Paragraph({ spacing: { after: 80 }, indent: { left: 360, hanging: 360 }, children: [new TextRun({ text: `${i + 1}.\t`, bold: true }), new TextRun(item)] })),
+    );
+  } else {
+    out.push(para(counts));
+  }
+  out.push(
     heading('Scores by category', HeadingLevel.HEADING_2),
     para('Scores start at 100 and drop for each issue found, weighted by severity. They show where to focus first, not a measure of compliance.'),
     table(
@@ -140,8 +181,9 @@ function executiveSummary(plan: ExportPlan): (Paragraph | Table)[] {
       }),
     ),
     heading('Top issues', HeadingLevel.HEADING_2),
-  ];
-  if (top.length === 0) out.push(para('Automated checks raised no issues in the areas checked. Manual testing is still needed (see section 6).'));
+  );
+  const limits = plan.outline.find((o) => o.id === 'limitations')!.number;
+  if (top.length === 0) out.push(para(`Automated checks raised no issues in the areas checked. Manual testing is still needed (see section ${limits}).`));
   for (const t of top) {
     out.push(
       new Paragraph({
@@ -179,11 +221,15 @@ function lighthouseTable(plan: ExportPlan): (Paragraph | Table)[] {
   ];
 }
 
-function scopeAndMethod(plan: ExportPlan): (Paragraph | Table)[] {
-  return [...scopeAndMethodTable(plan), ...lighthouseTable(plan)];
+function scopeAndMethod(plan: ExportPlan, entry: OutlineEntry): (Paragraph | Table)[] {
+  const [title, ...rest] = scopeAndMethodTable(plan, entry);
+  // Client-facing reports open the section with the methodology in words, then the detail.
+  const words = plan.options.clientFacing ? writtenText(plan.options.text.methodology ?? suggestReportText(plan).methodology) : [];
+  return [title, ...words, ...rest, ...lighthouseTable(plan)];
 }
 
-function scopeAndMethodTable(plan: ExportPlan): (Paragraph | Table)[] {
+function scopeAndMethodTable(plan: ExportPlan, entry: OutlineEntry): (Paragraph | Table)[] {
+  const title = heading(`${entry.number}. ${entry.title}`, HeadingLevel.HEADING_1);
   const s = plan.run.settings as Record<string, unknown>;
   const pages = plan.locations.filter((l) => l.statusCode !== null && l.statusCode < 400);
   const templates = new Set(pages.map((l) => l.templateKey));
@@ -192,7 +238,7 @@ function scopeAndMethodTable(plan: ExportPlan): (Paragraph | Table)[] {
   if (plan.run.mode === 'journey') {
     const summary = plan.run.summary as Record<string, unknown>;
     return [
-      heading('3. Scope and method', HeadingLevel.HEADING_1),
+      title,
       para(scopeSentence(plan) + '.'),
       para('The journey was recorded once by an auditor clicking through it, then replayed by Prego with checks after every step, at each viewport.'),
       table(
@@ -213,7 +259,7 @@ function scopeAndMethodTable(plan: ExportPlan): (Paragraph | Table)[] {
     const states = plan.locations.filter((l) => l.kind === 'state');
     const skipped = plan.edges.filter((e) => e.outcome === 'skipped' || e.outcome === 'external');
     return [
-      heading('3. Scope and method', HeadingLevel.HEADING_1),
+      title,
       para(scopeSentence(plan) + '.'),
       para(
         'Prego opened the interactive and pressed every control on every screen it found, breadth-first from the start screen, recording where each one led. ' +
@@ -237,7 +283,7 @@ function scopeAndMethodTable(plan: ExportPlan): (Paragraph | Table)[] {
     ];
   }
   return [
-    heading('3. Scope and method', HeadingLevel.HEADING_1),
+    title,
     para(scopeSentence(plan) + '.'),
     table(
       ['', ''],
@@ -258,8 +304,8 @@ function scopeAndMethodTable(plan: ExportPlan): (Paragraph | Table)[] {
   ];
 }
 
-function findings(plan: ExportPlan, runDir: string): (Paragraph | Table)[] {
-  const out: (Paragraph | Table)[] = [heading('4. Findings by category', HeadingLevel.HEADING_1)];
+function findings(plan: ExportPlan, runDir: string, entry: OutlineEntry): (Paragraph | Table)[] {
+  const out: (Paragraph | Table)[] = [heading(`${entry.number}. ${entry.title}`, HeadingLevel.HEADING_1)];
   if (plan.sections.length === 0) out.push(para('Automated checks raised no issues in the areas checked.'));
   for (const section of plan.sections) out.push(...findingsSection(section, runDir));
   return out;
@@ -305,10 +351,10 @@ function findingsSection(section: ReportSectionPlan, runDir: string): (Paragraph
   return out;
 }
 
-function stateMapSection(plan: ExportPlan, image: Buffer | undefined): (Paragraph | Table)[] {
+function stateMapSection(plan: ExportPlan, image: Buffer | undefined, entry: OutlineEntry): (Paragraph | Table)[] {
   const states = stateMapStates(plan);
   const out: (Paragraph | Table)[] = [
-    heading('5. State map summary', HeadingLevel.HEADING_1),
+    heading(`${entry.number}. ${entry.title}`, HeadingLevel.HEADING_1),
     para('Every screen Prego reached, arranged by how many taps it is from the start screen. Screens with a thick red border are dead ends or have a control that does nothing. The full diagram is also in state-map.png.'),
   ];
   const picture = image && pngImage(image, MAX_IMAGE_WIDTH, 600, `State map of ${states.length} screens`);
@@ -323,11 +369,11 @@ function stateMapSection(plan: ExportPlan, image: Buffer | undefined): (Paragrap
   return out;
 }
 
-function journeySection(plan: ExportPlan): (Paragraph | Table)[] {
+function journeySection(plan: ExportPlan, entry: OutlineEntry): (Paragraph | Table)[] {
   const issues = new Map<number, number>();
   for (const t of plan.tickets) for (const id of new Set(t.occurrenceList.map((o) => o.locationId))) issues.set(id, (issues.get(id) ?? 0) + 1);
   return [
-    heading('5. Journey steps', HeadingLevel.HEADING_1),
+    heading(`${entry.number}. ${entry.title}`, HeadingLevel.HEADING_1),
     para('Each step of the recorded journey, the page it ended on and how many issues were found there.'),
     table(
       ['Step', 'Page', 'Issues'],
@@ -337,7 +383,7 @@ function journeySection(plan: ExportPlan): (Paragraph | Table)[] {
   ];
 }
 
-function siteMap(plan: ExportPlan): (Paragraph | Table)[] {
+function siteMap(plan: ExportPlan, entry: OutlineEntry): (Paragraph | Table)[] {
   const rows = plan.locations.map((l) => [
     l.url,
     l.title ?? '',
@@ -345,19 +391,20 @@ function siteMap(plan: ExportPlan): (Paragraph | Table)[] {
     l.audited ? 'Audited' : l.statusCode !== null && l.statusCode >= 400 ? `Broken (HTTP ${l.statusCode})` : 'Same template, not audited',
   ]);
   return [
-    heading('5. Site map summary', HeadingLevel.HEADING_1),
+    heading(`${entry.number}. ${entry.title}`, HeadingLevel.HEADING_1),
     para('Every page Prego found, the template it was grouped into and whether it was audited. Broken links found while crawling are listed too.'),
     table(['Address', 'Page title', 'Template', 'Status'], rows, { fontSize: 16 }),
   ];
 }
 
-function limitations(plan: ExportPlan): Paragraph[] {
+function limitations(plan: ExportPlan, entry: OutlineEntry): Paragraph[] {
+  const method = plan.outline.find((o) => o.id === 'method')!.number;
   const notAudited = plan.locations.filter((l) => !l.audited && (l.statusCode ?? 0) < 400).length;
   const items = [
     'Automated tools find only a portion of accessibility problems. Many WCAG criteria need human judgement, such as whether alt text is meaningful, whether instructions make sense, or whether the reading order is logical.',
     'This report records what automated checks found. It does not show that the product meets WCAG or any other standard, and should support manual testing, not replace it.',
     plan.run.mode === 'explore'
-      ? 'Only screens Prego could reach by pressing controls were checked. Screens that need specific input (a correct quiz answer, a search term), gestures such as swiping or pinching, or one of the controls Prego never presses (see section 3) were not explored.'
+      ? `Only screens Prego could reach by pressing controls were checked. Screens that need specific input (a correct quiz answer, a search term), gestures such as swiping or pinching, or one of the controls Prego never presses (see section ${method}) were not explored.`
       : 'Only pages Prego could reach by following links and the sitemap were checked. Pages behind forms, searches or logins that were not configured were not visited.',
     notAudited > 0
       ? `${notAudited} ${plural(notAudited, 'page')} shared a template with pages already audited and were not checked individually. Content-specific problems on those pages may be missed.`
@@ -373,7 +420,7 @@ function limitations(plan: ExportPlan): Paragraph[] {
     'Touch and kiosks: check target sizes, gestures with single-tap alternatives, and idle timeouts that give enough warning.',
   ];
   return [
-    heading('6. Limitations and manual testing', HeadingLevel.HEADING_1),
+    heading(`${entry.number}. ${entry.title}`, HeadingLevel.HEADING_1),
     heading('What automated checks cannot cover', HeadingLevel.HEADING_2),
     ...items.map((text) => new Paragraph({ bullet: { level: 0 }, children: [new TextRun(text)] })),
     heading('Recommended manual tests', HeadingLevel.HEADING_2),
@@ -445,6 +492,19 @@ function productName(plan: ExportPlan): string {
 
 function heading(text: string, level: (typeof HeadingLevel)[keyof typeof HeadingLevel]) {
   return new Paragraph({ heading: level, children: [new TextRun(text)] });
+}
+
+/** The auditor's own text: a blank line starts a new paragraph, and lines starting with - are bullets. */
+function writtenText(text: string): Paragraph[] {
+  return text
+    .split(/\n\s*\n/)
+    .map((block) => block.trim())
+    .filter(Boolean)
+    .flatMap((block) => {
+      const lines = block.split('\n');
+      if (lines.every((l) => /^\s*[-*•]\s+/.test(l))) return lines.map((l) => new Paragraph({ bullet: { level: 0 }, children: [new TextRun(l.replace(/^\s*[-*•]\s+/, ''))] }));
+      return [para(lines.join(' '))];
+    });
 }
 
 function para(text: string) {

@@ -56,7 +56,11 @@ export function stateMapSvg(states: ImageState[], edges: MapEdge[]): string {
 
 /** Render the state map to a PNG with headless Chromium. */
 export async function stateMapPng(states: ImageState[], edges: MapEdge[]): Promise<Buffer> {
-  const svg = stateMapSvg(states, edges);
+  return svgToPng(stateMapSvg(states, edges));
+}
+
+/** Draw an SVG to a PNG at twice its size, for sharp images in the Word report. */
+export async function svgToPng(svg: string): Promise<Buffer> {
   const browser = await chromium.launch();
   try {
     const page = await browser.newPage({ deviceScaleFactor: 2 });

@@ -104,3 +104,31 @@ describe('setting up an audit from a typed request', () => {
     expect(empty.status).toBe(400);
   });
 });
+
+describe('report contents and analytics', () => {
+  const json = (method: string, body: unknown) => ({ method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+
+  it('saves the report options per audit and imports Google Analytics exports for the project', async () => {
+    const run = db.listProjects().flatMap((p) => db.listRuns(p.id)).find((r) => r.status === 'complete')!;
+    const before = await (await fetch(`${base}/api/runs/${run.id}/report`)).json();
+    expect(before).toMatchObject({ options: { clientFacing: false }, available: { analytics: false } });
+    expect(before.suggestions.recommendations).toEqual(expect.any(String));
+
+    const saved = await (await fetch(`${base}/api/runs/${run.id}/report`, json('PUT', { clientFacing: true, include: { analytics: true }, text: { summary: 'Hello' } }))).json();
+    expect(saved.outline.map((o: { title: string }) => o.title).slice(0, 2)).toEqual(['Executive summary', 'Methodology']);
+    expect(db.getReportOptions(run.id)).toMatchObject({ clientFacing: true, text: { summary: 'Hello' } });
+
+    const ga = 'Device category,Active users\nmobile,10\ndesktop,5\n';
+    const bad = await fetch(`${base}/api/projects/${run.projectId}/analytics`, json('PUT', { files: [{ name: 'x.csv', text: 'Name,Email\n' }] }));
+    expect(bad.status).toBe(400);
+    expect((await bad.json()).error).toMatch(/look like a Google Analytics report/);
+    const imported = await fetch(`${base}/api/projects/${run.projectId}/analytics`, json('PUT', { files: [{ name: 'devices.csv', text: ga }] }));
+    expect(imported.status).toBe(200);
+    const after = await (await fetch(`${base}/api/runs/${run.id}/report`)).json();
+    expect(after.available.analytics).toBe(true);
+    expect(after.outline.map((o: { id: string }) => o.id)).toContain('analytics');
+
+    await fetch(`${base}/api/projects/${run.projectId}/analytics`, { method: 'DELETE' });
+    expect(db.getProject(run.projectId)!.settings.analytics).toBeUndefined();
+  });
+});

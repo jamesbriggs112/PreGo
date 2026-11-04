@@ -13,7 +13,7 @@ export interface CheckGroup {
 export const CHECK_GROUPS: CheckGroup[] = [
   { id: 'quick', name: 'Quick check', description: 'The basics before anything else: accessibility, go-live mistakes, broken links and security headers.', checks: ['axe', 'golive', 'links', 'security'] },
   { id: 'accessibility', name: 'Accessibility', description: 'Both accessibility engines plus the custom keyboard, zoom and spacing checks.', checks: ['axe', 'a11y-custom', 'ibm', 'canvas'] },
-  { id: 'content', name: 'Content and SEO', description: 'Titles, descriptions, alt text, HTML validity, spelling and go-live mistakes.', checks: ['content', 'html', 'spelling', 'golive'] },
+  { id: 'content', name: 'Content and SEO', description: 'Titles, descriptions, alt text, HTML validity, spelling, go-live mistakes and readability.', checks: ['content', 'html', 'spelling', 'golive', 'structure'] },
   { id: 'design', name: 'Design and browsers', description: 'Visual consistency, and Firefox and Safari rendering.', checks: ['ui', 'browsers'] },
   { id: 'performance', name: 'Performance', description: 'Lighthouse performance, best-practice and SEO scores.', checks: ['lighthouse'] },
   { id: 'security', name: 'Security', description: 'Passive checks only: headers, certificate, cookies, CSP, outdated libraries and tracking before consent. Nothing is attacked.', checks: ['security', 'libraries', 'privacy'] },

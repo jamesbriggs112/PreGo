@@ -89,6 +89,7 @@ function NewAuditForm({ defaults, defaultDenyLabels }: { defaults?: Settings['de
   const [denySelectors, setDenySelectors] = useState('');
   const [masks, setMasks] = useState('');
   const [safetyEdited, setSafetyEdited] = useState(false);
+  const [competitors, setCompetitors] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
 
@@ -157,6 +158,7 @@ function NewAuditForm({ defaults, defaultDenyLabels }: { defaults?: Settings['de
       concurrency: Number(concurrency),
       delayMs: Number(delay),
       basicAuth: username ? { username, password } : undefined,
+      ...(mode === 'crawl' && lines(competitors).length && { competitors: lines(competitors) }),
     };
     start.mutate(body);
   }
@@ -411,6 +413,23 @@ function NewAuditForm({ defaults, defaultDenyLabels }: { defaults?: Settings['de
       </Card>
       )}
 
+      {mode === 'crawl' && (
+      <Card>
+        <CardHeader>
+          <CardTitle>Competitors</CardTitle>
+          <CardDescription>
+            Optional, for the report’s Competitor analysis. Prego loads each site’s public home page, as any visitor would, and scores it with Lighthouse alongside this site.
+            Sites whose robots.txt asks not to are skipped. Adds about a minute per site.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Field id="competitors" label="Competitor sites" hint="One address per line, up to 8, e.g. competitor.co.uk.">
+            <Textarea id="competitors" value={competitors} onChange={(e) => setCompetitors(e.target.value)} rows={4} />
+          </Field>
+        </CardContent>
+      </Card>
+      )}
+
       <Card>
         <CardHeader>
           <CardTitle>Login</CardTitle>
@@ -567,6 +586,9 @@ function NewAuditForm({ defaults, defaultDenyLabels }: { defaults?: Settings['de
                         ? 'The recorded steps'
                         : `Up to ${maxPages} pages, ${auditAll ? 'every page audited' : `${perTemplate} per template audited`}, ${delay} ms between pages${respectRobots ? '' : ', ignoring robots.txt'}`,
                 },
+                ...(mode === 'crawl' && lines(competitors).length
+                  ? [{ to: 'scope' as const, term: 'Competitors', value: lines(competitors).join(', ') }]
+                  : []),
                 { to: 'scope' as const, term: 'Login', value: loginJourney ? `Recorded journey “${loginJourney.name}”` : username ? `Basic auth as ${username}` : 'None' },
               ].map((row) => (
                 <div key={row.term} className="flex flex-wrap items-baseline gap-x-4 gap-y-1 px-4 py-3">

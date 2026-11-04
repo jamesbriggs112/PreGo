@@ -1,5 +1,6 @@
 import type { Calibration, CheckCost, CheckGroup } from '@prego/core/estimate';
-import type { Category, Location, Priority, Project, Run, Severity, Ticket } from '@prego/core/types';
+import type { AnalyticsSummary, Category, Location, Priority, Project, Run, Severity, Ticket } from '@prego/core/types';
+import type { OptionalSection, ReportOptions } from '@prego/core/report-options';
 
 export type RunSummary = Pick<Run, 'id' | 'projectId' | 'mode' | 'target' | 'status' | 'startedAt' | 'finishedAt' | 'summary' | 'error'>;
 export type Scores = Partial<Record<Category, number>>;
@@ -139,6 +140,14 @@ export interface StartRunBody {
   basicAuth?: { username: string; password: string };
 }
 
+/** What goes in report.docx for one audit, with the sections that have something to show. */
+export interface ReportState {
+  options: ReportOptions;
+  available: Record<OptionalSection, boolean>;
+  outline: { id: string; number: number; title: string }[];
+  suggestions: { keyFindings: string; recommendations: string; methodology: string };
+}
+
 /** An audit read from a typed request, waiting for the person to confirm it. */
 export interface AuditPlan {
   source: 'ollama' | 'reader';
@@ -181,6 +190,11 @@ export const api = {
     request<{ deleted: { project: string; audits: number; exports: number } }>(`/api/projects/${id}`, { method: 'DELETE' }),
   startRun: (body: StartRunBody) => post<{ runId: number; projectId: number }>('/api/runs', body),
   planAudit: (text: string) => post<AuditPlan>('/api/assistant/plan', { text }),
+  report: (runId: number) => request<ReportState>(`/api/runs/${runId}/report`),
+  saveReport: (runId: number, options: ReportOptions) => request<ReportState>(`/api/runs/${runId}/report`, { method: 'PUT', body: JSON.stringify(options) }),
+  importAnalytics: (projectId: number, files: { name: string; text: string }[]) =>
+    request<{ analytics: AnalyticsSummary }>(`/api/projects/${projectId}/analytics`, { method: 'PUT', body: JSON.stringify({ files }) }),
+  removeAnalytics: (projectId: number) => request<{ analytics: null }>(`/api/projects/${projectId}/analytics`, { method: 'DELETE' }),
   activeRun: () => request<{ runId: number; projectId: number } | null>('/api/runs/active'),
   run: (id: number) => request<RunDetail>(`/api/runs/${id}`),
   stopRun: (id: number) => post<{ stopping: boolean }>(`/api/runs/${id}/stop`),

@@ -91,6 +91,19 @@ Small single-purpose pages for the explorer and the canvas check. Each one is a 
 | `canvas.html` | Canvas detection (T23) | A WebGL "gallery map" filling the screen, with no accessible name or fallback: must raise a manual-review ticket |
 | `canvas-small.html` | Canvas detection (T23) | A small labelled 2D chart, well under 40% of the screen: must **not** be flagged |
 
+## future-site
+
+A small arts centre site for the Search and sharing and Future readiness checks (step 3). `{{ORIGIN}}` is replaced with the test server's address.
+
+| File | What it contains |
+|---|---|
+| `index.html` | The good example: full title, description, canonical, Open Graph and X card tags, a 1200 × 630 share image, apple-touch-icon, Organization and FAQPage JSON-LD, a summary paragraph after the h1, a question heading and a linked phone number |
+| `events.html` | Share image given as a relative address and only 300 × 157; no canonical link; no `twitter:card`; a different phone number from the home page |
+| `app.html` | All of its text added by JavaScript (`content-needs-javascript`), and a JSON-LD block with a trailing comma (`structured-data-invalid`) |
+| `robots.txt` | Blocks GPTBot and CCBot, allows every other crawler, and points to the sitemap |
+| `sitemap.xml` | Every page with a `<lastmod>` date |
+| `images/` | `share.png` (1200 × 630), `small.png` (300 × 157) and `touch-icon.png` (180 × 180), plain colour |
+
 ## journeys
 
 | File | What it is |

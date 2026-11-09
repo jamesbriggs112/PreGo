@@ -79,6 +79,31 @@ export function ReportContents({ run }: { run: RunDetail }) {
             label="Overview (overview.docx)"
             hint="A short report for client leadership, read first: scores at a glance, why a healthy website matters, key findings, top recommendations and a guide to the pack."
           />
+          <Toggle
+            id="report-future"
+            checked={current.reports.future}
+            onChange={(on) => update((o) => ({ ...o, reports: { ...o.reports, future: on } }))}
+            label="Search, sharing and future readiness (future.docx)"
+            hint={
+              <>
+                How the site looks in search results and when shared on social media and in messages, with previews, and how ready it is for AI assistants, answer engines
+                and voice search.
+                {report.data && !report.data.hasReadiness && ' Needs the Search and sharing or Future readiness check in the audit. Run the audit again with them ticked.'}
+              </>
+            }
+          />
+          {current.reports.future && report.data?.hasReadiness && (
+            <div className="grid gap-2 pl-6">
+              <Label htmlFor="report-notes-future">Your observations</Label>
+              <Textarea
+                id="report-notes-future"
+                rows={3}
+                value={current.text.future ?? ''}
+                onChange={(e) => setText('future', e.target.value)}
+                placeholder="Optional. Shown with the recommendations in future.docx."
+              />
+            </div>
+          )}
           {current.reports.overview && (
             <div className="grid gap-2 pl-6">
               <Label htmlFor="report-whyItMatters">Why a healthy website matters</Label>

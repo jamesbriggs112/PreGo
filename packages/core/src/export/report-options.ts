@@ -3,18 +3,18 @@
 // architecture, competitors). Chosen on the Export page and kept per audit.
 
 /** Written text the auditor can add. Empty means Prego's own wording (or the section is left out). */
-export const REPORT_TEXT_KEYS = ['summary', 'keyFindings', 'recommendations', 'methodology', 'conclusion', 'analytics', 'content', 'ia', 'competitors', 'whyItMatters'] as const;
+export const REPORT_TEXT_KEYS = ['summary', 'keyFindings', 'recommendations', 'methodology', 'conclusion', 'analytics', 'content', 'ia', 'competitors', 'whyItMatters', 'future'] as const;
 export type ReportTextKey = (typeof REPORT_TEXT_KEYS)[number];
 
 export const OPTIONAL_SECTIONS = ['analytics', 'content', 'ia', 'competitors'] as const;
 export type OptionalSection = (typeof OPTIONAL_SECTIONS)[number];
 
 /** Reports written alongside report.docx (the technical report, always written). */
-export const PACK_REPORTS = ['overview'] as const;
+export const PACK_REPORTS = ['overview', 'future'] as const;
 export type PackReport = (typeof PACK_REPORTS)[number];
 
 /** File name of each report in the pack. */
-export const PACK_FILES: Record<PackReport, string> = { overview: 'overview.docx' };
+export const PACK_FILES: Record<PackReport, string> = { overview: 'overview.docx', future: 'future.docx' };
 
 export interface ReportOptions {
   /**
@@ -30,7 +30,7 @@ export interface ReportOptions {
 
 export const DEFAULT_REPORT_OPTIONS: ReportOptions = {
   clientFacing: false,
-  reports: { overview: false },
+  reports: { overview: false, future: false },
   include: { analytics: false, content: false, ia: false, competitors: false },
   text: {},
 };

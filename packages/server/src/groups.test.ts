@@ -25,7 +25,7 @@ afterAll(async () => {
 describe('test groups and time estimates', () => {
   it('lists the groups, with no timings until an audit has run', async () => {
     const body = await (await fetch(`${base}/api/check-groups`)).json();
-    expect(body.groups.map((g: { id: string }) => g.id)).toEqual(['quick', 'accessibility', 'content', 'design', 'performance', 'security', 'full']);
+    expect(body.groups.map((g: { id: string }) => g.id)).toEqual(['quick', 'accessibility', 'content', 'future', 'design', 'performance', 'security', 'full']);
     expect(body.calibration).toBeNull();
     const checks = await (await fetch(`${base}/api/checks`)).json();
     expect(checks.find((c: { id: string }) => c.id === 'lighthouse').cost).toMatchObject({ id: 'lighthouse', perPage: true, serial: true });

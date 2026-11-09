@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Members | Riverside Arts Centre</title>
+  <meta name="description" content="Membership at Riverside Arts Centre: priority booking, discounts and members' events throughout the year.">
+  <link rel="canonical" href="{{ORIGIN}}/app.html">
+  <!-- DEFECT: invalid JSON-LD (trailing comma) -->
+  <script type="application/ld+json">{"@context": "https://schema.org", "@type": "WebPage", "name": "Members",}</script>
+</head>
+<body>
+  <main id="app"></main>
+  <!-- DEFECT: all of the page's content is added by JavaScript -->
+  <script>
+    document.getElementById('app').innerHTML =
+      '<h1>Become a member</h1>' +
+      '<p>Members get priority booking for every show, ten per cent off tickets and in the café, and invitations to members-only previews and talks throughout the year.</p>' +
+      '<p>Membership starts at thirty pounds a year, and you can join online or at the box office. Every membership supports our work with local schools and community groups.</p>';
+  </script>
+</body>
+</html>

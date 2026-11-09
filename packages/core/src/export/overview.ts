@@ -5,6 +5,7 @@ import { auditedCount, brandedDocument, categoryScores, cover, heading, para, pl
 import type { ExportPlan } from './plan.js';
 import { listItems } from './report-options.js';
 import { suggestReportText } from './suggest.js';
+import { assessReadiness } from './readiness.js';
 
 /** What each category's score covers, in plain English for the scorecard. */
 const COVERS: Record<Category, string> = {
@@ -35,6 +36,7 @@ export async function overviewDocx(plan: ExportPlan, whyItMatters: string, brand
   const { text } = plan.options;
   const suggested = suggestReportText(plan);
   const scores = categoryScores(plan).filter((c) => c.score !== null);
+  const readiness = assessReadiness(plan.locations);
   const serious = plan.tickets.filter((t) => t.severity === 'Critical' || t.severity === 'High').length;
   const audited = auditedCount(plan);
   const unit = plan.run.mode === 'explore' ? 'screen' : plan.run.mode === 'journey' ? 'journey step' : 'page';
@@ -50,6 +52,7 @@ export async function overviewDocx(plan: ExportPlan, whyItMatters: string, brand
     ],
     ['occurrences.csv', 'Every place each issue was found', 'Development team'],
   ];
+  if (plan.options.reports.future && readiness) pack.splice(1, 0, ['future.docx', 'How the site looks in search and when shared, and how ready it is for AI assistants and voice search', 'Marketing, digital and leadership']);
   if (plan.run.mode === 'explore') pack.push(['state-map.png', 'A diagram of every screen reached', 'Project and development teams']);
 
   let n = 0;
@@ -66,7 +69,12 @@ export async function overviewDocx(plan: ExportPlan, whyItMatters: string, brand
       ? [
           table(
             ['Area', 'Score', 'Rating', 'What it covers'],
-            scores.map((c) => [c.name, `${c.score} / 100`, scoreRating(c.score!), COVERS[c.category]]),
+            [
+              ...scores.map((c) => [c.name, `${c.score} / 100`, scoreRating(c.score!), COVERS[c.category]]),
+              ...(readiness
+                ? [['Future readiness', `${readiness.score} / 100`, scoreRating(readiness.score), 'How the site appears in search and when shared, and how ready it is for AI assistants and voice search']]
+                : []),
+            ],
             { boldFirstColumn: true },
           ),
           para('Scores start at 100 and drop for each issue found, weighted by severity; Performance is Lighthouse’s own score. They show where to focus first, not whether the site meets a standard.'),

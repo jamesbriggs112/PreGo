@@ -20,6 +20,8 @@ import { spellingModule } from './spelling/spelling.js';
 import { browsersModule } from './browsers/browsers.js';
 import { aiModule, type AiSettings } from './ai/ai.js';
 import { structureModule } from './structure/structure.js';
+import { futureModule } from './future/future.js';
+import { sharingModule } from './sharing/sharing.js';
 
 /** Everything a check factory may need from the audit. */
 export interface CheckFactoryContext {
@@ -31,6 +33,8 @@ export interface CheckFactoryContext {
   ai?: AiSettings;
   /** Told about requests made by browsers that Prego doesn't open through BrowserSession. */
   onRequest?: (url: string) => void;
+  /** The run's folder, for checks that keep images for the report (deleted on export). */
+  runDir?: string;
 }
 
 export interface CheckDefinition {
@@ -167,6 +171,24 @@ const definitions: CheckDefinition[] = [
     defaultOn: true,
     cost: { seconds: [0.05, 0.15], perPage: true },
     create: (context) => structureModule(context.startUrl),
+  },
+  {
+    id: 'sharing',
+    name: 'Search and sharing',
+    description: 'How each page appears in search results and when shared on LinkedIn, Facebook, X, WhatsApp or Slack: share images (loaded and measured), X cards, canonical links and home-screen icons. Adds previews to the Future readiness report.',
+    categories: ['CONT'],
+    defaultOn: true,
+    cost: { seconds: [0.05, 0.6], perPage: true },
+    create: (context) => sharingModule(context.runDir),
+  },
+  {
+    id: 'future',
+    name: 'Future readiness',
+    description: 'How ready the site is for AI assistants, answer engines and voice search: which AI crawlers robots.txt allows, how much content needs JavaScript, structured data, question-and-answer content and sitemap dates. Reads only what the site publishes.',
+    categories: ['TECH', 'CONT'],
+    defaultOn: true,
+    cost: { seconds: [0.1, 0.5], perPage: true },
+    create: (context) => futureModule(context.startUrl),
   },
   {
     id: 'golive',

@@ -682,6 +682,85 @@ const PREGO: Record<string, RuleGuidance> = {
     recommendation: 'Check whether analytics should be installed, and if so add it (behind cookie consent where needed).',
     effort: 'Small',
   },
+  // Future readiness
+  'content-needs-javascript': {
+    title: 'Page content only appears once JavaScript runs',
+    description: 'Most of the page’s text isn’t in the HTML the server sends; it’s added by JavaScript in the browser.',
+    whyItMatters: 'Many AI assistants, link previews and some search crawlers read the HTML without running JavaScript, so they see an almost empty page and can’t describe, quote or recommend it.',
+    recommendation: 'Render the main content on the server (server-side rendering or static generation), so it’s in the HTML before any script runs.',
+    effort: 'Large',
+  },
+  'structured-data-invalid': {
+    title: 'Structured data can’t be read',
+    description: 'A JSON-LD block on the page isn’t valid JSON.',
+    whyItMatters: 'Search engines and AI tools ignore structured data they can’t read, so rich results and accurate answers about the page are lost.',
+    recommendation: 'Fix the JSON (often a trailing comma or an unescaped quote) and test it with Google’s Rich Results Test or the Schema Markup Validator.',
+    effort: 'Small',
+  },
+  'structured-data-missing': {
+    title: 'No structured data',
+    description: 'None of the pages audited describe themselves with schema.org structured data.',
+    whyItMatters: 'Structured data tells search engines, AI assistants and voice search exactly what a page is (an organisation, an event, a product, an article, a FAQ), so they can show it accurately and quote it with confidence.',
+    recommendation: 'Add JSON-LD for the main kinds of page: Organization on the home page, and Article, Event, Product, FAQPage or BreadcrumbList where they fit.',
+    effort: 'Medium',
+  },
+  'organisation-data-missing': {
+    title: 'The home page doesn’t say who runs the site',
+    description: 'The home page has no schema.org Organization (or LocalBusiness) data.',
+    whyItMatters: 'Search engines and AI assistants use it to identify the organisation behind the site: its name, logo, contact details and social profiles. Without it they piece this together, sometimes wrongly.',
+    recommendation: 'Add Organization (or LocalBusiness) JSON-LD to the home page with the name, URL, logo, contact point and sameAs links to official profiles.',
+    effort: 'Small',
+  },
+  'sitemap-no-dates': {
+    title: 'The sitemap doesn’t say when pages changed',
+    description: 'Most entries in the sitemap have no last-modified date.',
+    whyItMatters: 'Search engines and AI crawlers use the dates to find new and updated content quickly; without them, changes can take longer to show up.',
+    recommendation: 'Have the CMS or build write a <lastmod> date for each page in sitemap.xml, from when its content last changed.',
+    effort: 'Small',
+  },
+  // Search and sharing
+  'share-image-broken': {
+    title: 'The share image doesn’t load',
+    description: 'The image named for link previews (og:image or twitter:image) couldn’t be loaded.',
+    whyItMatters: 'When someone shares a link on LinkedIn, Facebook, X, WhatsApp or Slack, it shows with no picture, so it’s less likely to be noticed or clicked.',
+    recommendation: 'Point og:image at an image that exists, using its full https:// address, and check it in each platform’s link preview tool.',
+    effort: 'Small',
+  },
+  'share-image-small': {
+    title: 'The share image is too small',
+    description: 'The image used for link previews is smaller than platforms need for a large card.',
+    whyItMatters: 'Shared links show a small thumbnail instead of a large image, so they stand out less in feeds and messages.',
+    recommendation: 'Use a share image of 1200 × 630 pixels, with the important part in the middle so it survives cropping to a square.',
+    effort: 'Small',
+  },
+  'share-image-relative': {
+    title: 'The share image address isn’t complete',
+    description: 'og:image is given as a relative address rather than a full one.',
+    whyItMatters: 'Facebook, LinkedIn and other platforms expect a full address and may show no image at all.',
+    recommendation: 'Give og:image as a full address, including https:// and the domain.',
+    effort: 'Small',
+  },
+  'canonical-missing': {
+    title: 'Pages don’t say which address is the main one',
+    description: 'Pages have no canonical link.',
+    whyItMatters: 'When a page can be reached by more than one address (with tracking codes, with or without www), search engines may split its ranking between them or show the wrong one.',
+    recommendation: 'Add <link rel="canonical"> to every page, pointing at its main, full address.',
+    effort: 'Small',
+  },
+  'twitter-card-missing': {
+    title: 'Links shared on X show as small cards',
+    description: 'Pages have Open Graph tags but no twitter:card tag.',
+    whyItMatters: 'X uses Open Graph for the title and picture, but without twitter:card it shows links as a small summary instead of a large image card.',
+    recommendation: 'Add <meta name="twitter:card" content="summary_large_image"> to the page template.',
+    effort: 'Small',
+  },
+  'touch-icon-missing': {
+    title: 'No icon for phones and apps',
+    description: 'The site has no apple-touch-icon.',
+    whyItMatters: 'When someone saves the site to their phone’s home screen, or some apps show a shared link, there’s a screenshot or a plain letter instead of the logo.',
+    recommendation: 'Add a 180 × 180 pixel PNG as <link rel="apple-touch-icon">.',
+    effort: 'Small',
+  },
 };
 
 const GENERIC_WHY =

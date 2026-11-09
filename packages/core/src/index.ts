@@ -24,6 +24,8 @@ export { buildExportPlan, reportOutline, availableSections, type OutlineEntry, t
 export { ticketsCsv, occurrencesCsv, writeCsvFiles, CSV_PRESETS, TICKET_COLUMNS, OCCURRENCE_COLUMNS, type CsvPreset } from './export/csv.js';
 export { reportDocx, writeReportDocx, categoryScore, categoryScores, type CategoryScore, type ReportBranding } from './export/docx.js';
 export { overviewDocx, writeOverviewDocx, scoreRating } from './export/overview.js';
+export { futureDocx, writeFutureDocx, hasReadiness } from './export/future-report.js';
+export { assessReadiness, type Readiness, type ReadinessItem } from './export/readiness.js';
 export { exportRun, runImagesDeleted, type ExportOptions, type ExportResult } from './export/bundle.js';
 export { verifyExport, type VerifyResult } from './export/verify.js';
 export { moduleCategories, checkedCategories } from './checks/categories.js';

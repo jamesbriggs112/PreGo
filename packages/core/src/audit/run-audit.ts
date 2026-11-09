@@ -217,6 +217,7 @@ export async function runAudit(db: PregoDb, options: AuditOptions): Promise<Audi
           basicAuth: options.basicAuth,
           onRequest: options.onRequest,
           ai: options.ai,
+          runDir,
         })),
       ...(discovery.modules ?? []),
     ];

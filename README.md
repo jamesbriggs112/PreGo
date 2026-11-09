@@ -87,7 +87,9 @@ passive: it only loads pages a visitor could reach, and nothing is attacked.
 | `canvas` | Large canvas or WebGL content, flagged for manual review |
 | `ui` | Visual consistency: near-duplicate colours, too many greys or typefaces, text sizes, line heights and spacing a pixel apart |
 | `content` | Titles, meta descriptions, Open Graph tags, unhelpful alt text |
-| `structure` | Copy readability and the main navigation, for the report's Content and tone and Information architecture sections |
+| `structure` | Copy readability, the main navigation, links, contact details and forms, for the report's Content and tone and Information architecture sections and audience suggestions |
+| `sharing` | How pages appear in search results and when shared: share images (loaded and measured), X cards, canonical links, home-screen icons |
+| `future` | Readiness for AI assistants, answer engines and voice search: which AI crawlers robots.txt allows, content that needs JavaScript, structured data, question-and-answer content, sitemap dates |
 | `spelling` | British English spelling in the main content (cspell's MIT dictionary). Dismiss a word once and it stays quiet |
 | `golive` | Staging leftovers: noindex, robots.txt blocking everything, links to staging addresses, placeholder text, missing pages that return 200, no sitemap, favicon or analytics |
 | `lighthouse` | Performance, best-practice and SEO scores and failing audits, one page per template. Adds several seconds per template |
@@ -121,6 +123,11 @@ The Export page chooses what goes into the export, saved per audit:
   add overview.docx, a short report for client leadership: scores at a glance with a plain-English
   rating, why a healthy website matters, key findings, top recommendations and a guide to the pack.
   The "why it matters" wording is set once in Settings → Reports and can be tailored per audit.
+  Tick **Search, sharing and future readiness** to add future.docx: a readiness score with a
+  checklist, pictures of how key pages look as a search result and when shared on LinkedIn,
+  Facebook, X, WhatsApp and Slack, which AI crawlers robots.txt lets in, content that needs
+  JavaScript, structured data, voice search, and what to do. It needs the `sharing` or `future`
+  check. Prego doesn't look for `llms.txt`, because sites don't usually link to it.
 - **Client-facing report** adds a contents page and your own executive summary, key findings, top
   recommendations, methodology and conclusion. Prego suggests key findings, recommendations and
   methodology from the results, so a blank section is never empty. A client-facing report has no

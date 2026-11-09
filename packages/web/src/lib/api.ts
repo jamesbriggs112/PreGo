@@ -148,7 +148,11 @@ export interface ReportState {
   available: Record<OptionalSection, boolean>;
   outline: { id: string; number: number; title: string }[];
   suggestions: { keyFindings: string; recommendations: string; methodology: string };
+  /** The Search and sharing or Future readiness check ran, so future.docx has something to show. */
+  hasReadiness: boolean;
 }
+
+export type PreviewReport = 'technical' | 'overview' | 'future';
 
 /** An audit read from a typed request, waiting for the person to confirm it. */
 export interface AuditPlan {
@@ -216,8 +220,8 @@ export const api = {
   stateMap: (runId: number) => request<StateMapData>(`/api/runs/${runId}/state-map`),
   exports: (runId: number) => request<ExportSummary[]>(`/api/runs/${runId}/exports`),
   createExport: (runId: number, preset: string) => post<ExportSummary>(`/api/runs/${runId}/exports`, { preset }),
-  reportPreview: (runId: number, report: 'technical' | 'overview' = 'technical') =>
-    request<{ html: string }>(`/api/runs/${runId}/report-preview${report === 'overview' ? '?report=overview' : ''}`),
+  reportPreview: (runId: number, report: PreviewReport = 'technical') =>
+    request<{ html: string }>(`/api/runs/${runId}/report-preview${report === 'technical' ? '' : `?report=${report}`}`),
   settings: () => request<Settings & { hasLogo: boolean; exploreDefaults: { denyLabels: string[] } }>('/api/settings'),
   testOllama: (url: string) => post<{ models: string[] }>('/api/settings/ai/test', { url }),
   saveSettings: (settings: Settings) => request<Settings & { hasLogo: boolean }>('/api/settings', { method: 'PUT', body: JSON.stringify(settings) }),

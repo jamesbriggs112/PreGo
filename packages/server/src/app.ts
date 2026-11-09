@@ -40,6 +40,8 @@ import {
   reportBranding,
   reportDocx,
   overviewDocx,
+  futureDocx,
+  hasReadiness,
   saveSettings,
   type DummyData,
   type ExportRecord,
@@ -608,7 +610,7 @@ export async function buildApp(options: AppOptions): Promise<PregoApp> {
 
   const reportState = (runId: number) => {
     const plan = buildExportPlan(db, runId);
-    return { options: plan.options, available: plan.available, outline: plan.outline, suggestions: suggestReportText(plan) };
+    return { options: plan.options, available: plan.available, outline: plan.outline, suggestions: suggestReportText(plan), hasReadiness: hasReadiness(plan) };
   };
 
   app.get<{ Params: { id: string } }>('/api/runs/:id/report', async (request, reply) => {
@@ -759,6 +761,10 @@ export async function buildApp(options: AppOptions): Promise<PregoApp> {
     if (!run) return reply.code(404).send({ error: 'Run not found' });
     if (run.status !== 'complete') return reply.code(409).send({ error: 'Only finished audits have a report.' });
     const plan = buildExportPlan(db, runId);
+    if (request.query.report === 'future') {
+      const { value } = await mammoth.convertToHtml({ buffer: await futureDocx(plan, runDirectory(dataDir, runId), reportBranding(db, dataDir)) });
+      return { html: value };
+    }
     if (request.query.report === 'overview') {
       const { value } = await mammoth.convertToHtml({ buffer: await overviewDocx(plan, getSettings(db).report.whyItMatters, reportBranding(db, dataDir)) });
       return { html: value };
@@ -834,6 +840,7 @@ export async function buildApp(options: AppOptions): Promise<PregoApp> {
 
 const EXPORT_FILES: Record<string, string> = {
   'overview.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'future.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   'report.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   'tickets.csv': 'text/csv; charset=utf-8',
   'occurrences.csv': 'text/csv; charset=utf-8',

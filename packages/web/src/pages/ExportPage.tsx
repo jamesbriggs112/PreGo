@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link, useParams } from 'react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Download, FileArchive } from 'lucide-react';
-import { api, exportFileUrl, exportZipUrl, type ExportSummary } from '@/lib/api';
+import { api, exportFileUrl, exportZipUrl, type ExportSummary, type PreviewReport } from '@/lib/api';
 import { CSV_PRESET_OPTIONS } from '@/lib/presets';
 import { useTitle } from '@/lib/use-title';
 import { formatDateTime } from '@/lib/utils';
@@ -15,6 +15,7 @@ import { ReportContents } from '@/components/ReportContents';
 
 const FILE_LABELS: Record<string, string> = {
   'overview.docx': 'Overview (Word)',
+  'future.docx': 'Search, sharing and future readiness (Word)',
   'report.docx': 'Full findings report (Word)',
   'tickets.csv': 'Tickets (CSV)',
   'occurrences.csv': 'Occurrences (CSV)',
@@ -30,10 +31,14 @@ export function ExportPage() {
   const exports = useQuery({ queryKey: ['exports', runId], queryFn: () => api.exports(runId) });
   const [preset, setPreset] = useState<string | null>(null);
   const [showPreview, setShowPreview] = useState(false);
-  const [previewing, setPreviewing] = useState<'technical' | 'overview'>('technical');
+  const [previewing, setPreviewing] = useState<PreviewReport>('technical');
   const report = useQuery({ queryKey: ['report', runId], queryFn: () => api.report(runId) });
-  const hasOverview = report.data?.options.reports.overview ?? false;
-  const shown = hasOverview ? previewing : 'technical';
+  const choices: { id: PreviewReport; label: string; file: string }[] = [
+    ...(report.data?.options.reports.overview ? [{ id: 'overview' as const, label: 'Overview', file: 'overview.docx' }] : []),
+    ...(report.data?.options.reports.future && report.data.hasReadiness ? [{ id: 'future' as const, label: 'Search, sharing and future readiness', file: 'future.docx' }] : []),
+    { id: 'technical', label: 'Full findings report', file: 'report.docx' },
+  ];
+  const shown = choices.find((c) => c.id === previewing)?.id ?? 'technical';
   const preview = useQuery({ queryKey: ['preview', runId, shown], queryFn: () => api.reportPreview(runId, shown), enabled: showPreview, staleTime: 0, gcTime: 0 });
   useTitle(run.data ? `Export ${run.data.project.name}` : 'Export');
 
@@ -122,15 +127,18 @@ export function ExportPage() {
         <Card id="report-preview">
           <CardHeader>
             <CardTitle>Report preview</CardTitle>
-            <CardDescription>A simplified view of {shown === 'overview' ? 'overview.docx' : 'report.docx'}. Layout and styling differ in Word.</CardDescription>
+            <CardDescription>A simplified view of {choices.find((c) => c.id === shown)!.file}. Layout and styling differ in Word.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
-            {hasOverview && (
-              <div className="grid max-w-xs gap-1">
+            {choices.length > 1 && (
+              <div className="grid max-w-sm gap-1">
                 <Label htmlFor="preview-report">Report to preview</Label>
-                <NativeSelect id="preview-report" value={shown} onChange={(e) => setPreviewing(e.target.value as 'technical' | 'overview')}>
-                  <option value="overview">Overview</option>
-                  <option value="technical">Full findings report</option>
+                <NativeSelect id="preview-report" value={shown} onChange={(e) => setPreviewing(e.target.value as PreviewReport)}>
+                  {choices.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.label}
+                    </option>
+                  ))}
                 </NativeSelect>
               </div>
             )}

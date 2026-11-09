@@ -318,6 +318,20 @@ describe('Settings and Export screens', () => {
     expect(await axeViolations(page)).toEqual([]);
   }, 60_000);
 
+  it('adds the Search, sharing and future readiness report, with previews of shared links', async () => {
+    const { page } = gui;
+    await page.getByLabel('Search, sharing and future readiness (future.docx)').check();
+    await page.getByLabel('Your observations').first().waitFor();
+    await expect.poll(() => gui.db.getReportOptions(runId).reports, { timeout: 10_000 }).toMatchObject({ overview: true, future: true });
+    await page.getByRole('button', { name: 'Preview the report' }).click();
+    await page.getByLabel('Report to preview').selectOption('future');
+    const frame = page.frameLocator('iframe[title="Report preview"]');
+    await frame.getByRole('heading', { name: '2. How the site looks in search and when shared' }).waitFor({ timeout: 60_000 });
+    await expect(frame.locator('img').count()).resolves.toBeGreaterThan(0);
+    await page.getByRole('button', { name: 'Hide report preview' }).click();
+    expect(await axeViolations(page)).toEqual([]);
+  }, 90_000);
+
   it('suggests purposes and personas from the audit, and saves the auditor’s changes', async () => {
     const { page } = gui;
     const projectId = gui.db.getRun(runId)!.projectId;

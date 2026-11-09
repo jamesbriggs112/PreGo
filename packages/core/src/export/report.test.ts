@@ -80,18 +80,18 @@ describe('report options', () => {
   it('keeps only known fields, and reads written lists as items', () => {
     expect(parseReportOptions({ clientFacing: true, include: { ia: true, bogus: true }, text: { summary: ' Hello ', keyFindings: '', other: 'x' } })).toEqual({
       clientFacing: true,
-      reports: { overview: false },
+      reports: { overview: false, future: false },
       include: { analytics: false, content: false, ia: true, competitors: false },
       text: { summary: ' Hello ' },
     });
-    expect(parseReportOptions({ reports: { overview: true, other: true } }).reports).toEqual({ overview: true });
+    expect(parseReportOptions({ reports: { overview: true, other: true } }).reports).toEqual({ overview: true, future: false });
     expect(listItems('- One\n2. Two\n\n• Three\n')).toEqual(['One', 'Two', 'Three']);
   });
 
   it('numbers sections from what is included, with findings after the scene-setting', () => {
     const all = { analytics: true, content: true, ia: true, competitors: true };
     expect(reportOutline({ mode: 'crawl' }, DEFAULT_REPORT_OPTIONS, all).map((o) => `${o.number} ${o.id}`)).toEqual(['2 summary', '3 method', '4 findings', '5 map', '6 limitations']);
-    const client: ReportOptions = { clientFacing: true, reports: { overview: false }, include: all, text: { conclusion: 'Done.' } };
+    const client: ReportOptions = { clientFacing: true, reports: { overview: false, future: false }, include: all, text: { conclusion: 'Done.' } };
     expect(reportOutline({ mode: 'crawl' }, client, all).map((o) => o.title)).toEqual([
       'Executive summary',
       'Methodology',
@@ -236,7 +236,7 @@ describe('the Overview report', () => {
   });
 
   it('opens with scores at a glance, then why it matters, findings, recommendations and the pack', async () => {
-    db.saveReportOptions(runId, { ...DEFAULT_REPORT_OPTIONS, reports: { overview: true } });
+    db.saveReportOptions(runId, { ...DEFAULT_REPORT_OPTIONS, reports: { overview: true, future: false } });
     const text = await textOf(await overviewDocx(buildExportPlan(db, runId), DEFAULT_WHY_IT_MATTERS));
     expect([...text.matchAll(/^(\d+)\. (.+)$/gm)].map((m) => m[2])).toEqual([
       'At a glance',
@@ -253,7 +253,7 @@ describe('the Overview report', () => {
   });
 
   it('uses the audit’s own wording when it has some', async () => {
-    db.saveReportOptions(runId, { ...DEFAULT_REPORT_OPTIONS, reports: { overview: true }, text: { whyItMatters: 'Acme’s site is how members renew.', keyFindings: '- Forms lack labels' } });
+    db.saveReportOptions(runId, { ...DEFAULT_REPORT_OPTIONS, reports: { overview: true, future: false }, text: { whyItMatters: 'Acme’s site is how members renew.', keyFindings: '- Forms lack labels' } });
     const text = await textOf(await overviewDocx(buildExportPlan(db, runId), DEFAULT_WHY_IT_MATTERS));
     expect(text).toContain('Acme’s site is how members renew.');
     expect(text).not.toContain('Regular checks like this one');
@@ -273,7 +273,7 @@ describe('the Overview report', () => {
         tasks: [{ id: 't1', personaId: 'p1', goal: 'Find the Mark IV price', doneWhen: '', success: { kind: 'described' } }],
       },
     });
-    db.saveReportOptions(runId, { ...DEFAULT_REPORT_OPTIONS, reports: { overview: true } });
+    db.saveReportOptions(runId, { ...DEFAULT_REPORT_OPTIONS, reports: { overview: true, future: false } });
     const text = await textOf(await overviewDocx(buildExportPlan(db, runId), DEFAULT_WHY_IT_MATTERS));
     expect(text).toMatch(/2\. What the site is for\n/);
     expect(text).toMatch(/Show and sell products\nMain\nYes\nYes\n/);
@@ -283,7 +283,7 @@ describe('the Overview report', () => {
   });
 
   it('is written into the export only when chosen', async () => {
-    db.saveReportOptions(runId, { ...DEFAULT_REPORT_OPTIONS, reports: { overview: true } });
+    db.saveReportOptions(runId, { ...DEFAULT_REPORT_OPTIONS, reports: { overview: true, future: false } });
     const withOverview = await exportRun(db, runId, { dataDir, outDir: join(dataDir, 'with-overview') });
     expect(withOverview.files.overview).toBe(join(withOverview.dir, 'overview.docx'));
     expect(JSON.parse(readFileSync(withOverview.files.runJson, 'utf8')).reports).toEqual(['report.docx', 'overview.docx']);

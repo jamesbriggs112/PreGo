@@ -28,6 +28,7 @@ const GROUP_WORDS: [string, RegExp][] = [
   ['design', /\b(design|visual|look and feel|brand|browsers?|safari|firefox|cross[- ]browser)\b/i],
   ['performance', /\b(performance|speed|fast|slow|lighthouse|core web vitals|load(ing)? times?)\b/i],
   ['security', /\b(security|secure|headers?|https|ssl|tls|cookies?|privacy|gdpr|trackers?)\b/i],
+  ['future', /\b(future[- ]?(readiness|proof\w*)|ai[- ]?(ready|readiness)|chatgpt|llms?|voice( search)?|answer engines?|open graph|social (sharing|previews?)|link previews?|structured data|schema\.org)\b/i],
 ];
 
 const VIEWPORT_WORDS: [ProfileName, RegExp][] = [

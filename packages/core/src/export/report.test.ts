@@ -260,6 +260,28 @@ describe('the Overview report', () => {
     expect(text).toMatch(/Key findings\nForms lack labels\n/);
   });
 
+  it('says what the site is for, with gaps and who it serves, when the project has purposes', async () => {
+    const projectId = db.getRun(runId)!.projectId;
+    db.saveProjectSettings(projectId, {
+      audience: {
+        updatedAt: '',
+        purposes: [
+          { id: 'sell', title: 'Show and sell products', description: '', current: true, intended: true, priority: 'primary', evidence: [] },
+          { id: 'book', title: 'Help people book a demo', description: '', current: false, intended: true, priority: 'secondary', evidence: [] },
+        ],
+        personas: [{ id: 'p1', name: 'Member of staff', summary: 'Works at Acme.', context: '', device: 'desktop', accessNeeds: '', internal: true, purposeIds: ['sell'] }],
+        tasks: [{ id: 't1', personaId: 'p1', goal: 'Find the Mark IV price', doneWhen: '', success: { kind: 'described' } }],
+      },
+    });
+    db.saveReportOptions(runId, { ...DEFAULT_REPORT_OPTIONS, reports: { overview: true } });
+    const text = await textOf(await overviewDocx(buildExportPlan(db, runId), DEFAULT_WHY_IT_MATTERS));
+    expect(text).toMatch(/2\. What the site is for\n/);
+    expect(text).toMatch(/Show and sell products\nMain\nYes\nYes\n/);
+    expect(text).toContain('Gaps: the site doesn’t yet help people book a demo.');
+    expect(text).toContain('Member of staff (internal): Works at Acme. Comes to find the Mark IV price.');
+    db.saveProjectSettings(projectId, { audience: undefined });
+  });
+
   it('is written into the export only when chosen', async () => {
     db.saveReportOptions(runId, { ...DEFAULT_REPORT_OPTIONS, reports: { overview: true } });
     const withOverview = await exportRun(db, runId, { dataDir, outDir: join(dataDir, 'with-overview') });

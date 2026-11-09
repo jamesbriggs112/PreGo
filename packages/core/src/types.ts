@@ -1,5 +1,8 @@
 // Shared data model for the audit engine. Storage (db/), checks, tickets and exports all use these.
 
+import type { AudienceProfile } from './audience/types.js';
+export type { AudienceProfile, AudienceSuggestion, PageSignals, Persona, PersonaDevice, Purpose, TaskSuccess, UserTask } from './audience/types.js';
+
 export type Category = 'A11Y' | 'UI' | 'UX' | 'CONT' | 'PERF' | 'SEC' | 'TECH';
 
 /** Report order for categories, also used for section numbering (4.1, 4.2, ...). */
@@ -34,6 +37,8 @@ export interface ProjectSettings {
   maskSelectors?: string[];
   /** Figures from a Google Analytics export, for the report's Analytics section. */
   analytics?: AnalyticsSummary;
+  /** What the site is for and who it's for: purposes, personas and their tasks. */
+  audience?: AudienceProfile;
 }
 
 /** What Prego keeps from Google Analytics CSV exports. Figures only; nothing about individual people. */

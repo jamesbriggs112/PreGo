@@ -131,6 +131,32 @@ describe('report contents and analytics', () => {
     await fetch(`${base}/api/projects/${run.projectId}/analytics`, { method: 'DELETE' });
     expect(db.getProject(run.projectId)!.settings.analytics).toBeUndefined();
   });
+  it('suggests and saves a project’s purposes, personas and tasks', async () => {
+    const run = db.listProjects().flatMap((p) => db.listRuns(p.id)).find((r) => r.status === 'complete')!;
+    const empty = await (await fetch(`${base}/api/projects/${run.projectId}/audience`)).json();
+    expect(empty).toMatchObject({ profile: null, latestRunId: expect.any(Number), pages: expect.arrayContaining([expect.stringMatching(/^\//)]) });
+
+    const suggestion = await (await fetch(`${base}/api/projects/${run.projectId}/audience/suggest`, json('POST', {}))).json();
+    expect(suggestion.source).toBe('reader');
+    expect(suggestion.profile.personas.length).toBeGreaterThan(0);
+    // Suggesting doesn't save anything.
+    expect(db.getProject(run.projectId)!.settings.audience).toBeUndefined();
+
+    const saved = await (
+      await fetch(`${base}/api/projects/${run.projectId}/audience`, json('PUT', { purposes: [{ id: 'x', title: 'Sell', intended: true }], personas: [{ id: 'p', name: 'Pat', purposeIds: ['x'] }], tasks: [{ personaId: 'p', goal: 'Buy' }] }))
+    ).json();
+    expect(saved.profile).toMatchObject({ purposes: [{ id: 'x', intended: true }], personas: [{ name: 'Pat', purposeIds: ['x'] }], tasks: [{ goal: 'Buy', success: { kind: 'described' } }] });
+    expect((await (await fetch(`${base}/api/projects/${run.projectId}/audience`)).json()).profile.purposes[0].title).toBe('Sell');
+    await fetch(`${base}/api/projects/${run.projectId}/audience`, { method: 'DELETE' });
+    expect(db.getProject(run.projectId)!.settings.audience).toBeUndefined();
+
+    const unaudited = db.createProject('Not audited yet');
+    const refused = await fetch(`${base}/api/projects/${unaudited.id}/audience/suggest`, json('POST', {}));
+    expect(refused.status).toBe(409);
+    expect((await refused.json()).error).toMatch(/^Run an audit of this site first/);
+    expect((await fetch(`${base}/api/projects/9999/audience`)).status).toBe(404);
+  });
+
   it('keeps standard wording in Settings and previews the Overview', async () => {
     const run = db.listProjects().flatMap((p) => db.listRuns(p.id)).find((r) => r.status === 'complete')!;
     const settings = await (await fetch(`${base}/api/settings`)).json();

@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils';
 import { HomePage } from '@/pages/HomePage';
 import { AboutPage } from '@/pages/AboutPage';
 import { ProjectsPage } from '@/pages/ProjectsPage';
+import { AudiencePage } from '@/pages/AudiencePage';
 import { ProjectSidebar } from '@/components/ProjectSidebar';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { Button } from '@/components/ui/button';
@@ -89,6 +90,7 @@ export function App() {
           <Routes>
             <Route path="/" element={<HomePage />} />
             <Route path="/projects" element={<ProjectsPage />} />
+            <Route path="/projects/:projectId/audience" element={<AudiencePage />} />
             <Route path="/audits/new" element={<NewAuditPage />} />
             <Route path="/runs/:runId" element={<RunPage />} />
             <Route path="/runs/:runId/tickets/:ticketId" element={<TicketPage />} />

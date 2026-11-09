@@ -317,6 +317,30 @@ describe('Settings and Export screens', () => {
     await page.getByRole('button', { name: 'Hide report preview' }).click();
     expect(await axeViolations(page)).toEqual([]);
   }, 60_000);
+
+  it('suggests purposes and personas from the audit, and saves the auditor’s changes', async () => {
+    const { page } = gui;
+    const projectId = gui.db.getRun(runId)!.projectId;
+    await page.goto(`${gui.url}runs/${runId}`);
+    await page.getByRole('link', { name: 'Purposes and audience' }).click();
+    await page.getByRole('heading', { name: /^Purposes and audience: / }).waitFor();
+    await page.getByRole('button', { name: 'Suggest from the latest audit' }).click();
+    await page.getByRole('status').getByText(/Added Prego’s suggestions/).waitFor();
+    await expect(page.getByRole('textbox', { name: 'Purpose' }).first().inputValue()).resolves.toBe('Help people get in touch');
+    await expect(page.locator('input[value="On their phone, in a hurry"]').count()).resolves.toBe(1);
+
+    // A purpose from the brief that the site doesn't serve yet shows as a gap.
+    await page.getByRole('button', { name: 'Add a purpose' }).click();
+    await page.getByRole('textbox', { name: 'Purpose' }).last().fill('Help people book a demo');
+    await page.getByText(/^Gaps: the client wants the site to help people book a demo/).waitFor();
+    expect(await axeViolations(page)).toEqual([]);
+    await page.getByRole('button', { name: 'Save' }).click();
+    await page.getByRole('status').getByText('Saved.').waitFor();
+    const audience = gui.db.getProject(projectId)!.settings.audience!;
+    expect(audience.purposes.at(-1)).toMatchObject({ title: 'Help people book a demo', intended: true, current: false });
+    expect(audience.personas.some((p) => p.internal)).toBe(true);
+    expect(audience.tasks.length).toBeGreaterThan(0);
+  }, 60_000);
 });
 
 describe('Interactive exploration', () => {

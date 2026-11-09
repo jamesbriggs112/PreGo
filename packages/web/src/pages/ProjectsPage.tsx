@@ -84,6 +84,11 @@ export function ProjectsPage() {
                       <div className="flex justify-end gap-2">
                         {project.lastRun && <LastRunLink run={project.lastRun} projectName={project.name} />}
                         <Button asChild size="sm" variant="outline">
+                          <Link to={`/projects/${project.id}/audience`} aria-label={`Purposes and audience of ${project.name}`}>
+                            Audience
+                          </Link>
+                        </Button>
+                        <Button asChild size="sm" variant="outline">
                           <Link to={`/audits/new?project=${encodeURIComponent(project.name)}`} aria-label={`New audit of ${project.name}`}>
                             New audit
                           </Link>

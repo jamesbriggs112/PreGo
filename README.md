@@ -140,6 +140,24 @@ The Export page chooses what goes into the export, saved per audit:
 
 Sections are numbered in order, and ticket section numbers in tickets.csv follow them.
 
+### Purposes and audience
+
+Every site is there to serve a purpose, so each project can record what its site is for and who it
+serves (**Audience** on the Projects page, or **Purposes and audience** on an audit's results):
+
+- **Purposes**: what the site exists to do, each marked as something it does now, something the
+  client wants, or both. Wanted but not done yet is a gap.
+- **Personas**: the people it serves, with their situation, device and access needs, including
+  internal users such as staff.
+- **Tasks**: what each persona comes to do, and how you'd know it was done (reaching a page, finding
+  contact details or a form), so Prego can check them against the site in later steps.
+
+**Suggest from the latest audit** reads the navigation, page titles, headings, links, contact details
+and forms the audit saw (with the *Content and structure* check), plus any Google Analytics devices,
+and proposes a starting point. With AI review switched on, the local Ollama model writes the
+suggestion instead; task pages it names must be pages Prego found. Nothing is saved until you press
+**Save**. Purposes and personas appear in the Overview report under *What the site is for*.
+
 ### Screenshots
 
 Exporting puts the outlined screenshots into the Word report, then deletes them from Prego. The

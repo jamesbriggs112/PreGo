@@ -73,6 +73,8 @@ export async function overviewDocx(plan: ExportPlan, whyItMatters: string, brand
         ]
       : [para('No scored checks were run in this audit.')]),
 
+    ...purposeSection(plan, section),
+
     section('Why a healthy website matters'),
     ...writtenText(text.whyItMatters ?? whyItMatters),
 
@@ -96,6 +98,46 @@ export async function overviewDocx(plan: ExportPlan, whyItMatters: string, brand
   ];
   return Packer.toBuffer(brandedDocument(brand, `${plan.project.name}: Website health overview`, `${plan.project.name} overview`, children));
 }
+
+/** What the site is for and who it serves, when the project has purposes. Gaps are what the client wants but the site doesn't do yet. */
+function purposeSection(plan: ExportPlan, section: (title: string) => Paragraph): (Paragraph | Table)[] {
+  const audience = plan.project.settings.audience;
+  if (!audience?.purposes.length) return [];
+  const yes = (b: boolean) => (b ? 'Yes' : 'No');
+  const gaps = audience.purposes.filter((p) => p.intended && !p.current);
+  const out: (Paragraph | Table)[] = [
+    section('What the site is for'),
+    para('Every website is there to serve a purpose. These are the purposes we found on the site and the ones agreed for it, which the rest of this audit is weighed against.'),
+    table(
+      ['Purpose', 'Importance', 'Does it now', 'Wanted'],
+      [...audience.purposes].sort((a, b) => (a.priority === b.priority ? 0 : a.priority === 'primary' ? -1 : 1)).map((p) => [p.title, p.priority === 'primary' ? 'Main' : 'Secondary', yes(p.current), yes(p.intended)]),
+      { boldFirstColumn: true },
+    ),
+  ];
+  if (gaps.length) {
+    out.push(
+      new Paragraph({
+        spacing: { before: 120, after: 120 },
+        children: [new TextRun({ text: 'Gaps: ', bold: true }), new TextRun(`the site doesn’t yet ${gaps.map((g) => lowerFirst(g.title)).join('; ')}.`)],
+      }),
+    );
+  }
+  if (audience.personas.length) {
+    out.push(heading('Who it’s for', HeadingLevel.HEADING_2));
+    for (const p of audience.personas) {
+      const tasks = audience.tasks.filter((t) => t.personaId === p.id).map((t) => t.goal);
+      out.push(
+        new Paragraph({
+          bullet: { level: 0 },
+          children: [new TextRun({ text: `${p.name}${p.internal ? ' (internal)' : ''}: `, bold: true }), new TextRun([p.summary, tasks.length ? `Comes to ${tasks.map(lowerFirst).join('; ')}.` : ''].filter(Boolean).join(' '))],
+        }),
+      );
+    }
+  }
+  return out;
+}
+
+const lowerFirst = (text: string) => text.charAt(0).toLowerCase() + text.slice(1);
 
 export async function writeOverviewDocx(plan: ExportPlan, path: string, whyItMatters: string, branding: ReportBranding = {}) {
   writeFileSync(path, await overviewDocx(plan, whyItMatters, branding));

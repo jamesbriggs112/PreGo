@@ -31,6 +31,9 @@ import {
   parseReportOptions,
   parseAnalyticsCsv,
   AnalyticsImportError,
+  parseAudienceProfile,
+  siteFacts,
+  suggestAudienceFor,
   suggestReportText,
   getSettings,
   logoPath,
@@ -624,6 +627,41 @@ export async function buildApp(options: AppOptions): Promise<PregoApp> {
       return reportState(run.id);
     },
   );
+
+  // What a project's site is for and who it's for: purposes, personas and tasks, suggested from its
+  // latest finished audit and edited by the auditor.
+  const latestCompleteRun = (projectId: number) => db.listRuns(projectId).findLast((r) => r.status === 'complete');
+
+  app.get<{ Params: { id: string } }>('/api/projects/:id/audience', async (request, reply) => {
+    const project = db.getProject(Number(request.params.id));
+    if (!project) return reply.code(404).send({ error: 'Project not found' });
+    const run = latestCompleteRun(project.id);
+    const pages = run ? siteFacts(project, db.getLocations(run.id)).pages.map((p) => p.path) : [];
+    return { profile: project.settings.audience ?? null, latestRunId: run?.id ?? null, pages: [...new Set(pages)].sort() };
+  });
+
+  app.post<{ Params: { id: string } }>('/api/projects/:id/audience/suggest', async (request, reply) => {
+    const project = db.getProject(Number(request.params.id));
+    if (!project) return reply.code(404).send({ error: 'Project not found' });
+    const run = latestCompleteRun(project.id);
+    if (!run) return reply.code(409).send({ error: 'Run an audit of this site first: suggestions come from what Prego finds on it.' });
+    return suggestAudienceFor(siteFacts(project, db.getLocations(run.id)), aiSettings(getSettings(db)));
+  });
+
+  app.put<{ Params: { id: string }; Body: unknown }>('/api/projects/:id/audience', { schema: { body: { type: 'object' } }, bodyLimit: 512 * 1024 }, async (request, reply) => {
+    const project = db.getProject(Number(request.params.id));
+    if (!project) return reply.code(404).send({ error: 'Project not found' });
+    const profile = parseAudienceProfile(request.body);
+    db.saveProjectSettings(project.id, { audience: profile });
+    return { profile };
+  });
+
+  app.delete<{ Params: { id: string } }>('/api/projects/:id/audience', async (request, reply) => {
+    const project = db.getProject(Number(request.params.id));
+    if (!project) return reply.code(404).send({ error: 'Project not found' });
+    db.saveProjectSettings(project.id, { audience: undefined });
+    return { profile: null };
+  });
 
   // Google Analytics figures for a project's reports, from GA's own CSV exports.
   app.put<{ Params: { id: string }; Body: { files: { name: string; text: string }[] } }>(

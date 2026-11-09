@@ -53,3 +53,5 @@ export { markupModule } from './checks/markup/markup.js';
 export { brokenLinksModule } from './checks/links/links.js';
 export { ibmModule, dropDuplicates } from './checks/ibm/ibm.js';
 export * from './checks/estimate.js';
+export { parseAudienceProfile } from './audience/profile.js';
+export { siteFacts, suggestAudience, suggestAudienceFor, askOllamaForAudience, type SiteFacts } from './audience/suggest.js';

@@ -80,6 +80,9 @@ export function RunResults({ run }: { run: RunDetail }) {
               <Link to={`/runs/${run.id}/map`}>State map</Link>
             </Button>
           )}
+          <Button asChild variant="outline">
+            <Link to={`/projects/${run.projectId}/audience`}>Purposes and audience</Link>
+          </Button>
           <Button asChild>
             <Link to={`/runs/${run.id}/export`}>Export report and tickets</Link>
           </Button>

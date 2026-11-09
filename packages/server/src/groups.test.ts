@@ -78,24 +78,24 @@ describe('setting up an audit from a typed request', () => {
 
   it('reads the request into settings to confirm, without starting anything', async () => {
     const runsBefore = db.listProjects().flatMap((p) => db.listRuns(p.id)).length;
-    const body = await plan('run an accessibility audit on fcn.com, desktop and mobile');
+    const body = await plan('run an accessibility audit on example.org, desktop and mobile');
     expect(body).toMatchObject({
       source: 'reader',
       problems: [],
       projectExists: false,
       checksLabel: 'Accessibility',
       estimate: expect.stringMatching(/minute|hour/),
-      run: { project: 'fcn.com', target: 'https://fcn.com/', mode: 'crawl', checks: ['axe', 'a11y-custom', 'ibm', 'canvas'], viewports: ['desktop', 'mobile'], maxPages: 100, auditAll: false },
+      run: { project: 'example.org', target: 'https://example.org/', mode: 'crawl', checks: ['axe', 'a11y-custom', 'ibm', 'canvas'], viewports: ['desktop', 'mobile'], maxPages: 100, auditAll: false },
     });
     expect(db.listProjects().flatMap((p) => db.listRuns(p.id))).toHaveLength(runsBefore);
-    expect(db.listProjects().some((p) => p.name === 'fcn.com')).toBe(false);
+    expect(db.listProjects().some((p) => p.name === 'example.org')).toBe(false);
   });
 
   it('finds the existing project by name or by an earlier audit of the same site', async () => {
-    const fcn = db.createProject('Football Club Network');
-    db.createRun({ projectId: fcn.id, mode: 'crawl', target: 'https://www.fcn.com/' });
-    expect(await plan('quick check of fcn.com')).toMatchObject({ projectExists: true, run: { project: 'Football Club Network', checks: ['axe', 'golive', 'links', 'security'] } });
-    expect(await plan('security audit of staging.fcn.com for "football club network"')).toMatchObject({ projectExists: true, run: { project: 'Football Club Network' } });
+    const example = db.createProject('Example Organisation');
+    db.createRun({ projectId: example.id, mode: 'crawl', target: 'https://www.example.org/' });
+    expect(await plan('quick check of example.org')).toMatchObject({ projectExists: true, run: { project: 'Example Organisation', checks: ['axe', 'golive', 'links', 'security'] } });
+    expect(await plan('security audit of staging.example.org for "example organisation"')).toMatchObject({ projectExists: true, run: { project: 'Example Organisation' } });
   });
 
   it('asks for the site when the request doesn’t give one, and rejects empty requests', async () => {

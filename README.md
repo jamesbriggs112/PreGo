@@ -1,19 +1,34 @@
-# Prego v2
+# Prego
 
-Automated UX, UI and accessibility audits for websites, web apps and browser-based interactives.
-Prego explores a product, runs checks on every page or screen it reaches, and exports a Word report
-plus a CSV of tickets that cross-reference each other. See [SPEC.md](SPEC.md) for the full specification.
+A pre-launch audit tool for websites, web apps and browser-based interactives. Prego explores a
+product, checks every page or screen it reaches for accessibility, usability, content, performance,
+security and go-live problems, and exports a Word report plus a CSV of tickets that cross-reference
+each other.
 
-The March 2025 prototype is preserved, unchanged, in [`legacy/`](legacy/).
+- **Runs on your own computer.** Nothing is sent to an outside service: no accounts, API keys or
+  paid tools. The optional AI features use [Ollama](https://ollama.com) on the same machine.
+- **Passive only.** Prego loads pages a visitor could reach, respects robots.txt (unless you switch
+  that off for a staging site you own), only types dummy values into forms, and never attacks a site
+  or looks for pages it doesn't link to.
+- **Reports findings, not verdicts.** Automated checks find only some problems, so reports never
+  claim a site is compliant with a standard. Read them alongside manual testing.
+
+See [SPEC.md](SPEC.md) for the full specification. Prego v2 replaces the March 2025 Pa11y dashboard
+prototype, which is preserved, unchanged, in [`legacy/`](legacy/).
 
 ## Requirements
 
 - macOS (other platforms untested), Node.js 22 or later
+- Optional: [Ollama](https://ollama.com) for AI review and plain-English audit set-up
 
 ## Setup
 
 ```bash
-npm install
+git clone git@github.com:jamesbriggs112/PreGo.git prego
+```
+
+```bash
+cd prego && npm install
 ```
 
 `npm install` also downloads Playwright's Chromium (about 100 MB).
@@ -34,10 +49,12 @@ npm run build && npm start
 That serves everything from http://localhost:4310/ (set `PREGO_PORT` to change it). Prego only
 listens on this computer and refuses requests from other sites.
 
-In the GUI you can create projects, start an audit, watch it live, triage tickets (edit, merge,
-dismiss false positives, add notes) and export. Triage is saved per project, so it carries into
-later audits. Report branding (company name, accent colour, logo) and New audit defaults are in
-Settings; CLI exports use the same branding.
+The home page has a box for describing an audit in plain English, with your most recent projects
+down the left. **New audit** walks through five steps (site, screen sizes, tests, scope and login,
+review), and you can watch the audit live, triage tickets (edit, merge, dismiss false positives, add
+notes) and export. Triage is saved per project, so it carries into later audits. Settings has
+sections for report branding (company name, accent colour, logo), New audit defaults, exports and
+AI; CLI exports use the same branding.
 
 ## Three ways to explore
 
@@ -70,6 +87,7 @@ passive: it only loads pages a visitor could reach, and nothing is attacked.
 | `canvas` | Large canvas or WebGL content, flagged for manual review |
 | `ui` | Visual consistency: near-duplicate colours, too many greys or typefaces, text sizes, line heights and spacing a pixel apart |
 | `content` | Titles, meta descriptions, Open Graph tags, unhelpful alt text |
+| `structure` | Copy readability and the main navigation, for the report's Content and tone and Information architecture sections |
 | `spelling` | British English spelling in the main content (cspell's MIT dictionary). Dismiss a word once and it stays quiet |
 | `golive` | Staging leftovers: noindex, robots.txt blocking everything, links to staging addresses, placeholder text, missing pages that return 200, no sitemap, favicon or analytics |
 | `lighthouse` | Performance, best-practice and SEO scores and failing audits, one page per template. Adds several seconds per template |
@@ -123,7 +141,7 @@ the same audit again gives a report without them, so keep the first report.
 
 ### Setting up an audit by typing
 
-The Projects page has a box for describing an audit in plain English, such as *"run an accessibility
+The home page has a box for describing an audit in plain English, such as *"run an accessibility
 audit on example.org, desktop and mobile"*. Prego reads it into the site, test groups, screen sizes and
 page limit, matches it to an existing project where it can, and shows the settings with a time
 estimate. Nothing starts until you press **Start audit**; **Change settings** opens the full form
@@ -148,8 +166,12 @@ approves them on the ticket page.
    ollama pull qwen2.5vl:7b
    ```
 
-2. In Settings, tick **Offer AI review**, press **Check Ollama**, and save.
-3. Tick **AI heuristic review** on the New audit form. Expect 15 to 60 seconds per template.
+2. In Settings → AI, tick **Offer AI review**, press **Check Ollama**, and save.
+3. Tick **AI heuristic review** in the Tests step of New audit. Expect 15 to 60 seconds per template.
+
+If Ollama can't go in `/Applications` (a managed Mac, say), unzip the Mac app from
+[ollama.com/download](https://ollama.com/download) into `~/Applications` instead. To switch it off,
+quit it from the menu bar; remove it from Login Items so it only runs when you open it.
 
 ## Running an audit from the command line
 
@@ -230,7 +252,15 @@ npm run desktop:build
 ```
 
 It downloads Electron the first time, takes a few minutes, and writes
-`packages/desktop/out/Prego-darwin-<chip>/Prego.app` (about 580 MB). Drag it to Applications.
+`packages/desktop/out/Prego-darwin-<chip>/Prego.app` (about 550 MB). Drag it to Applications, or
+to `~/Applications` if you can't write to the main folder, and keep it in the Dock. Rebuild it after
+pulling changes: it holds a copy of the code from when it was built.
+
+To share it, zip it (about 180 MB) and send the zip:
+
+```bash
+ditto -c -k --keepParent packages/desktop/out/Prego-darwin-arm64/Prego.app Prego-mac-arm64.zip
+```
 
 - **Data:** the app keeps its own data in `~/Library/Application Support/Prego/data`, separate from
   this folder's `data/`. **Data → Show data folder** opens it.
@@ -240,7 +270,7 @@ It downloads Electron the first time, takes a few minutes, and writes
 - **Other Macs:** the app is built for this Mac's chip and isn't signed by Apple, so macOS asks before
   opening it the first time (right-click → Open). Signing needs a paid Apple Developer account.
 
-
+## Development
 
 | Command | What it does |
 |---|---|
@@ -259,7 +289,16 @@ packages/core      audit engine: crawl, checks, tickets, exports
 packages/server    Fastify API, background audit jobs, live progress
 packages/web       React GUI (Vite, Tailwind, shadcn/ui components)
 packages/cli       command-line wrapper around core
+packages/desktop   optional Mac app (Electron), not part of the main install
 fixtures/          test targets with known defects
 templates/         report template assets
 data/              run data, database, screenshots, sessions (git-ignored)
 ```
+
+Branches: `dev` for work in progress, `staging` for the build being tested, `production` for the
+released build.
+
+## Licence
+
+[MIT](LICENSE). Prego uses only permissively licensed dependencies; check the licence of any Ollama
+model before using it for client work.

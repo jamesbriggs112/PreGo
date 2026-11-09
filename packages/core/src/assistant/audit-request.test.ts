@@ -5,9 +5,9 @@ import { askOllama, findAddress, readAuditRequest, understandAuditRequest } from
 
 describe('the built-in reader', () => {
   it('reads the site, test group and screen sizes from a plain request', () => {
-    expect(readAuditRequest('run a accessibiltiy audit on fcn.com')).toMatchObject({ target: 'https://fcn.com/' });
-    expect(readAuditRequest('run an accessibility audit on fcn.com, desktop and mobile')).toEqual({
-      target: 'https://fcn.com/',
+    expect(readAuditRequest('run a accessibiltiy audit on example.org')).toMatchObject({ target: 'https://example.org/' });
+    expect(readAuditRequest('run an accessibility audit on example.org, desktop and mobile')).toEqual({
+      target: 'https://example.org/',
       groups: ['accessibility'],
       viewports: ['desktop', 'mobile'],
     });
@@ -27,9 +27,9 @@ describe('the built-in reader', () => {
   });
 
   it('ignores email addresses and file names, and trims trailing punctuation', () => {
-    expect(findAddress('email hello@fcn.com about report.docx')).toBeUndefined();
-    expect(findAddress('audit fcn.com.')).toBe('https://fcn.com/');
-    expect(findAddress('(see https://fcn.com/about).')).toBe('https://fcn.com/about');
+    expect(findAddress('email hello@example.org about report.docx')).toBeUndefined();
+    expect(findAddress('audit example.org.')).toBe('https://example.org/');
+    expect(findAddress('(see https://example.org/about).')).toBe('https://example.org/about');
     expect(readAuditRequest('run a quick check')).toEqual({ groups: ['quick'] });
   });
 });
@@ -57,29 +57,29 @@ afterAll(() => new Promise((done) => ollama.close(done)));
 
 describe('reading with a local Ollama model', () => {
   it('turns looser wording into settings, keeping only known groups and screen sizes', async () => {
-    answer = { project: 'FCN', site: 'fcn.com', groups: ['accessibility', 'hacking'], viewports: ['mobile', 'watch'], maxPages: 0, everyPage: false, interactive: false };
-    const request = await askOllama({ url, model: 'qwen2.5:3b' }, 'make sure fcn.com works for people using screen readers on their phones');
-    expect(request).toEqual({ project: 'FCN', target: 'https://fcn.com/', groups: ['accessibility'], viewports: ['mobile'] });
-    expect(prompts.at(-1)).toContain('Request: make sure fcn.com works');
+    answer = { project: 'Example', site: 'example.org', groups: ['accessibility', 'hacking'], viewports: ['mobile', 'watch'], maxPages: 0, everyPage: false, interactive: false };
+    const request = await askOllama({ url, model: 'qwen2.5:3b' }, 'make sure example.org works for people using screen readers on their phones');
+    expect(request).toEqual({ project: 'Example', target: 'https://example.org/', groups: ['accessibility'], viewports: ['mobile'] });
+    expect(prompts.at(-1)).toContain('Request: make sure example.org works');
   });
 
   it('never uses an address that isn’t in the request', async () => {
     answer = { project: '', site: 'https://evil.example', groups: [], viewports: [], maxPages: 0, everyPage: false, interactive: false };
-    expect((await askOllama({ url, model: 'm' }, 'check the FCN site')).target).toBeUndefined();
+    expect((await askOllama({ url, model: 'm' }, 'check the Example site')).target).toBeUndefined();
   });
 
   it('fills in what the model missed from the built-in reader, and falls back to it when Ollama is down', async () => {
     answer = { project: '', site: '', groups: ['performance'], viewports: [], maxPages: 0, everyPage: false, interactive: false };
-    expect(await understandAuditRequest('how fast is fcn.com on mobile?', { url, model: 'm' })).toEqual({
+    expect(await understandAuditRequest('how fast is example.org on mobile?', { url, model: 'm' })).toEqual({
       source: 'ollama',
-      request: { target: 'https://fcn.com/', viewports: ['mobile'], groups: ['performance'] },
+      request: { target: 'https://example.org/', viewports: ['mobile'], groups: ['performance'] },
     });
-    const down = await understandAuditRequest('accessibility audit of fcn.com', { url: 'http://127.0.0.1:9', model: 'm' });
-    expect(down).toMatchObject({ source: 'reader', request: { target: 'https://fcn.com/', groups: ['accessibility'] }, note: expect.stringMatching(/^Ollama didn’t answer/) });
-    expect(await understandAuditRequest('accessibility audit of fcn.com', undefined)).toMatchObject({ source: 'reader' });
+    const down = await understandAuditRequest('accessibility audit of example.org', { url: 'http://127.0.0.1:9', model: 'm' });
+    expect(down).toMatchObject({ source: 'reader', request: { target: 'https://example.org/', groups: ['accessibility'] }, note: expect.stringMatching(/^Ollama didn’t answer/) });
+    expect(await understandAuditRequest('accessibility audit of example.org', undefined)).toMatchObject({ source: 'reader' });
   });
 
   it('only talks to Ollama on this computer', async () => {
-    await expect(askOllama({ url: 'https://ollama.example.com', model: 'm' }, 'audit fcn.com')).rejects.toThrow(/only talks to Ollama on this computer/);
+    await expect(askOllama({ url: 'https://ollama.example.com', model: 'm' }, 'audit example.org')).rejects.toThrow(/only talks to Ollama on this computer/);
   });
 });

@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { ExportPlan, OutlineEntry } from './plan.js';
 import type { Location } from '../types.js';
+import { normalisePath, trafficByPath } from './analytics.js';
 
 // The report's optional sections: Analytics, Content and tone, Information architecture and
 // Competitor analysis. Each shows figures Prego gathered, then the auditor's own notes.
@@ -77,26 +78,93 @@ const show = (n: number | null | undefined) => (n === null || n === undefined ? 
 // Analytics
 
 export function analyticsSection(ctx: SectionContext, entry: OutlineEntry): Block[] {
-  const { heading, para, table } = ctx.helpers;
+  const { heading, para, table, plural } = ctx.helpers;
   const a = ctx.plan.project.settings.analytics!;
-  const out: Block[] = [
-    heading(`${entry.number}. ${entry.title}`, HeadingLevel.HEADING_1),
-    para(`Figures from Google Analytics${a.period ? ` for ${a.period}` : ''}, imported from ${a.files.join(', ')}. They show how people reach and use the site, to set the findings in context.`),
-  ];
+  const out: Block[] = [heading(`${entry.number}. ${entry.title}`, HeadingLevel.HEADING_1)];
+  if (a.tables.length) {
+    out.push(para(`Figures from Google Analytics${a.period ? ` for ${a.period}` : ''}, imported from ${a.files.join(', ')}. They show how people reach and use the site, to set the findings in context.`));
+  }
   if (a.engagementSeconds !== null) out.push(para(`Average engagement time per active user: ${duration(a.engagementSeconds)}.`));
   out.push(...chart(ctx, ctx.charts.analytics, 'Users by traffic source'));
+  const firstColumn: Record<string, string> = { pages: 'Page', landing: 'Landing page', devices: 'Device', countries: 'Country', events: 'Event', channels: 'Source' };
   for (const t of a.tables) {
     const total = t.rows.reduce((sum, r) => sum + r.value, 0) || 1;
+    const engagement = t.id !== 'events' && t.rows.some((r) => r.engagementSeconds !== undefined && Number.isFinite(r.engagementSeconds));
     out.push(
       heading(t.title, HeadingLevel.HEADING_2),
       table(
-        [t.id === 'pages' ? 'Page' : t.id === 'devices' ? 'Device' : t.id === 'countries' ? 'Country' : 'Source', t.measure, 'Share'],
-        t.rows.slice(0, 10).map((r) => [r.label, r.value.toLocaleString('en-GB'), `${Math.round((r.value / total) * 100)}%`]),
+        [firstColumn[t.id] ?? '', t.measure, ...(t.id === 'events' ? [] : ['Share']), ...(engagement ? ['Engagement'] : [])],
+        t.rows
+          .slice(0, 10)
+          .map((r) => [
+            r.label,
+            r.value.toLocaleString('en-GB'),
+            ...(t.id === 'events' ? [] : [`${Math.round((r.value / total) * 100)}%`]),
+            ...(engagement ? [r.engagementSeconds !== undefined && Number.isFinite(r.engagementSeconds) ? duration(r.engagementSeconds) : '–'] : []),
+          ]),
         { fontSize: 18 },
       ),
     );
   }
+
+  const search = a.search;
+  if (search && (search.queries.length || search.pages.length)) {
+    const clicks = search.queries.reduce((sum, r) => sum + r.clicks, 0) || search.pages.reduce((sum, r) => sum + r.clicks, 0);
+    out.push(
+      heading('What people search for', HeadingLevel.HEADING_2),
+      para(
+        `From Google Search Console: the searches that showed the site and how often people clicked through${clicks ? ` (${clicks.toLocaleString('en-GB')} clicks from the queries listed)` : ''}. Position is the average place in the results; 1 is the top.`,
+      ),
+    );
+    const rows = (list: typeof search.queries) => list.slice(0, 10).map((r) => [r.label, r.clicks.toLocaleString('en-GB'), r.impressions.toLocaleString('en-GB'), `${r.ctr.toFixed(1)}%`, r.position.toFixed(1)]);
+    if (search.queries.length) out.push(table(['Search', 'Clicks', 'Seen', 'Click rate', 'Position'], rows(search.queries), { fontSize: 18 }));
+    // Searches that show the site often but rarely get a click: a title or description that doesn't match what people want.
+    const missed = search.queries.filter((r) => r.impressions >= 100 && r.ctr < 2 && r.position <= 10).slice(0, 5);
+    if (missed.length) {
+      out.push(
+        para(
+          `${missed.length} ${plural(missed.length, 'search')} show the site on the first page of results but are rarely clicked: ${missed.map((r) => `“${r.label}”`).join(', ')}. Clearer page titles and descriptions for those searches could bring more visits.`,
+        ),
+      );
+    }
+    if (search.pages.length) {
+      out.push(heading('Pages people reach from search', HeadingLevel.HEADING_3), table(['Page', 'Clicks', 'Seen', 'Click rate', 'Position'], rows(search.pages), { fontSize: 18 }));
+    }
+  }
+
+  // Where traffic and problems meet: the busiest pages audited, and the issues found on them.
+  const busy = busiestPages(ctx.plan);
+  if (busy.length) {
+    out.push(
+      heading('Issues on the busiest pages', HeadingLevel.HEADING_2),
+      para('The audited pages that get the most visits, and how many issues were found on each. Issues on pages that get a quarter or more of all visits are raised one priority level.'),
+      table(['Page', 'Share of visits', 'Issues', 'Critical or high'], busy.map((b) => [b.path, `${Math.round(b.share * 100)}%`, String(b.issues), String(b.serious)]), { fontSize: 18 }),
+    );
+  }
   return [...out, ...notes(ctx, 'analytics')];
+}
+
+/** Audited pages by share of visits, with the issues found on each. Exported for tests. */
+export function busiestPages(plan: SectionContext['plan']): { path: string; share: number; issues: number; serious: number }[] {
+  const traffic = trafficByPath(plan.project.settings.analytics);
+  if (!traffic) return [];
+  const pages = new Map<string, { share: number; issues: Set<string>; serious: Set<string> }>();
+  for (const l of plan.locations) {
+    const path = l.kind === 'page' && l.audited ? normalisePath(l.url) : null;
+    if (path && traffic.has(path) && !pages.has(path)) pages.set(path, { share: traffic.get(path)!, issues: new Set(), serious: new Set() });
+  }
+  for (const t of plan.tickets) {
+    for (const o of t.occurrenceList) {
+      const page = o.location?.kind === 'page' ? pages.get(normalisePath(o.location.url) ?? '') : undefined;
+      if (!page) continue;
+      page.issues.add(t.ticketId);
+      if (t.severity === 'Critical' || t.severity === 'High') page.serious.add(t.ticketId);
+    }
+  }
+  return [...pages.entries()]
+    .sort((a, b) => b[1].share - a[1].share)
+    .slice(0, 10)
+    .map(([path, p]) => ({ path, share: p.share, issues: p.issues.size, serious: p.serious.size }));
 }
 
 function duration(seconds: number): string {

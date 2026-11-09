@@ -30,6 +30,7 @@ import {
   reportCharts,
   parseReportOptions,
   parseAnalyticsCsv,
+  mergeAnalytics,
   AnalyticsImportError,
   parseAudienceProfile,
   siteFacts,
@@ -690,7 +691,8 @@ export async function buildApp(options: AppOptions): Promise<PregoApp> {
       const project = db.getProject(Number(request.params.id));
       if (!project) return reply.code(404).send({ error: 'Project not found' });
       try {
-        const analytics = parseAnalyticsCsv(request.body.files);
+        // Added to what's there: a report replaces the same report from an earlier import.
+        const analytics = mergeAnalytics(project.settings.analytics, parseAnalyticsCsv(request.body.files));
         db.saveProjectSettings(project.id, { analytics });
         return { analytics };
       } catch (error) {

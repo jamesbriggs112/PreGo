@@ -9,6 +9,8 @@ export interface SiteFacts {
   pages: { path: string; title: string; headings: string[]; signals?: PageSignals }[];
   navigation: { label: string; path: string | null }[];
   analytics?: AnalyticsSummary;
+  /** What people search for to find the site, from Search Console, most clicked first. */
+  searches: string[];
 }
 
 export function siteFacts(project: Project, locations: Location[]): SiteFacts {
@@ -31,6 +33,7 @@ export function siteFacts(project: Project, locations: Location[]): SiteFacts {
     pages,
     navigation: (nav?.items ?? []).map((i) => ({ label: i.label, path: i.href ? pathOf(i.href) : null })),
     analytics: project.settings.analytics,
+    searches: (project.settings.analytics?.search?.queries ?? []).slice(0, 30).map((q) => q.label),
   };
 }
 
@@ -142,16 +145,28 @@ export function suggestAudience(facts: SiteFacts): AudienceProfile {
     const inNav = facts.navigation.filter((n) => rule.words.test(n.label) || (n.path && rule.words.test(n.path)));
     const pages = facts.pages.filter((p) => rule.words.test(p.path) || rule.words.test(p.title) || p.headings.some((h) => rule.words.test(h)));
     const linked = [...links.values()].filter((l) => rule.words.test(l.label) && !inNav.some((n) => n.path === l.path));
+    const searched = facts.searches.filter((q) => rule.words.test(q));
     const signal =
       rule.id === 'contact' ? facts.pages.filter((p) => p.signals && (p.signals.tel || p.signals.mailto || p.signals.phoneText || p.signals.forms.includes('contact'))) : rule.id === 'account' ? facts.pages.filter((p) => p.signals?.forms.includes('login')) : [];
-    if (!inNav.length && !pages.length && !signal.length && !linked.length) continue;
+    if (!inNav.length && !pages.length && !signal.length && !linked.length && !searched.length) continue;
     const evidence = [
       ...inNav.map((n) => `“${n.label}” in the main navigation`),
       ...pages.slice(0, 3).map((p) => `page ${p.path}${p.title ? ` (“${p.title}”)` : ''}`),
       ...linked.slice(0, 2).map((l) => `“${l.label}” link on ${l.pages} ${l.pages === 1 ? 'page' : 'pages'}`),
+      ...searched.slice(0, 2).map((q) => `people search for “${q}” (Search Console)`),
       ...(rule.id === 'contact' && signal.length ? [`contact details or a contact form on ${signal.length} ${signal.length === 1 ? 'page' : 'pages'}`] : []),
     ];
-    purposes.push({ id: rule.id, title: rule.title, description: rule.description, current: true, intended: false, priority: inNav.length ? 'primary' : 'secondary', evidence: [...new Set(evidence)].slice(0, 6) });
+    // Something people search for that the site doesn't show isn't something it does now: it may be a gap.
+    const visible = inNav.length + pages.length + signal.length + linked.length > 0;
+    purposes.push({
+      id: rule.id,
+      title: rule.title,
+      description: rule.description,
+      current: visible,
+      intended: false,
+      priority: inNav.length || searched.length >= 2 ? 'primary' : 'secondary',
+      evidence: [...new Set(evidence)].slice(0, 6),
+    });
     targets.set(rule.id, inNav.find((n) => n.path)?.path ?? pages[0]?.path ?? linked[0]?.path ?? null);
   }
   const has = (id: string) => purposes.some((p) => p.id === id);
@@ -289,6 +304,7 @@ function factsText(facts: SiteFacts): string {
     lines.push(`- ${p.path} “${p.title}”${extra ? ` (${extra})` : ''}`);
   }
   for (const table of facts.analytics?.tables ?? []) lines.push(`${table.title} (${table.measure}): ${table.rows.slice(0, 8).map((r) => `${r.label} ${r.value}`).join(', ')}`);
+  if (facts.searches.length) lines.push(`What people search for to find the site: ${facts.searches.slice(0, 20).join('; ')}`);
   return lines.join('\n');
 }
 

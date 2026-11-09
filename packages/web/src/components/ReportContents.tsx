@@ -21,7 +21,12 @@ const WRITTEN: { key: ReportTextKey; label: string; hint: string; suggest?: 'key
 ];
 
 const SECTIONS: { id: OptionalSection; label: string; hint: string; missing: string }[] = [
-  { id: 'analytics', label: 'Analytics', hint: 'Traffic sources, devices, popular pages and countries from Google Analytics.', missing: 'Import Google Analytics CSV exports below to use this.' },
+  {
+    id: 'analytics',
+    label: 'Analytics',
+    hint: 'Traffic sources, devices, popular and landing pages, key events and countries from Google Analytics, what people search for from Search Console, and the issues on the busiest pages.',
+    missing: 'Import Google Analytics or Search Console CSV exports below to use this.',
+  },
   { id: 'content', label: 'Content and tone', hint: 'Reading ease, sentence length and whether the copy talks to the reader.', missing: 'Needs the “Content and structure (for reports)” check in the audit. Run the audit again with it ticked.' },
   { id: 'ia', label: 'Information architecture', hint: 'How pages are organised: depth, top-level sections and the main navigation.', missing: 'Available for site crawls only.' },
   { id: 'competitors', label: 'Competitor analysis', hint: 'Lighthouse scores and home page screenshots for this site and its competitors.', missing: 'Add competitor sites in the Scope and login step of the New audit form, then run the audit again.' },
@@ -245,13 +250,18 @@ function AnalyticsImport({ run }: { run: RunDetail }) {
     <div className="grid gap-2 pl-6 text-sm">
       {analytics && (
         <p>
-          Imported {formatDateTime(analytics.importedAt)} from {analytics.files.join(', ')}
-          {analytics.period ? `, covering ${analytics.period}` : ''}: {analytics.tables.map((t) => t.title.toLowerCase()).join(', ')}.
+          Last import {formatDateTime(analytics.importedAt)}, from {analytics.files.join(', ')}
+          {analytics.period ? `, covering ${analytics.period}` : ''}:{' '}
+          {[
+            ...analytics.tables.map((t) => t.title.toLowerCase()),
+            ...(analytics.search ? [`Search Console ${(['queries', 'pages', 'devices', 'countries'] as const).filter((k) => analytics.search![k].length).join(', ')}`] : []),
+          ].join('; ')}
+          .
         </p>
       )}
       <div className="flex flex-wrap items-end gap-3">
         <div className="grid gap-1">
-          <Label htmlFor="analytics-files">{analytics ? 'Replace with new exports' : 'Google Analytics CSV exports'}</Label>
+          <Label htmlFor="analytics-files">{analytics ? 'Add or update exports' : 'Google Analytics or Search Console CSV exports'}</Label>
           <input id="analytics-files" type="file" accept=".csv,text/csv" multiple onChange={onFiles} aria-describedby="analytics-files-hint" className="text-sm" />
         </div>
         {analytics && (
@@ -261,8 +271,9 @@ function AnalyticsImport({ run }: { run: RunDetail }) {
         )}
       </div>
       <span id="analytics-files-hint" className="text-muted-foreground">
-        In Google Analytics, open Traffic acquisition, Pages and screens, Tech details or Demographic details, then Share → Download file → CSV. Shared by every audit of this
-        project, and kept on this computer.
+        In Google Analytics, open Traffic acquisition, Pages and screens, Landing page, Events, Tech details or Demographic details, then Share → Download file → CSV. In
+        Search Console, open Performance, then Export → Download CSV, and unzip it. A new export replaces the same report from before; the rest stay. With page figures,
+        issues on pages that get a quarter or more of visits move up a priority level. Shared by every audit of this project, and kept on this computer.
       </span>
       {upload.isPending && <p role="status">Importing…</p>}
       {(upload.isError || remove.isError) && (

@@ -9,7 +9,10 @@ import { runAudit } from '../audit/run-audit.js';
 import { serveFolder, type StaticServer } from '../serve/static-server.js';
 import { buildExportPlan, reportOutline } from './plan.js';
 import { exportRun } from './bundle.js';
-import { parseAnalyticsCsv, AnalyticsImportError } from './analytics.js';
+import { parseAnalyticsCsv, mergeAnalytics, normalisePath, trafficByPath, AnalyticsImportError } from './analytics.js';
+import { busiestPages } from './sections.js';
+import { ticketsCsv } from './csv.js';
+import { reportDocx } from './docx.js';
 import { DEFAULT_REPORT_OPTIONS, listItems, parseReportOptions, type ReportOptions } from './report-options.js';
 import { measureCopy } from './sections.js';
 import { overviewDocx, scoreRating } from './overview.js';
@@ -144,6 +147,30 @@ describe('measurements for the optional sections', () => {
   });
 });
 
+const GA_LANDING = `Landing page + query string,Sessions,Active users,Key events
+/,500,400,12
+/contact.html?utm_source=x,120,100,30
+`;
+const GA_EVENTS = `Event name,Event count,Key events
+page_view,5000,0
+form_submit,80,80
+`;
+const GA_PAGES = `Page path and screen class,Views,Active users
+/,600,500
+/index.html,100,80
+/about.html,200,150
+/news/post-1.html,50,40
+/contact.html,50,30
+`;
+const GSC_QUERIES = `Top queries,Clicks,Impressions,CTR,Position
+acme widgets,120,800,15%,1.2
+widget opening times,3,600,0.5%,4.1
+contact acme,20,150,13.3%,2
+`;
+const GSC_COUNTRIES = `Country,Clicks,Impressions,CTR,Position
+United Kingdom,140,1400,10%,2.5
+`;
+
 describe('Google Analytics import', () => {
   it('reads GA4 CSV exports into figures, dropping account details and totals', () => {
     const a = parseAnalyticsCsv([
@@ -158,6 +185,71 @@ describe('Google Analytics import', () => {
     expect(JSON.stringify(a)).not.toMatch(/Acme website/);
     expect(() => parseAnalyticsCsv([{ name: 'other.csv', text: 'Name,Email\nA,b@c.d\n' }])).toThrow(AnalyticsImportError);
   });
+
+  it('reads landing pages, key events and Search Console, telling Search Console’s countries from GA’s', () => {
+    const a = parseAnalyticsCsv([
+      { name: 'landing.csv', text: GA_LANDING },
+      { name: 'events.csv', text: GA_EVENTS },
+      { name: 'Queries.csv', text: GSC_QUERIES },
+      { name: 'Countries.csv', text: GSC_COUNTRIES },
+    ]);
+    expect(a.tables.map((t) => [t.id, t.measure])).toEqual([
+      ['landing', 'Active users'],
+      ['events', 'Key events'],
+    ]);
+    expect(a.search!.queries[0]).toEqual({ label: 'acme widgets', clicks: 120, impressions: 800, ctr: 15, position: 1.2 });
+    expect(a.search!.countries).toHaveLength(1);
+    expect(a.tables.some((t) => t.id === 'countries')).toBe(false);
+  });
+
+  it('adds a new import to the last, a report replacing the same report', () => {
+    const first = parseAnalyticsCsv([{ name: 'traffic.csv', text: GA_CHANNELS }, { name: 'devices.csv', text: GA_DEVICES }]);
+    const merged = mergeAnalytics(first, parseAnalyticsCsv([{ name: 'Queries.csv', text: GSC_QUERIES }, { name: 'devices2.csv', text: 'Device category,Active users\nmobile,5\n' }]));
+    expect(merged.tables.map((t) => t.id)).toEqual(['channels', 'devices']);
+    expect(merged.tables[1].rows).toEqual([{ label: 'mobile', value: 5, engagementSeconds: undefined }]);
+    expect(merged.search!.queries).toHaveLength(3);
+    expect(merged.files).toEqual(['traffic.csv', 'devices.csv', 'Queries.csv', 'devices2.csv']);
+  });
+
+  it('works out each page’s share of visits, matching addresses however they’re written', () => {
+    expect(['https://acme.example/about.html?x=1', '/news/', '/index.html', 'Home page', ''].map(normalisePath)).toEqual(['/about.html', '/news', '/', null, null]);
+    const shares = trafficByPath(parseAnalyticsCsv([{ name: 'pages.csv', text: GA_PAGES }]))!;
+    // Active users: (500 + 80) of 800, with / and /index.html counted as one page.
+    expect(shares.get('/')).toBeCloseTo(0.725, 3);
+    expect(shares.get('/about.html')).toBeCloseTo(0.1875, 4);
+    // Without GA page figures, Search Console's pages are used.
+    expect(trafficByPath(parseAnalyticsCsv([{ name: 'Pages.csv', text: 'Top pages,Clicks,Impressions,CTR,Position\nhttps://acme.example/,30,90,33%,1\nhttps://acme.example/about.html,10,50,20%,3\n' }]))!.get('/')).toBe(0.75);
+  });
+
+  it('raises the priority of issues on busy pages, and shows the traffic in the CSV and report', async () => {
+    const projectId = db.getRun(runId)!.projectId;
+    db.saveProjectSettings(projectId, { analytics: parseAnalyticsCsv([{ name: 'pages.csv', text: GA_PAGES }, { name: 'Queries.csv', text: GSC_QUERIES }]) });
+    db.saveReportOptions(runId, { ...DEFAULT_REPORT_OPTIONS, include: { analytics: true, content: false, ia: false, competitors: false } });
+    const plan = buildExportPlan(db, runId);
+    const before = new Map(db.getTickets(runId).map((t) => [t.ticketId, t.priority]));
+    const home = plan.tickets.filter((t) => t.occurrenceList.some((o) => normalisePath(o.location.url) === '/'));
+    expect(home.length).toBeGreaterThan(0);
+    for (const t of home) {
+      expect(t.traffic).toBeGreaterThanOrEqual(0.7);
+      expect(t.priorityRaised).toBe(before.get(t.ticketId) !== 'P1');
+      if (t.priorityRaised) expect(t.priority < before.get(t.ticketId)!).toBe(true);
+    }
+    expect(busiestPages(plan)[0]).toMatchObject({ path: '/', share: expect.closeTo(0.725, 3), issues: expect.any(Number) });
+
+    // Built directly rather than exported: exporting deletes the screenshots later tests use.
+    const [header, ...rows] = parse(ticketsCsv(plan).replace(/^\uFEFF/, '')) as string[][];
+    const traffic = header.indexOf('Traffic share');
+    expect(traffic).toBe(header.length - 1);
+    expect(rows.some((r) => /^\d+% of visits \(priority raised\)$/.test(r[traffic]))).toBe(true);
+    const zip = await JSZip.loadAsync(await reportDocx(plan, join(dataDir, 'runs', String(runId))));
+    const text = (await zip.file('word/document.xml')!.async('string')).replace(/<\/w:p>/g, '\n').replace(/<[^>]+>/g, '');
+    expect(text).toContain('What people search for');
+    expect(text).toMatch(/widget opening times\n3\n600\n0\.5%\n4\.1/);
+    expect(text).toContain('show the site on the first page of results but are rarely clicked: “widget opening times”');
+    expect(text).toContain('Issues on the busiest pages');
+    expect(text).toMatch(/raised: pages with \d+% of visits/);
+    db.saveProjectSettings(projectId, { analytics: undefined });
+  }, 120_000);
 });
 
 describe('the client-facing report', () => {

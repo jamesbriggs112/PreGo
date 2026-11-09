@@ -25,6 +25,8 @@ function keyFindings({ tickets, locations }: Pick<ExportPlan, 'tickets' | 'locat
   }
   const performance = averagePerformance(locations);
   if (performance !== null) lines.push(`The average Lighthouse performance score is ${performance} out of 100${performance < 50 ? ', so pages load slowly' : performance < 90 ? ', with room to load faster' : ''}.`);
+  const busy = tickets.filter((t) => t.priorityRaised).length;
+  if (busy) lines.push(`${busy} ${busy === 1 ? 'issue is' : 'issues are'} on pages that get a quarter or more of all visits, so ${busy === 1 ? 'it has' : 'they have'} been moved up a priority level.`);
   const broken = locations.filter((l) => (l.statusCode ?? 0) >= 400).length;
   if (broken) lines.push(`${broken} ${broken === 1 ? 'link leads' : 'links lead'} to a page that doesn’t load.`);
   if (!lines.length) lines.push('Automated checks raised no issues in the areas checked.');

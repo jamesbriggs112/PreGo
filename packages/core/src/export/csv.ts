@@ -6,12 +6,13 @@ import type { Priority } from '../types.js';
 /**
  * tickets.csv columns, in the order the spec sets (section 7.3), without the status and history
  * columns: tickets are managed in the team's own tool once exported. Screenshots are in the report.
+ * Traffic share, from imported analytics, comes last.
  */
 export const TICKET_COLUMNS = [
   'Ticket ID', 'Title', 'Category', 'Severity', 'Priority', 'WCAG criterion', 'WCAG level', 'Rule ID',
   'Engine', 'Occurrences', 'Locations affected', 'Example location', 'Example selector', 'Description',
   'Why it matters', 'Steps to reproduce', 'Expected', 'Actual', 'Recommendation', 'Effort', 'Report section',
-  'Auditor notes', 'Labels',
+  'Auditor notes', 'Labels', 'Traffic share',
 ] as const;
 export type TicketColumn = (typeof TICKET_COLUMNS)[number];
 
@@ -53,6 +54,7 @@ function fullDescription(t: PlannedTicket): string {
     `Actual: ${t.actual}`,
     `Recommendation: ${t.recommendation}`,
     t.wcagCriterion ? `WCAG: ${t.wcagCriterion} (level ${t.wcagLevel ?? '-'})` : '',
+    t.traffic !== null ? `Traffic: pages with ${trafficText(t)}` : '',
     `Prego ticket: ${t.ticketId}, report section ${t.reportSection}`,
   ]
     .filter(Boolean)
@@ -130,7 +132,15 @@ function ticketRow(t: PlannedTicket): Row {
     'Report section': t.reportSection,
     'Auditor notes': t.auditorNotes,
     Labels: t.labels.join(' '),
+    'Traffic share': trafficText(t),
   };
+}
+
+/** "34% of visits", with "(priority raised)" when that moved it up a level; empty without analytics. */
+export function trafficText(t: Pick<PlannedTicket, 'traffic' | 'priorityRaised'>): string {
+  if (t.traffic === null) return '';
+  const pct = t.traffic > 0 && t.traffic < 0.01 ? 'under 1%' : `${Math.round(t.traffic * 100)}%`;
+  return `${pct} of visits${t.priorityRaised ? ' (priority raised)' : ''}`;
 }
 
 /** UTF-8 with BOM (so Excel and Numbers read accents correctly), comma-separated, every field quoted. */

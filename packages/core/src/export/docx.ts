@@ -23,6 +23,7 @@ import { checkedCategories } from '../checks/categories.js';
 import { averagePerformance, type LighthouseScores } from '../checks/lighthouse/lighthouse.js';
 import { stateMapStates, type ExportPlan, type OutlineEntry, type PlannedTicket, type ReportSectionId, type ReportSectionPlan } from './plan.js';
 import { listItems } from './report-options.js';
+import { trafficText } from './csv.js';
 import { suggestReportText } from './suggest.js';
 import { analyticsSection, competitorSection, contentSection, iaSection, type SectionContext } from './sections.js';
 
@@ -213,7 +214,7 @@ function executiveSummary(plan: ExportPlan, entry: OutlineEntry): (Paragraph | T
     out.push(
       new Paragraph({
         bullet: { level: 0 },
-        children: [new TextRun({ text: t.ticketId, bold: true }), new TextRun(`: ${t.title}. ${t.severity} severity, ${t.priority}. See section ${t.reportSection}.`)],
+        children: [new TextRun({ text: t.ticketId, bold: true }), new TextRun(`: ${t.title}. ${t.severity} severity, ${t.priority}${raisedNote(t)}. See section ${t.reportSection}.`)],
       }),
     );
   }
@@ -357,7 +358,9 @@ function findingsSection(section: ReportSectionPlan, runDir: string, clientFacin
           bullet: { level: 0 },
           children: [
             new TextRun({ text: t.ticketId, bold: true }),
-            new TextRun(`: ${where(t)}. ${t.severity} severity, ${t.priority}. ${t.occurrences} ${plural(t.occurrences, 'occurrence')} on ${t.locationsAffected} ${plural(t.locationsAffected, 'page')}.`),
+            new TextRun(
+              `: ${where(t)}. ${t.severity} severity, ${t.priority}${raisedNote(t)}. ${t.occurrences} ${plural(t.occurrences, 'occurrence')} on ${t.locationsAffected} ${plural(t.locationsAffected, 'page')}${t.traffic ? `, which get ${trafficText({ ...t, priorityRaised: false })}` : ''}.`,
+            ),
           ],
         }),
       );
@@ -385,10 +388,19 @@ function themeReach(theme: Theme): Paragraph {
   const worst = SEVERITIES.find((s) => theme.tickets.some((t) => t.severity === s))!;
   const places = [...new Set(theme.tickets.map(where).filter(Boolean))];
   const shown = places.slice(0, 5).join(', ') + (places.length > 5 ? ` and ${places.length - 5} more` : '');
+  const busiest = Math.max(0, ...theme.tickets.map((t) => t.traffic ?? 0));
   return new Paragraph({
     spacing: { after: 120 },
-    children: [new TextRun({ text: 'Where: ', bold: true }), new TextRun(`${shown || 'across the site'}. ${worst} severity at worst.`)],
+    children: [
+      new TextRun({ text: 'Where: ', bold: true }),
+      new TextRun(`${shown || 'across the site'}. ${worst} severity at worst.${busiest >= 0.01 ? ` Pages with ${Math.round(busiest * 100)}% of visits are affected.` : ''}`),
+    ],
   });
+}
+
+/** Says when a ticket's priority was raised because its pages get a large share of visits. */
+function raisedNote(t: PlannedTicket): string {
+  return t.priorityRaised ? ` (raised: pages with ${Math.round((t.traffic ?? 0) * 100)}% of visits)` : '';
 }
 
 function stateMapSection(plan: ExportPlan, image: Buffer | undefined, entry: OutlineEntry): (Paragraph | Table)[] {

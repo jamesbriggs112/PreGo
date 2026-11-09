@@ -16,7 +16,7 @@ export { captureCrop, captureFullPage, HIGHLIGHT_COLOUR, type CropOptions } from
 export { buildTickets, fingerprint, calculatePriority, type BuildTicketsOptions } from './tickets/build.js';
 export { describeComponent, componentLabel, type ComponentInfo } from './tickets/component.js';
 export * from './export/report-options.js';
-export { parseAnalyticsCsv, AnalyticsImportError } from './export/analytics.js';
+export { parseAnalyticsCsv, mergeAnalytics, trafficByPath, normalisePath, AnalyticsImportError } from './export/analytics.js';
 export { reportCharts } from './export/charts.js';
 export { suggestReportText } from './export/suggest.js';
 export { competitorUrls, MAX_COMPETITORS } from './audit/competitors.js';

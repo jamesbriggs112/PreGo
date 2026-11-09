@@ -121,11 +121,15 @@ describe('report contents and analytics', () => {
     const ga = 'Device category,Active users\nmobile,10\ndesktop,5\n';
     const bad = await fetch(`${base}/api/projects/${run.projectId}/analytics`, json('PUT', { files: [{ name: 'x.csv', text: 'Name,Email\n' }] }));
     expect(bad.status).toBe(400);
-    expect((await bad.json()).error).toMatch(/look like a Google Analytics report/);
+    expect((await bad.json()).error).toMatch(/look like a Google Analytics or Search Console report/);
     const imported = await fetch(`${base}/api/projects/${run.projectId}/analytics`, json('PUT', { files: [{ name: 'devices.csv', text: ga }] }));
     expect(imported.status).toBe(200);
     const after = await (await fetch(`${base}/api/runs/${run.id}/report`)).json();
     expect(after.available.analytics).toBe(true);
+    // A later import adds to the first.
+    await fetch(`${base}/api/projects/${run.projectId}/analytics`, json('PUT', { files: [{ name: 'Queries.csv', text: 'Top queries,Clicks,Impressions,CTR,Position\nwidgets,5,50,10%,3\n' }] }));
+    const both = db.getProject(run.projectId)!.settings.analytics!;
+    expect([both.tables.map((t) => t.id), both.search?.queries.length]).toEqual([['devices'], 1]);
     expect(after.outline.map((o: { id: string }) => o.id)).toContain('analytics');
 
     await fetch(`${base}/api/projects/${run.projectId}/analytics`, { method: 'DELETE' });

@@ -51,6 +51,11 @@ describe('suggested purposes, personas and tasks', () => {
     for (const p of personas) expect(tasks.some((t) => t.personaId === p.id)).toBe(true);
   });
 
+  it('treats what people search for, but the site doesn’t show, as a possible gap', () => {
+    const visit = suggestAudience({ ...facts, searches: ['acme opening times', 'acme widgets'] }).purposes.find((p) => p.id === 'visit')!;
+    expect(visit).toMatchObject({ current: false, evidence: ['people search for “acme opening times” (Search Console)'] });
+  });
+
   it('uses Google Analytics devices to describe the phone user', () => {
     const withGa: SiteFacts = {
       ...facts,

@@ -135,8 +135,13 @@ The Export page chooses what goes into the export, saved per audit:
   and its Report section column points to the matching part of the report. Off gives the technical
   report, with ticket IDs throughout.
 - **Optional sections**, each with figures from Prego and room for your observations:
-  - **Analytics**: traffic sources, devices, popular pages and countries from Google Analytics CSV
-    exports, imported on the Export page and kept for the project. Prego keeps only the figures.
+  - **Analytics**: traffic sources, devices (with engagement), popular and landing pages, key events
+    and countries from Google Analytics CSV exports, and what people search for and where they land
+    from Search Console's Performance export (unzipped). Imported on the Export page and kept for the
+    project; a new export replaces the same report and the rest stay. Prego keeps only the figures.
+    With page figures, the section shows the issues on the busiest pages, tickets.csv gets a
+    *Traffic share* column, and issues on pages that get a quarter or more of all visits move up one
+    priority level (marked "priority raised"). Searches also feed the audience suggestions.
   - **Content and tone**: reading ease, sentence length and whether the copy talks to the reader,
     from the *Content and structure (for reports)* check.
   - **Information architecture**: how deep and flat the site is, its top-level sections and the main

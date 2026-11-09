@@ -41,17 +41,41 @@ export interface ProjectSettings {
   audience?: AudienceProfile;
 }
 
-/** What Prego keeps from Google Analytics CSV exports. Figures only; nothing about individual people. */
+/** What Prego keeps from Google Analytics and Search Console CSV exports. Figures only; nothing about individual people. */
 export interface AnalyticsSummary {
   importedAt: string;
   /** The files the figures came from. */
   files: string[];
   /** The date range the export covers, as GA writes it, if given. */
   period: string | null;
-  /** Rows of each report found, largest first: label, users (or sessions) and, where given, engagement. */
-  tables: { id: 'channels' | 'devices' | 'pages' | 'countries'; title: string; measure: string; rows: { label: string; value: number; engagementSeconds?: number }[] }[];
+  /** Rows of each GA report found, largest first: label, users (or sessions, views, events) and, where given, engagement. */
+  tables: {
+    id: 'channels' | 'devices' | 'pages' | 'landing' | 'events' | 'countries';
+    title: string;
+    measure: string;
+    rows: { label: string; value: number; engagementSeconds?: number }[];
+  }[];
   /** Average engagement time per active user, in seconds, if any report gave it. */
   engagementSeconds: number | null;
+  /** From Search Console's Performance export: what people search for and where they land. */
+  search?: SearchSummary;
+}
+
+export interface SearchRow {
+  label: string;
+  clicks: number;
+  impressions: number;
+  /** Click-through rate, 0 to 100. */
+  ctr: number;
+  /** Average position in results. */
+  position: number;
+}
+
+export interface SearchSummary {
+  queries: SearchRow[];
+  pages: SearchRow[];
+  devices: SearchRow[];
+  countries: SearchRow[];
 }
 
 export interface Project {

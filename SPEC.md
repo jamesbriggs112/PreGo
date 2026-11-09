@@ -223,6 +223,8 @@ Columns, in this order:
 - Encoded as UTF-8 with BOM, comma-separated, every field quoted.
 - Column presets for Jira, Linear and Trello rename the columns on export. [CONTEXT NEEDED: which ticketing tool the CSV will be imported into first. Productive.io is used at Four. Confirm whether it's the target, and get a sample import file.]
 
+After Phase 5, a `Traffic share` column follows `Labels`: the share of visits to the pages a ticket affects, from imported analytics, with "(priority raised)" when that moved it up a level (T41).
+
 ### 7.4 `occurrences.csv` (one row per instance)
 
 `Ticket ID, Location (URL or state ID), Viewport, Selector, HTML snippet, Screenshot crop`
@@ -342,7 +344,7 @@ compliance claims. Built on `dev`, a task per commit.
 | T38 ✓ | Purposes, personas and tasks: what the site serves now (suggested from content, navigation, forms and top GA pages) and what it should achieve (entered from the brief); personas with context, needs and device; tasks with a checkable success condition. Suggestions from a built-in reader and, if switched on, Ollama; the auditor edits or adds their own, including internal users | `core/audience` + GUI | Suggestions appear for a fixture site; edits are saved per project |
 | T39 ✓ | Future readiness check: AI crawler rules in robots.txt, content and links without JavaScript, structured data, answerable content (question headings, summaries, FAQs), voice (concise answers, `speakable`, consistent contact details), entity clarity, sitemap health | `core/checks/future` + `future.docx` | Each signal has a fixture page that triggers it. `llms.txt` isn't read (not approved: sites don't usually link to it) |
 | T40 ✓ | Search and sharing: how each page appears across channels. Titles and descriptions as search snippets, Open Graph and X cards as previews for LinkedIn, Facebook, X, WhatsApp and Slack, canonical, hreflang, icons, rich-result eligibility | Check + report section | Previews render for a fixture page with and without tags |
-| T41 | Analytics, deeper: more GA4 exports (landing pages, key events, engagement by device) and Search Console CSV (queries, pages); findings weighted by the traffic of the pages they affect | `core/export/analytics` | Imports fixture CSVs; ticket priority reflects traffic |
+| T41 ✓ | Analytics, deeper: more GA4 exports (landing pages, key events, engagement by device) and Search Console CSV (queries, pages); findings weighted by the traffic of the pages they affect | `core/export/analytics` | Imports fixture CSVs; ticket priority reflects traffic |
 | T42 | Task testing: a tree test on the crawl's link structure (does each task's target sit where its labels suggest?) and an optional Ollama walkthrough per persona and task, following only links and controls a visitor can see, never submitting forms. Scored success, partial or failed, with steps against the shortest route | `core/tasks` + `audience.docx` | Fixture tasks score as expected; the walkthrough never submits a form |
 | T43 | Cross-analysis in the Overview: findings tagged with the purposes and personas they affect, and priority from severity, traffic and purpose | Overview section | A fixture audit with analytics and tasks shows a joined-up headline |
 

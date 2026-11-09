@@ -2,6 +2,11 @@ import type { PregoDb } from '../db/database.js';
 import { CATEGORIES, CATEGORY_NAMES, type Category, type Location, type Occurrence, type Project, type Run, type StateEdge, type Ticket } from '../types.js';
 import type { ImageState } from './state-map-image.js';
 import { DEFAULT_REPORT_OPTIONS, type OptionalSection, type ReportOptions } from './report-options.js';
+import { normalisePath, trafficByPath } from './analytics.js';
+
+/** Tickets on pages that get at least this share of visits move up one priority level. */
+export const TRAFFIC_RAISE_SHARE = 0.25;
+const RAISED: Record<Ticket['priority'], Ticket['priority']> = { P1: 'P1', P2: 'P1', P3: 'P2', P4: 'P3' };
 
 /** Statuses left out of exports: dismissed false positives, and AI suggestions nobody has approved. */
 const NOT_EXPORTED = new Set<Ticket['status']>(['Dismissed', 'Needs review']);
@@ -18,6 +23,10 @@ export interface PlannedTicket extends Ticket {
   /** First outlined crop, shown in the report. */
   screenshotFile: string | null;
   occurrenceList: PlannedOccurrence[];
+  /** Share of visits (0 to 1) to the pages the ticket affects, from imported analytics; null without page figures. */
+  traffic: number | null;
+  /** The priority was raised a level because the pages get a large share of visits. `priority` is the raised one. */
+  priorityRaised: boolean;
 }
 
 export interface ReportSectionPlan {
@@ -126,6 +135,7 @@ export function buildExportPlan(db: PregoDb, runId: number, options: ReportOptio
   const outline = reportOutline(run, options, available);
   const findingsNumber = outline.find((o) => o.id === 'findings')!.number;
   const locationById = new Map(locations.map((l) => [l.id, l]));
+  const traffic = trafficByPath(project.settings.analytics);
 
   const exported = db
     .getTickets(runId)
@@ -144,11 +154,18 @@ export function buildExportPlan(db: PregoDb, runId: number, options: ReportOptio
         if (occurrence.crop) screenshotFile = `${ticket.ticketId}_${String(++n).padStart(2, '0')}.png`;
         return { ...occurrence, location: locationById.get(occurrence.locationId)!, screenshotFile };
       });
+      // Each page counts once, however many times the problem appears on it.
+      const paths = new Set(occurrenceList.filter((o) => o.location?.kind === 'page').map((o) => normalisePath(o.location.url)));
+      const share = traffic ? Math.min(1, [...paths].reduce((sum, path) => sum + (path ? (traffic.get(path) ?? 0) : 0), 0)) : null;
+      const raise = share !== null && share >= TRAFFIC_RAISE_SHARE && RAISED[ticket.priority] !== ticket.priority;
       return {
         ...ticket,
+        priority: raise ? RAISED[ticket.priority] : ticket.priority,
         reportSection: number,
         screenshotFile: occurrenceList.find((o) => o.screenshotFile)?.screenshotFile ?? null,
         occurrenceList,
+        traffic: share === null ? null : Math.round(share * 1000) / 1000,
+        priorityRaised: raise,
       };
     });
     sections.push({ number, category, title: CATEGORY_NAMES[category], tickets: planned });

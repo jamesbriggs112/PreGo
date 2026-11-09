@@ -52,6 +52,9 @@ export async function overviewDocx(plan: ExportPlan, whyItMatters: string, brand
     ],
     ['occurrences.csv', 'Every place each issue was found', 'Development team'],
   ];
+  if (plan.options.reports.audience && plan.project.settings.audience?.personas.length) {
+    pack.splice(1, 0, ['audience.docx', 'What the site is for, who it serves, and whether each of them can do what they came to do', 'Leadership, marketing and content']);
+  }
   if (plan.options.reports.future && readiness) pack.splice(1, 0, ['future.docx', 'How the site looks in search and when shared, and how ready it is for AI assistants and voice search', 'Marketing, digital and leadership']);
   if (plan.run.mode === 'explore') pack.push(['state-map.png', 'A diagram of every screen reached', 'Project and development teams']);
 
@@ -108,7 +111,7 @@ export async function overviewDocx(plan: ExportPlan, whyItMatters: string, brand
 }
 
 /** What the site is for and who it serves, when the project has purposes. Gaps are what the client wants but the site doesn't do yet. */
-function purposeSection(plan: ExportPlan, section: (title: string) => Paragraph): (Paragraph | Table)[] {
+export function purposeSection(plan: ExportPlan, section: (title: string) => Paragraph, withPersonas = true): (Paragraph | Table)[] {
   const audience = plan.project.settings.audience;
   if (!audience?.purposes.length) return [];
   const yes = (b: boolean) => (b ? 'Yes' : 'No');
@@ -130,7 +133,7 @@ function purposeSection(plan: ExportPlan, section: (title: string) => Paragraph)
       }),
     );
   }
-  if (audience.personas.length) {
+  if (withPersonas && audience.personas.length) {
     out.push(heading('Who it’s for', HeadingLevel.HEADING_2));
     for (const p of audience.personas) {
       const tasks = audience.tasks.filter((t) => t.personaId === p.id).map((t) => t.goal);

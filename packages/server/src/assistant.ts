@@ -45,7 +45,7 @@ export async function planAudit(db: PregoDb, text: string) {
   const project = byName || bySite;
   const projectName = project ? project.name : (request.project ?? host);
 
-  const available = checkDefinitions().filter((c) => c.id !== 'ai' || ai);
+  const available = checkDefinitions().filter((c) => (c.id !== 'ai' && c.id !== 'tasks') || ai);
   const groups = (request.groups ?? []).map((id) => CHECK_GROUPS.find((g) => g.id === id)!).filter(Boolean);
   const checks = groups.length
     ? [...new Set(groups.flatMap((g) => groupChecks(g, available)))]

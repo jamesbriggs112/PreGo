@@ -10,6 +10,7 @@ import { writeCsvFiles } from './csv.js';
 import { writeReportDocx, type ReportBranding } from './docx.js';
 import { writeOverviewDocx } from './overview.js';
 import { hasReadiness, writeFutureDocx } from './future-report.js';
+import { hasAudience, writeAudienceDocx } from './audience-report.js';
 import { PACK_FILES } from './report-options.js';
 import { getSettings, reportBranding } from '../settings.js';
 
@@ -27,13 +28,13 @@ export interface ExportResult {
   /** The export's ID in the exports log. */
   id: number;
   dir: string;
-  files: { report: string; tickets: string; occurrences: string; runJson: string; overview?: string; future?: string };
+  files: { report: string; tickets: string; occurrences: string; runJson: string; overview?: string; audience?: string; future?: string };
   plan: ExportPlan;
 }
 
 /**
  * Write the export bundle for a run: report.docx, tickets.csv, occurrences.csv and run.json, plus any
- * other reports chosen for the pack (overview.docx, future.docx), all in
+ * other reports chosen for the pack (overview.docx, audience.docx, future.docx), all in
  * one folder and cross-referenced by ticket ID. Screenshots go into the report and nowhere else: once
  * it's written, the run's screenshots are deleted from Prego.
  */
@@ -64,6 +65,10 @@ export async function exportRun(db: PregoDb, runId: number, options: ExportOptio
     files.overview = join(dir, PACK_FILES.overview);
     await writeOverviewDocx(plan, files.overview, getSettings(db).report.whyItMatters, branding);
   }
+  if (plan.options.reports.audience && hasAudience(plan)) {
+    files.audience = join(dir, PACK_FILES.audience);
+    await writeAudienceDocx(plan, runDir, files.audience, branding);
+  }
   if (plan.options.reports.future && hasReadiness(plan)) {
     files.future = join(dir, PACK_FILES.future);
     await writeFutureDocx(plan, runDir, files.future, branding);
@@ -74,7 +79,7 @@ export async function exportRun(db: PregoDb, runId: number, options: ExportOptio
       {
         generatedBy: 'Prego',
         exportedAt: new Date().toISOString(),
-        reports: ['report.docx', ...(files.overview ? [PACK_FILES.overview] : []), ...(files.future ? [PACK_FILES.future] : [])],
+        reports: ['report.docx', ...(['overview', 'audience', 'future'] as const).filter((r) => files[r]).map((r) => PACK_FILES[r])],
         reportLayout: plan.options.clientFacing ? 'client-facing' : 'technical',
         project: plan.project,
         run: plan.run,
@@ -97,7 +102,7 @@ export async function exportRun(db: PregoDb, runId: number, options: ExportOptio
 /** Delete a run's screenshots, crops, competitor screenshots and share images. Exporting does this once the reports hold them. */
 export function deleteRunImages(dataDir: string, runId: number) {
   const runDir = runDirectory(dataDir, runId);
-  for (const folder of ['screenshots', 'crops', 'competitors', 'sharing']) rmSync(join(runDir, folder), { recursive: true, force: true });
+  for (const folder of ['screenshots', 'crops', 'competitors', 'sharing', 'tasks']) rmSync(join(runDir, folder), { recursive: true, force: true });
 }
 
 /** Whether a run's screenshots have been deleted, which happens when it's first exported. */

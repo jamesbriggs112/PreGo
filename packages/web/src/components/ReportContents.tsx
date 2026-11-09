@@ -85,6 +85,39 @@ export function ReportContents({ run }: { run: RunDetail }) {
             hint="A short report for client leadership, read first: scores at a glance, why a healthy website matters, key findings, top recommendations and a guide to the pack."
           />
           <Toggle
+            id="report-audience"
+            checked={current.reports.audience}
+            onChange={(on) => update((o) => ({ ...o, reports: { ...o.reports, audience: on } }))}
+            label="Audience and tasks (audience.docx)"
+            hint={
+              <>
+                What the site is for, who it serves, and whether each persona can do what they came to do: a navigation test of every task, and the AI walkthrough if it ran.
+                {report.data && !report.data.hasAudience && (
+                  <>
+                    {' '}
+                    Needs personas and tasks: set them up on the project’s{' '}
+                    <Link to={`/projects/${run.projectId}/audience`} className="text-primary underline">
+                      Purposes and audience
+                    </Link>{' '}
+                    page.
+                  </>
+                )}
+              </>
+            }
+          />
+          {current.reports.audience && report.data?.hasAudience && (
+            <div className="grid gap-2 pl-6">
+              <Label htmlFor="report-notes-audience">Your observations</Label>
+              <Textarea
+                id="report-notes-audience"
+                rows={3}
+                value={current.text.audience ?? ''}
+                onChange={(e) => setText('audience', e.target.value)}
+                placeholder="Optional. Shown at the end of audience.docx."
+              />
+            </div>
+          )}
+          <Toggle
             id="report-future"
             checked={current.reports.future}
             onChange={(on) => update((o) => ({ ...o, reports: { ...o.reports, future: on } }))}

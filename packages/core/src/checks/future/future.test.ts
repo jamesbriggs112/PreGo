@@ -77,7 +77,7 @@ describe('the checks on a fixture site', () => {
 
 describe('the Search, sharing and future readiness report', () => {
   it('is written into the pack with previews, no ticket IDs, and the share images deleted afterwards', async () => {
-    db.saveReportOptions(runId, { ...DEFAULT_REPORT_OPTIONS, reports: { overview: true, future: true }, text: { future: 'Start with the members page.' } });
+    db.saveReportOptions(runId, { ...DEFAULT_REPORT_OPTIONS, reports: { overview: true, audience: false, future: true }, text: { future: 'Start with the members page.' } });
     const exported = await exportRun(db, runId, { dataDir, outDir: join(dataDir, 'pack') });
     expect(exported.files.future).toBe(join(exported.dir, 'future.docx'));
     const zip = await JSZip.loadAsync(readFileSync(exported.files.future!));

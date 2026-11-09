@@ -25,6 +25,9 @@ export { ticketsCsv, occurrencesCsv, writeCsvFiles, CSV_PRESETS, TICKET_COLUMNS,
 export { reportDocx, writeReportDocx, categoryScore, categoryScores, type CategoryScore, type ReportBranding } from './export/docx.js';
 export { overviewDocx, writeOverviewDocx, scoreRating } from './export/overview.js';
 export { futureDocx, writeFutureDocx, hasReadiness } from './export/future-report.js';
+export { audienceDocx, writeAudienceDocx, hasAudience, taskResults } from './export/audience-report.js';
+export { treeTest, type TreeResult, type TaskOutcome } from './tasks/tree.js';
+export { walkTasks, type WalkResult, type WalkStep } from './tasks/walkthrough.js';
 export { assessReadiness, type Readiness, type ReadinessItem } from './export/readiness.js';
 export { exportRun, runImagesDeleted, type ExportOptions, type ExportResult } from './export/bundle.js';
 export { verifyExport, type VerifyResult } from './export/verify.js';

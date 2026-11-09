@@ -355,6 +355,20 @@ describe('Settings and Export screens', () => {
     expect(audience.personas.some((p) => p.internal)).toBe(true);
     expect(audience.tasks.length).toBeGreaterThan(0);
   }, 60_000);
+
+  it('adds the Audience and tasks report, with the navigation test of each task', async () => {
+    const { page } = gui;
+    await page.goto(`${gui.url}runs/${runId}/export`);
+    await page.getByLabel('Audience and tasks (audience.docx)').check();
+    await expect.poll(() => gui.db.getReportOptions(runId).reports.audience, { timeout: 10_000 }).toBe(true);
+    await page.getByRole('button', { name: 'Preview the report' }).click();
+    await page.getByLabel('Report to preview').selectOption('audience');
+    const frame = page.frameLocator('iframe[title="Report preview"]');
+    await frame.getByRole('heading', { name: '3. People and their tasks' }).waitFor({ timeout: 60_000 });
+    await frame.getByText(/^Navigation test: (Done|Partly|Not done|Not tested)\./).first().waitFor();
+    await page.getByRole('button', { name: 'Hide report preview' }).click();
+    expect(await axeViolations(page)).toEqual([]);
+  }, 90_000);
 });
 
 describe('Interactive exploration', () => {

@@ -219,6 +219,19 @@ const definitions: CheckDefinition[] = [
     create: (context) => aiModule(context.ai),
   },
   {
+    id: 'tasks',
+    name: 'Persona task walkthrough (AI, local)',
+    description:
+      'The AI model in Ollama on this computer plays each persona from the project’s Purposes and audience and tries their tasks, choosing from the links and menus a visitor can see. It never types or submits forms. Set up personas and tasks first, and switch AI on in Settings.',
+    // Results go in the Audience and tasks report, not tickets.
+    categories: [],
+    defaultOn: false,
+    slow: true,
+    cost: { seconds: [0, 0], perPage: true, setupSeconds: [90, 600] },
+    // The walkthrough runs once the pages are checked (see runAudit), so there's nothing to do per page.
+    create: () => ({ id: 'tasks', name: 'Persona task walkthrough', perViewport: false, run: async () => [] }),
+  },
+  {
     id: 'canvas',
     name: 'Canvas and WebGL detection',
     description: 'Flags large canvas content that automated tools cannot read, for manual review.',

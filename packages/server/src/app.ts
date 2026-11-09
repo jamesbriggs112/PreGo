@@ -43,6 +43,8 @@ import {
   overviewDocx,
   futureDocx,
   hasReadiness,
+  audienceDocx,
+  hasAudience,
   saveSettings,
   type DummyData,
   type ExportRecord,
@@ -194,7 +196,7 @@ export async function buildApp(options: AppOptions): Promise<PregoApp> {
       defaultOn,
       slow: !!slow,
       cost: { id, ...cost },
-      available: id !== 'ai' || !!aiSettings(getSettings(db)),
+      available: (id !== 'ai' && id !== 'tasks') || !!aiSettings(getSettings(db)),
     })),
   );
 
@@ -334,7 +336,10 @@ export async function buildApp(options: AppOptions): Promise<PregoApp> {
       if (unknownCheckIds.length) return reply.code(400).send({ error: `Unknown check: ${unknownCheckIds.join(', ')}` });
       if (body.loginJourney && !loginJourney) return reply.code(400).send({ error: `No recorded journey called "${body.loginJourney}" for this project.` });
       const ai = aiSettings(getSettings(db));
-      if (checks.includes('ai') && !ai) return reply.code(400).send({ error: 'AI review is switched off. Turn it on in Settings, with Ollama running on this computer.' });
+      if ((checks.includes('ai') || checks.includes('tasks')) && !ai) return reply.code(400).send({ error: 'AI review is switched off. Turn it on in Settings, with Ollama running on this computer.' });
+      if (checks.includes('tasks') && !project?.settings.audience?.tasks.length) {
+        return reply.code(400).send({ error: 'The task walkthrough needs personas and tasks. Set them up on this project’s Purposes and audience page first.' });
+      }
       const job = await jobs.start({
         ai,
         project: body.project.trim(),
@@ -611,7 +616,7 @@ export async function buildApp(options: AppOptions): Promise<PregoApp> {
 
   const reportState = (runId: number) => {
     const plan = buildExportPlan(db, runId);
-    return { options: plan.options, available: plan.available, outline: plan.outline, suggestions: suggestReportText(plan), hasReadiness: hasReadiness(plan) };
+    return { options: plan.options, available: plan.available, outline: plan.outline, suggestions: suggestReportText(plan), hasReadiness: hasReadiness(plan), hasAudience: hasAudience(plan) };
   };
 
   app.get<{ Params: { id: string } }>('/api/runs/:id/report', async (request, reply) => {
@@ -763,6 +768,10 @@ export async function buildApp(options: AppOptions): Promise<PregoApp> {
     if (!run) return reply.code(404).send({ error: 'Run not found' });
     if (run.status !== 'complete') return reply.code(409).send({ error: 'Only finished audits have a report.' });
     const plan = buildExportPlan(db, runId);
+    if (request.query.report === 'audience') {
+      const { value } = await mammoth.convertToHtml({ buffer: await audienceDocx(plan, runDirectory(dataDir, runId), reportBranding(db, dataDir)) });
+      return { html: value };
+    }
     if (request.query.report === 'future') {
       const { value } = await mammoth.convertToHtml({ buffer: await futureDocx(plan, runDirectory(dataDir, runId), reportBranding(db, dataDir)) });
       return { html: value };
@@ -843,6 +852,7 @@ export async function buildApp(options: AppOptions): Promise<PregoApp> {
 const EXPORT_FILES: Record<string, string> = {
   'overview.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   'future.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'audience.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   'report.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   'tickets.csv': 'text/csv; charset=utf-8',
   'occurrences.csv': 'text/csv; charset=utf-8',

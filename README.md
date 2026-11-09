@@ -170,6 +170,23 @@ and proposes a starting point. With AI review switched on, the local Ollama mode
 suggestion instead; task pages it names must be pages Prego found. Nothing is saved until you press
 **Save**. Purposes and personas appear in the Overview report under *What the site is for*.
 
+#### Task testing
+
+Tick **Audience and tasks** on the Export page for audience.docx: what the site is for, each persona
+and whether they can do what they came to do.
+
+- **Navigation test**, always, from the audit's links (needs the *Content and structure* check): the
+  shortest route from the home page to where each task is done. Up to 3 clicks counts as done;
+  deeper, or a first link whose label doesn't match the task, counts as partly.
+- **AI walkthrough**, optional: tick **Persona task walkthrough** on the New audit form (AI on in
+  Settings, personas and tasks saved). The local Ollama model plays each persona at their device's
+  screen size and chooses from the links and menus on screen; Prego checks whether the task is done.
+  It never types, submits a form, presses anything on the explorer's denylist, or visits pages
+  robots.txt rules out. A screenshot of where it stopped goes in the report and is deleted on export.
+  Expect a few minutes per task.
+
+Personas aren't real users: the report says so, and recommends testing with real people.
+
 ### Screenshots
 
 Exporting puts the outlined screenshots into the Word report, then deletes them from Prego. The

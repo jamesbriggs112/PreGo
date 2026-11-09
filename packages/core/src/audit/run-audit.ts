@@ -21,6 +21,7 @@ import type { CheckModule } from '../checks/types.js';
 import type { AiSettings } from '../checks/ai/ai.js';
 import { defaultDataDir } from '../paths.js';
 import { competitorUrls, scoreSites } from './competitors.js';
+import { walkTasks, type WalkResult } from '../tasks/walkthrough.js';
 import type { CompetitorResult } from '../export/sections.js';
 import type { Location, Run } from '../types.js';
 
@@ -88,7 +89,7 @@ export interface AuditOptions {
 
 export type AuditEvent =
   | { type: 'started'; runId: number; projectId: number }
-  | { type: 'phase'; phase: 'login' | 'crawl' | 'group' | 'explore' | 'journey' | 'audit' | 'tickets' | 'competitors' | 'done'; message: string }
+  | { type: 'phase'; phase: 'login' | 'crawl' | 'group' | 'explore' | 'journey' | 'audit' | 'tickets' | 'competitors' | 'tasks' | 'done'; message: string }
   | { type: 'page-found'; url: string; count: number }
   | { type: 'state-found'; stateId: string; title: string; depth: number; count: number; fromStateId: string | null; action: string | null }
   | { type: 'journey-step'; index: number; total: number; description: string; ok: boolean; error?: string }
@@ -299,9 +300,27 @@ export async function runAudit(db: PregoDb, options: AuditOptions): Promise<Audi
       timings.checks.competitors = Date.now() - started;
     }
 
+    // The AI walkthrough tries each persona's tasks on the site, from the project's saved audience.
+    let walked: WalkResult[] | undefined;
+    const audience = db.getProject(run.projectId)?.settings.audience;
+    if (checkIds.includes('tasks') && options.ai && audience?.tasks.length && /^https?:/.test(startUrl)) {
+      const started = Date.now();
+      walked = await walkTasks(audience, {
+        startUrl,
+        ai: options.ai,
+        runDir,
+        respectRobots: options.respectRobots,
+        basicAuth: options.basicAuth,
+        signal: options.signal,
+        onTask: (task, i, total) => emit({ type: 'phase', phase: 'tasks', message: `Walking through persona tasks: “${task.goal}” (${i + 1} of ${total})` }),
+      });
+      timings.checks.tasks = Date.now() - started;
+    }
+
     db.finishRun(run.id, 'complete', {
       ...discovery.summary,
       ...(compared && { competitors: compared }),
+      ...(walked && { walkthrough: walked }),
       findings: db.getRawFindings(run.id).length,
       tickets: db.getTickets(run.id).length,
       timings: { ...timings, totalMs: Date.now() - new Date(run.startedAt).getTime(), locations: toAudit.length, viewports: viewports.length },

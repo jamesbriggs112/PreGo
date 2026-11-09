@@ -58,6 +58,7 @@ describe('AI review settings', () => {
     const start = await fetch(`${base}/api/runs`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ project: 'AI', target: resolve('fixtures/bad-site'), checks: ['ai'] }) });
     expect(start.status).toBe(400);
     expect((await start.json()).error).toMatch(/AI review is switched off/);
+    expect(checks.find((c: { id: string }) => c.id === 'tasks')).toMatchObject({ available: false, defaultOn: false, slow: true });
 
     const { hasLogo: _h, exploreDefaults: _e, ...editable } = settings;
     const remote = await put({ ...editable, ai: { enabled: true, url: 'https://ollama.example.com', model: 'm' } });
@@ -65,6 +66,10 @@ describe('AI review settings', () => {
     expect((await remote.json()).error).toMatch(/only talks to Ollama on this computer/);
     expect((await put({ ...editable, ai: { enabled: true, url: 'http://localhost:11434', model: 'llava' } })).status).toBe(200);
     expect((await (await fetch(`${base}/api/checks`)).json()).find((c: { id: string }) => c.id === 'ai').available).toBe(true);
+    // The walkthrough also needs personas and tasks on the project.
+    const walk = await fetch(`${base}/api/runs`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ project: 'No audience', target: resolve('fixtures/bad-site'), checks: ['tasks'] }) });
+    expect(walk.status).toBe(400);
+    expect((await walk.json()).error).toMatch(/needs personas and tasks/);
 
     const test = await fetch(`${base}/api/settings/ai/test`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: 'http://127.0.0.1:9' }) });
     expect(test.status).toBe(502);

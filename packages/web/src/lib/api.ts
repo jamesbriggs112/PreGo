@@ -150,9 +150,11 @@ export interface ReportState {
   suggestions: { keyFindings: string; recommendations: string; methodology: string };
   /** The Search and sharing or Future readiness check ran, so future.docx has something to show. */
   hasReadiness: boolean;
+  /** The project has personas, so audience.docx has something to show. */
+  hasAudience: boolean;
 }
 
-export type PreviewReport = 'technical' | 'overview' | 'future';
+export type PreviewReport = 'technical' | 'overview' | 'audience' | 'future';
 
 /** An audit read from a typed request, waiting for the person to confirm it. */
 export interface AuditPlan {

@@ -15,6 +15,7 @@ import { ReportContents } from '@/components/ReportContents';
 
 const FILE_LABELS: Record<string, string> = {
   'overview.docx': 'Overview (Word)',
+  'audience.docx': 'Audience and tasks (Word)',
   'future.docx': 'Search, sharing and future readiness (Word)',
   'report.docx': 'Full findings report (Word)',
   'tickets.csv': 'Tickets (CSV)',
@@ -35,6 +36,7 @@ export function ExportPage() {
   const report = useQuery({ queryKey: ['report', runId], queryFn: () => api.report(runId) });
   const choices: { id: PreviewReport; label: string; file: string }[] = [
     ...(report.data?.options.reports.overview ? [{ id: 'overview' as const, label: 'Overview', file: 'overview.docx' }] : []),
+    ...(report.data?.options.reports.audience && report.data.hasAudience ? [{ id: 'audience' as const, label: 'Audience and tasks', file: 'audience.docx' }] : []),
     ...(report.data?.options.reports.future && report.data.hasReadiness ? [{ id: 'future' as const, label: 'Search, sharing and future readiness', file: 'future.docx' }] : []),
     { id: 'technical', label: 'Full findings report', file: 'report.docx' },
   ];

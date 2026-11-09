@@ -318,7 +318,7 @@ export function competitorSection(ctx: SectionContext, entry: OutlineEntry): Blo
 }
 
 /** JPEG ImageRun scaled to fit, reading the size from the file, or null if it isn't a JPEG. */
-function jpegImage(data: Buffer, maxWidth: number, maxHeight: number, description: string): ImageRun | null {
+export function jpegImage(data: Buffer, maxWidth: number, maxHeight: number, description: string): ImageRun | null {
   if (data[0] !== 0xff || data[1] !== 0xd8) return null;
   let i = 2;
   while (i < data.length) {

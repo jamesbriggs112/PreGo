@@ -36,6 +36,7 @@ import {
   logoPath,
   reportBranding,
   reportDocx,
+  overviewDocx,
   saveSettings,
   type DummyData,
   type ExportRecord,
@@ -545,7 +546,8 @@ export async function buildApp(options: AppOptions): Promise<PregoApp> {
     } catch (error) {
       return reply.code(400).send({ error: error instanceof Error ? error.message : String(error) });
     }
-    saveSettings(db, { ...request.body, ai, branding: { ...request.body.branding, accentColour: request.body.branding.accentColour.replace(/^#/, '').toUpperCase() } });
+    const report = request.body.report ?? getSettings(db).report;
+    saveSettings(db, { ...request.body, ai, report, branding: { ...request.body.branding, accentColour: request.body.branding.accentColour.replace(/^#/, '').toUpperCase() } });
     return { ...getSettings(db), hasLogo: existsSync(logoPath(dataDir)) };
   });
 
@@ -712,12 +714,17 @@ export async function buildApp(options: AppOptions): Promise<PregoApp> {
   });
 
   // The Word report as HTML, for previewing before export.
-  app.get<{ Params: { id: string } }>('/api/runs/:id/report-preview', async (request, reply) => {
+  // `?report=overview` previews the Overview instead of report.docx.
+  app.get<{ Params: { id: string }; Querystring: { report?: string } }>('/api/runs/:id/report-preview', async (request, reply) => {
     const runId = Number(request.params.id);
     const run = db.getRun(runId);
     if (!run) return reply.code(404).send({ error: 'Run not found' });
     if (run.status !== 'complete') return reply.code(409).send({ error: 'Only finished audits have a report.' });
     const plan = buildExportPlan(db, runId);
+    if (request.query.report === 'overview') {
+      const { value } = await mammoth.convertToHtml({ buffer: await overviewDocx(plan, getSettings(db).report.whyItMatters, reportBranding(db, dataDir)) });
+      return { html: value };
+    }
     const stateMap =
       run.mode === 'explore'
         ? await stateMapPng(stateMapStates(plan), plan.edges.map((e) => ({ from: e.fromLocationId, to: e.toLocationId, label: e.step.label, outcome: e.outcome })))
@@ -788,6 +795,7 @@ export async function buildApp(options: AppOptions): Promise<PregoApp> {
 }
 
 const EXPORT_FILES: Record<string, string> = {
+  'overview.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   'report.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   'tickets.csv': 'text/csv; charset=utf-8',
   'occurrences.csv': 'text/csv; charset=utf-8',
@@ -845,6 +853,12 @@ const settingsSchema = {
           url: { type: 'string', minLength: 1, maxLength: 200 },
           model: { type: 'string', minLength: 1, maxLength: 100 },
         },
+      },
+      report: {
+        type: 'object',
+        required: ['whyItMatters'],
+        additionalProperties: false,
+        properties: { whyItMatters: { type: 'string', maxLength: 20000 } },
       },
     },
   },

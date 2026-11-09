@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import JSZip from 'jszip';
@@ -12,6 +12,9 @@ import { exportRun } from './bundle.js';
 import { parseAnalyticsCsv, AnalyticsImportError } from './analytics.js';
 import { DEFAULT_REPORT_OPTIONS, listItems, parseReportOptions, type ReportOptions } from './report-options.js';
 import { measureCopy } from './sections.js';
+import { overviewDocx, scoreRating } from './overview.js';
+import { verifyExport } from './verify.js';
+import { DEFAULT_WHY_IT_MATTERS } from '../settings.js';
 import { competitorUrls } from '../audit/competitors.js';
 
 const dataDir = mkdtempSync(join(tmpdir(), 'prego-report-'));
@@ -77,16 +80,18 @@ describe('report options', () => {
   it('keeps only known fields, and reads written lists as items', () => {
     expect(parseReportOptions({ clientFacing: true, include: { ia: true, bogus: true }, text: { summary: ' Hello ', keyFindings: '', other: 'x' } })).toEqual({
       clientFacing: true,
+      reports: { overview: false },
       include: { analytics: false, content: false, ia: true, competitors: false },
       text: { summary: ' Hello ' },
     });
+    expect(parseReportOptions({ reports: { overview: true, other: true } }).reports).toEqual({ overview: true });
     expect(listItems('- One\n2. Two\n\n• Three\n')).toEqual(['One', 'Two', 'Three']);
   });
 
   it('numbers sections from what is included, with findings after the scene-setting', () => {
     const all = { analytics: true, content: true, ia: true, competitors: true };
     expect(reportOutline({ mode: 'crawl' }, DEFAULT_REPORT_OPTIONS, all).map((o) => `${o.number} ${o.id}`)).toEqual(['2 summary', '3 method', '4 findings', '5 map', '6 limitations']);
-    const client: ReportOptions = { clientFacing: true, include: all, text: { conclusion: 'Done.' } };
+    const client: ReportOptions = { clientFacing: true, reports: { overview: false }, include: all, text: { conclusion: 'Done.' } };
     expect(reportOutline({ mode: 'crawl' }, client, all).map((o) => o.title)).toEqual([
       'Executive summary',
       'Methodology',
@@ -202,6 +207,12 @@ describe('the client-facing report', () => {
     // Charts for analytics and competitors, and competitor home page screenshots.
     expect(Object.keys(zip.files).filter((f) => /^word\/media\/.+\.jpe?g$/.test(f)).length).toBeGreaterThanOrEqual(2);
 
+    // A client-facing report persuades; ticket IDs are for the team, in tickets.csv only.
+    expect(text).not.toMatch(/PRG-[A-Z0-9]+-\d{3}/);
+    expect(text).not.toContain('Ticket index');
+    expect(text).toMatch(/Where: .+\. (Critical|High|Medium|Low) severity at worst\./);
+    expect(await verifyExport(exported.dir)).toMatchObject({ ok: true, problems: [] });
+
     // Ticket report sections follow the findings section's number.
     const [header, ...rows] = parse(readFileSync(exported.files.tickets, 'utf8').replace(/^\uFEFF/, '')) as string[][];
     const section = header.indexOf('Report section');
@@ -214,4 +225,49 @@ describe('the client-facing report', () => {
     expect(plan.outline.map((o) => o.title)).toEqual(['Executive summary', 'Scope and method', 'Findings by category', 'Content and tone', 'Site map summary', 'Limitations and manual testing']);
     expect(plan.tickets.every((t) => t.reportSection.startsWith('4.'))).toBe(true);
   });
+});
+
+describe('the Overview report', () => {
+  const textOf = async (docx: Buffer) =>
+    (await (await JSZip.loadAsync(docx)).file('word/document.xml')!.async('string')).replace(/<\/w:p>/g, '\n').replace(/<[^>]+>/g, '');
+
+  it('rates scores in plain English', () => {
+    expect([95, 90, 75, 55, 20].map(scoreRating)).toEqual(['In good shape', 'In good shape', 'A few things to fix', 'Needs attention', 'Needs significant work']);
+  });
+
+  it('opens with scores at a glance, then why it matters, findings, recommendations and the pack', async () => {
+    db.saveReportOptions(runId, { ...DEFAULT_REPORT_OPTIONS, reports: { overview: true } });
+    const text = await textOf(await overviewDocx(buildExportPlan(db, runId), DEFAULT_WHY_IT_MATTERS));
+    expect([...text.matchAll(/^(\d+)\. (.+)$/gm)].map((m) => m[2])).toEqual([
+      'At a glance',
+      'Why a healthy website matters',
+      'Key findings',
+      'Top recommendations',
+      'What’s in this pack',
+      'About these results',
+    ]);
+    expect(text).toContain('Website health overview');
+    expect(text).toMatch(/Accessibility\n\d+ \/ 100\n(In good shape|A few things to fix|Needs attention|Needs significant work)\n/);
+    expect(text).toContain('Regular checks like this one catch problems while they’re small.');
+    expect(text).not.toMatch(/\b(complies with|is compliant|are compliant|legally compliant)\b/i);
+  });
+
+  it('uses the audit’s own wording when it has some', async () => {
+    db.saveReportOptions(runId, { ...DEFAULT_REPORT_OPTIONS, reports: { overview: true }, text: { whyItMatters: 'Acme’s site is how members renew.', keyFindings: '- Forms lack labels' } });
+    const text = await textOf(await overviewDocx(buildExportPlan(db, runId), DEFAULT_WHY_IT_MATTERS));
+    expect(text).toContain('Acme’s site is how members renew.');
+    expect(text).not.toContain('Regular checks like this one');
+    expect(text).toMatch(/Key findings\nForms lack labels\n/);
+  });
+
+  it('is written into the export only when chosen', async () => {
+    db.saveReportOptions(runId, { ...DEFAULT_REPORT_OPTIONS, reports: { overview: true } });
+    const withOverview = await exportRun(db, runId, { dataDir, outDir: join(dataDir, 'with-overview') });
+    expect(withOverview.files.overview).toBe(join(withOverview.dir, 'overview.docx'));
+    expect(JSON.parse(readFileSync(withOverview.files.runJson, 'utf8')).reports).toEqual(['report.docx', 'overview.docx']);
+    db.saveReportOptions(runId, DEFAULT_REPORT_OPTIONS);
+    const without = await exportRun(db, runId, { dataDir, outDir: join(dataDir, 'without-overview') });
+    expect(without.files.overview).toBeUndefined();
+    expect(existsSync(join(without.dir, 'overview.docx'))).toBe(false);
+  }, 120_000);
 });

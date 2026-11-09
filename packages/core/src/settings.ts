@@ -24,7 +24,24 @@ export interface PregoSettings {
   };
   /** Optional AI review through Ollama on this computer. Off by default. */
   ai: { enabled: boolean; url: string; model: string };
+  /** Standard wording for the reports, written once and used in every audit unless the audit changes it. */
+  report: { whyItMatters: string };
 }
+
+/**
+ * Why keeping a website healthy matters, for the Overview report. General reasons only: any figures
+ * should come from sources the agency is happy to cite, so they're left for the agency to add.
+ */
+export const DEFAULT_WHY_IT_MATTERS = `A website is often the first place people meet an organisation, and for many it’s the main way they find information, book, buy or get in touch. Keeping it healthy protects all of that.
+
+- Everyone can use it: clear, accessible pages work for more people, including disabled people and anyone on a small screen, a slow connection or in a hurry.
+- Trust: broken links, errors and slow pages make an organisation look careless, and visitors leave.
+- Being found: search engines, and increasingly AI assistants, favour sites that are fast, well structured and clearly described.
+- Duties: equality law, and accessibility regulations for public sector bodies, expect websites to be usable by disabled people.
+- Security and privacy: out-of-date software and missing protections put visitors’ data and the organisation’s reputation at risk.
+- Cost: problems are cheaper to fix early and in small steps than in a rebuild.
+
+Regular checks like this one catch problems while they’re small.`;
 
 export const DEFAULT_SETTINGS: PregoSettings = {
   branding: { companyName: 'Four', accentColour: '1F3A5F' },
@@ -38,6 +55,7 @@ export const DEFAULT_SETTINGS: PregoSettings = {
     checks: checkDefinitions().filter((d) => d.defaultOn).map((d) => d.id),
   },
   ai: { enabled: false, url: 'http://127.0.0.1:11434', model: 'qwen2.5vl:7b' },
+  report: { whyItMatters: DEFAULT_WHY_IT_MATTERS },
 };
 
 /** Ollama settings for an audit, or undefined when AI review is off. */
@@ -51,6 +69,7 @@ export function getSettings(db: PregoDb): PregoSettings {
     branding: { ...DEFAULT_SETTINGS.branding, ...saved.branding },
     defaults: { ...DEFAULT_SETTINGS.defaults, ...saved.defaults },
     ai: { ...DEFAULT_SETTINGS.ai, ...saved.ai },
+    report: { whyItMatters: saved.report?.whyItMatters?.trim() || DEFAULT_WHY_IT_MATTERS },
   };
 }
 

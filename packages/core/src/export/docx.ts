@@ -18,7 +18,7 @@ import {
 } from 'docx';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { CATEGORIES, CATEGORY_NAMES, SEVERITIES, type Severity } from '../types.js';
+import { CATEGORIES, CATEGORY_NAMES, SEVERITIES, type Category, type Severity } from '../types.js';
 import { checkedCategories } from '../checks/categories.js';
 import { averagePerformance, type LighthouseScores } from '../checks/lighthouse/lighthouse.js';
 import { stateMapStates, type ExportPlan, type OutlineEntry, type PlannedTicket, type ReportSectionId, type ReportSectionPlan } from './plan.js';
@@ -36,6 +36,11 @@ export interface ReportBranding {
 }
 
 const DEFAULT_BRANDING: Required<Omit<ReportBranding, 'logoPath'>> = { companyName: 'Four', accentColour: '1F3A5F' };
+export type Brand = typeof DEFAULT_BRANDING & ReportBranding;
+
+export function resolveBranding(branding: ReportBranding = {}): Brand {
+  return { ...DEFAULT_BRANDING, ...branding };
+}
 
 /** Score penalty per ticket. The score is an indicator for comparing runs, not a compliance measure. */
 const SEVERITY_PENALTY: Record<Severity, number> = { Critical: 12, High: 6, Medium: 3, Low: 1 };
@@ -49,6 +54,26 @@ export function categoryScore(severities: Severity[]): number {
 const MAX_IMAGE_WIDTH = 600;
 const MAX_IMAGE_HEIGHT = 420;
 
+/** A category's score in this audit, or null score when the category wasn't checked. */
+export interface CategoryScore {
+  category: Category;
+  name: string;
+  score: number | null;
+  issues: number;
+  bySeverity: Record<Severity, number>;
+}
+
+/** Scores for every category. Performance uses Lighthouse's own score when it ran; everything else counts issues. */
+export function categoryScores(plan: ExportPlan): CategoryScore[] {
+  const checked = checkedCategories(plan.run.settings);
+  return CATEGORIES.map((category) => {
+    const tickets = plan.tickets.filter((t) => t.category === category);
+    const bySeverity = Object.fromEntries(SEVERITIES.map((s) => [s, tickets.filter((t) => t.severity === s).length])) as Record<Severity, number>;
+    const score = checked.has(category) ? ((category === 'PERF' ? averagePerformance(plan.locations) : null) ?? categoryScore(tickets.map((t) => t.severity))) : null;
+    return { category, name: CATEGORY_NAMES[category], score, issues: tickets.length, bySeverity };
+  });
+}
+
 export interface ReportExtras {
   /** State map diagram (PNG) for interactive audits. */
   stateMap?: Buffer;
@@ -57,7 +82,7 @@ export interface ReportExtras {
 }
 
 export async function reportDocx(plan: ExportPlan, runDir: string, branding: ReportBranding = {}, extras: ReportExtras = {}): Promise<Buffer> {
-  const brand = { ...DEFAULT_BRANDING, ...branding };
+  const brand = resolveBranding(branding);
   const context: SectionContext = { plan, runDir, charts: extras.charts ?? {}, helpers: { heading, para, table, pngImage, writtenText, plural } };
   const builders: Record<ReportSectionId, (entry: OutlineEntry) => (Paragraph | Table)[]> = {
     summary: (e) => executiveSummary(plan, e),
@@ -72,14 +97,20 @@ export async function reportDocx(plan: ExportPlan, runDir: string, branding: Rep
     limitations: (e) => limitations(plan, e),
   };
   const children = [
-    ...cover(plan, brand),
+    ...cover(plan, brand, reportTitle(plan)),
     ...(plan.options.clientFacing ? contents(plan) : []),
     ...plan.outline.flatMap((entry) => builders[entry.id](entry)),
-    ...appendix(plan),
+    // Ticket IDs are for the team fixing things; a client-facing report persuades, so it has none.
+    ...(plan.options.clientFacing ? [] : appendix(plan)),
   ];
-  const doc = new Document({
+  return Packer.toBuffer(brandedDocument(brand, `${plan.project.name}: ${reportTitle(plan)}`, `${plan.project.name} audit`, children));
+}
+
+/** A Word document in the report style: Arial, headings in the accent colour, and a footer with page numbers. */
+export function brandedDocument(brand: Brand, title: string, footerLabel: string, children: (Paragraph | Table)[]): Document {
+  return new Document({
     creator: brand.companyName,
-    title: `${plan.project.name}: ${reportTitle(plan)}`,
+    title,
     description: 'Automated audit report produced by Prego',
     styles: {
       default: { document: { run: { font: 'Arial', size: 22 } } },
@@ -97,7 +128,7 @@ export async function reportDocx(plan: ExportPlan, runDir: string, branding: Rep
             children: [
               new Paragraph({
                 alignment: AlignmentType.RIGHT,
-                children: [new TextRun({ text: `${brand.companyName} · ${plan.project.name} audit · Page `, size: 18 }), new TextRun({ children: [PageNumber.CURRENT], size: 18 })],
+                children: [new TextRun({ text: `${brand.companyName} · ${footerLabel} · Page `, size: 18 }), new TextRun({ children: [PageNumber.CURRENT], size: 18 })],
               }),
             ],
           }),
@@ -106,7 +137,6 @@ export async function reportDocx(plan: ExportPlan, runDir: string, branding: Rep
       },
     ],
   });
-  return Packer.toBuffer(doc);
 }
 
 export async function writeReportDocx(plan: ExportPlan, runDir: string, path: string, branding: ReportBranding = {}, extras: ReportExtras = {}) {
@@ -115,7 +145,7 @@ export async function writeReportDocx(plan: ExportPlan, runDir: string, path: st
 
 // Sections
 
-function cover(plan: ExportPlan, brand: typeof DEFAULT_BRANDING & ReportBranding): Paragraph[] {
+export function cover(plan: ExportPlan, brand: Brand, title: string): Paragraph[] {
   const out: Paragraph[] = [];
   if (brand.logoPath && existsSync(brand.logoPath)) {
     const image = pngImage(readFileSync(brand.logoPath), 200, 80, `${brand.companyName} logo`);
@@ -123,7 +153,7 @@ function cover(plan: ExportPlan, brand: typeof DEFAULT_BRANDING & ReportBranding
   }
   out.push(
     new Paragraph({ spacing: { before: 1600, after: 200 }, children: [new TextRun({ text: plan.project.name, size: 56, bold: true, color: brand.accentColour })] }),
-    new Paragraph({ spacing: { after: 600 }, children: [new TextRun({ text: reportTitle(plan), size: 36 })] }),
+    new Paragraph({ spacing: { after: 600 }, children: [new TextRun({ text: title, size: 36 })] }),
     labelled('Product', productName(plan)),
     labelled('Date', formatDate(plan.run.startedAt)),
     labelled('Audit scope', scopeSentence(plan)),
@@ -142,19 +172,17 @@ function contents(plan: ExportPlan): Paragraph[] {
   return [
     heading('Contents', HeadingLevel.HEADING_1),
     ...plan.outline.map((e) => new Paragraph({ spacing: { after: 100 }, children: [new TextRun({ text: `${e.number}.`, bold: true }), new TextRun(` ${e.title}`)] })),
-    new Paragraph({ spacing: { after: 100 }, children: [new TextRun({ text: 'Appendix A.', bold: true }), new TextRun(' Ticket index')] }),
     new Paragraph({ children: [new PageBreak()] }),
   ];
 }
 
 function executiveSummary(plan: ExportPlan, entry: OutlineEntry): (Paragraph | Table)[] {
-  const checked = checkedCategories(plan.run.settings);
   const top = [...plan.tickets].sort((a, b) => a.priority.localeCompare(b.priority) || SEVERITIES.indexOf(a.severity) - SEVERITIES.indexOf(b.severity) || b.locationsAffected - a.locationsAffected).slice(0, 5);
   const { text, clientFacing } = plan.options;
   const suggested = suggestReportText(plan);
   const counts =
-    `Automated checks found ${plan.tickets.length} distinct ${plural(plan.tickets.length, 'issue')} across ${auditedCount(plan)} audited ${plural(auditedCount(plan), plan.run.mode === 'explore' ? 'screen' : plan.run.mode === 'journey' ? 'journey step' : 'page')}. ` +
-    'Each issue has a ticket ID (for example PRG-A11Y-001) that matches a row in tickets.csv, so the development team can pick it up directly.';
+    `Automated checks found ${plan.tickets.length} distinct ${plural(plan.tickets.length, 'issue')} across ${auditedCount(plan)} audited ${plural(auditedCount(plan), plan.run.mode === 'explore' ? 'screen' : plan.run.mode === 'journey' ? 'journey step' : 'page')}.` +
+    (clientFacing ? '' : ' Each issue has a ticket ID (for example PRG-A11Y-001) that matches a row in tickets.csv, so the development team can pick it up directly.');
   const out: (Paragraph | Table)[] = [heading(`${entry.number}. ${entry.title}`, HeadingLevel.HEADING_1)];
   if (clientFacing) {
     out.push(...(text.summary ? writtenText(text.summary) : [para(counts)]));
@@ -172,19 +200,16 @@ function executiveSummary(plan: ExportPlan, entry: OutlineEntry): (Paragraph | T
     para('Scores start at 100 and drop for each issue found, weighted by severity. They show where to focus first, not a measure of compliance.'),
     table(
       ['Category', 'Score', 'Issues', 'Critical', 'High', 'Medium', 'Low'],
-      CATEGORIES.map((category) => {
-        const tickets = plan.tickets.filter((t) => t.category === category);
-        if (!checked.has(category)) return [CATEGORY_NAMES[category], 'Not checked', '–', '–', '–', '–', '–'];
-        // Performance uses Lighthouse's own score when it ran; everything else counts issues.
-        const score = (category === 'PERF' ? averagePerformance(plan.locations) : null) ?? categoryScore(tickets.map((t) => t.severity));
-        return [CATEGORY_NAMES[category], String(score), String(tickets.length), ...SEVERITIES.map((s) => String(tickets.filter((t) => t.severity === s).length))];
-      }),
+      categoryScores(plan).map((c) =>
+        c.score === null ? [c.name, 'Not checked', '–', '–', '–', '–', '–'] : [c.name, String(c.score), String(c.issues), ...SEVERITIES.map((s) => String(c.bySeverity[s]))],
+      ),
     ),
-    heading('Top issues', HeadingLevel.HEADING_2),
   );
   const limits = plan.outline.find((o) => o.id === 'limitations')!.number;
   if (top.length === 0) out.push(para(`Automated checks raised no issues in the areas checked. Manual testing is still needed (see section ${limits}).`));
-  for (const t of top) {
+  // Client-facing reports already lead with key findings and recommendations; the ticket list is for the team.
+  if (!clientFacing && top.length) out.push(heading('Top issues', HeadingLevel.HEADING_2));
+  for (const t of clientFacing ? [] : top) {
     out.push(
       new Paragraph({
         bullet: { level: 0 },
@@ -307,14 +332,15 @@ function scopeAndMethodTable(plan: ExportPlan, entry: OutlineEntry): (Paragraph 
 function findings(plan: ExportPlan, runDir: string, entry: OutlineEntry): (Paragraph | Table)[] {
   const out: (Paragraph | Table)[] = [heading(`${entry.number}. ${entry.title}`, HeadingLevel.HEADING_1)];
   if (plan.sections.length === 0) out.push(para('Automated checks raised no issues in the areas checked.'));
-  for (const section of plan.sections) out.push(...findingsSection(section, runDir));
+  for (const section of plan.sections) out.push(...findingsSection(section, runDir, plan.options.clientFacing));
   return out;
 }
 
-function findingsSection(section: ReportSectionPlan, runDir: string): (Paragraph | Table)[] {
+/** A category's findings by theme. Client-facing reports say where each theme was found, without ticket IDs. */
+function findingsSection(section: ReportSectionPlan, runDir: string, clientFacing: boolean): (Paragraph | Table)[] {
   const out: (Paragraph | Table)[] = [
     heading(`${section.number} ${section.title}`, HeadingLevel.HEADING_2),
-    para(`${section.tickets.length} ${plural(section.tickets.length, 'issue')} in this category, grouped below by theme. Ticket IDs in bold match tickets.csv.`),
+    para(`${section.tickets.length} ${plural(section.tickets.length, 'issue')} in this category, grouped below by theme.${clientFacing ? '' : ' Ticket IDs in bold match tickets.csv.'}`),
   ];
   for (const theme of themesOf(section.tickets)) {
     const example = theme.tickets.find((t) => t.screenshotFile) ?? theme.tickets[0];
@@ -324,7 +350,8 @@ function findingsSection(section: ReportSectionPlan, runDir: string): (Paragraph
       new Paragraph({ children: [new TextRun({ text: 'Why it matters: ', bold: true }), new TextRun(example.whyItMatters)] }),
       new Paragraph({ children: [new TextRun({ text: 'What to do: ', bold: true }), new TextRun(example.recommendation)] }),
     );
-    for (const t of theme.tickets) {
+    if (clientFacing) out.push(themeReach(theme));
+    for (const t of clientFacing ? [] : theme.tickets) {
       out.push(
         new Paragraph({
           bullet: { level: 0 },
@@ -343,12 +370,25 @@ function findingsSection(section: ReportSectionPlan, runDir: string): (Paragraph
       out.push(
         new Paragraph({
           spacing: { after: 240 },
-          children: [new TextRun({ text: `Example from `, italics: true, size: 18 }), new TextRun({ text: example.ticketId, bold: true, italics: true, size: 18 }), new TextRun({ text: `, problem outlined in pink.`, italics: true, size: 18 })],
+          children: clientFacing
+            ? [new TextRun({ text: `Example from ${example.exampleLocation ?? 'the site'}, problem outlined in pink.`, italics: true, size: 18 })]
+            : [new TextRun({ text: `Example from `, italics: true, size: 18 }), new TextRun({ text: example.ticketId, bold: true, italics: true, size: 18 }), new TextRun({ text: `, problem outlined in pink.`, italics: true, size: 18 })],
         }),
       );
     }
   }
   return out;
+}
+
+/** How serious a theme is and where it was found, in a sentence, for client-facing reports. */
+function themeReach(theme: Theme): Paragraph {
+  const worst = SEVERITIES.find((s) => theme.tickets.some((t) => t.severity === s))!;
+  const places = [...new Set(theme.tickets.map(where).filter(Boolean))];
+  const shown = places.slice(0, 5).join(', ') + (places.length > 5 ? ` and ${places.length - 5} more` : '');
+  return new Paragraph({
+    spacing: { after: 120 },
+    children: [new TextRun({ text: 'Where: ', bold: true }), new TextRun(`${shown || 'across the site'}. ${worst} severity at worst.`)],
+  });
 }
 
 function stateMapSection(plan: ExportPlan, image: Buffer | undefined, entry: OutlineEntry): (Paragraph | Table)[] {
@@ -449,7 +489,7 @@ interface Theme {
 }
 
 /** Tickets grouped by rule. The theme name is the ticket title without its location suffix. */
-function themesOf(tickets: PlannedTicket[]): Theme[] {
+export function themesOf(tickets: PlannedTicket[]): Theme[] {
   const themes = new Map<string, Theme>();
   for (const t of tickets) {
     const key = `${t.engine}:${t.ruleId}`;
@@ -465,11 +505,11 @@ function where(t: PlannedTicket): string {
   return /\(([^)]*)\)$/.exec(t.title)?.[1] ?? t.exampleLocation ?? '';
 }
 
-function auditedCount(plan: ExportPlan): number {
+export function auditedCount(plan: ExportPlan): number {
   return plan.locations.filter((l) => l.audited).length;
 }
 
-function scopeSentence(plan: ExportPlan): string {
+export function scopeSentence(plan: ExportPlan): string {
   const s = plan.run.settings as Record<string, unknown>;
   const viewports = `${((s.viewports as string[]) ?? []).join(', ')} ${plural(((s.viewports as string[]) ?? []).length, 'viewport')}`;
   if (plan.run.mode === 'journey') {
@@ -485,17 +525,17 @@ function scopeSentence(plan: ExportPlan): string {
 }
 
 /** The audited URL, or for a local folder the folder itself (its temporary server address means nothing). */
-function productName(plan: ExportPlan): string {
+export function productName(plan: ExportPlan): string {
   const target = plan.run.target;
   return /^https?:\/\//i.test(target) ? target : `${target} (local folder)`;
 }
 
-function heading(text: string, level: (typeof HeadingLevel)[keyof typeof HeadingLevel]) {
+export function heading(text: string, level: (typeof HeadingLevel)[keyof typeof HeadingLevel]) {
   return new Paragraph({ heading: level, children: [new TextRun(text)] });
 }
 
 /** The auditor's own text: a blank line starts a new paragraph, and lines starting with - are bullets. */
-function writtenText(text: string): Paragraph[] {
+export function writtenText(text: string): Paragraph[] {
   return text
     .split(/\n\s*\n/)
     .map((block) => block.trim())
@@ -507,15 +547,15 @@ function writtenText(text: string): Paragraph[] {
     });
 }
 
-function para(text: string) {
+export function para(text: string) {
   return new Paragraph({ spacing: { after: 120 }, children: [new TextRun(text)] });
 }
 
-function labelled(label: string, value: string) {
+export function labelled(label: string, value: string) {
   return new Paragraph({ spacing: { after: 80 }, children: [new TextRun({ text: `${label}: `, bold: true }), new TextRun(value)] });
 }
 
-function table(header: string[], rows: string[][], options: { headerRow?: boolean; boldFirstColumn?: boolean; fontSize?: number } = {}) {
+export function table(header: string[], rows: string[][], options: { headerRow?: boolean; boldFirstColumn?: boolean; fontSize?: number } = {}) {
   const size = options.fontSize ?? 20;
   const border = { style: BorderStyle.SINGLE, size: 4, color: 'BFBFBF' };
   const cell = (text: string, bold = false, shaded = false) =>
@@ -533,7 +573,7 @@ function table(header: string[], rows: string[][], options: { headerRow?: boolea
 }
 
 /** PNG ImageRun scaled to fit, or null if the data isn't a PNG. */
-function pngImage(data: Buffer, maxWidth: number, maxHeight: number, description: string): ImageRun | null {
+export function pngImage(data: Buffer, maxWidth: number, maxHeight: number, description: string): ImageRun | null {
   if (data.length < 24 || data.toString('ascii', 1, 4) !== 'PNG') return null;
   const width = data.readUInt32BE(16);
   const height = data.readUInt32BE(20);
@@ -546,10 +586,10 @@ function pngImage(data: Buffer, maxWidth: number, maxHeight: number, description
   });
 }
 
-function formatDate(iso: string): string {
+export function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
 }
 
-function plural(n: number, word: string): string {
+export function plural(n: number, word: string): string {
   return n === 1 ? word : `${word}s`;
 }

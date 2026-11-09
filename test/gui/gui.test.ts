@@ -249,7 +249,7 @@ describe('Settings and Export screens', () => {
     await page.getByRole('status').getByText(/Export ready/).waitFor({ timeout: 60_000 });
     expect(await axeViolations(page)).toEqual([]);
 
-    const [report] = await Promise.all([page.waitForEvent('download'), page.getByRole('link', { name: 'Word report' }).click()]);
+    const [report] = await Promise.all([page.waitForEvent('download'), page.getByRole('link', { name: 'Full findings report (Word)' }).click()]);
     const docx = await JSZip.loadAsync(readFileSync((await report.path())!));
     expect(await docx.file('word/document.xml')!.async('string')).toContain('Four Agency');
 
@@ -294,6 +294,28 @@ describe('Settings and Export screens', () => {
     const frame = page.frameLocator('iframe[title="Report preview"]');
     await frame.getByText('Acme is launching a new widget shop.').waitFor({ timeout: 30_000 });
     await frame.getByRole('heading', { name: /^\d+\. Information architecture$/ }).waitFor();
+  }, 60_000);
+
+  it('adds the Overview to the pack, with its own wording and preview', async () => {
+    const { page } = gui;
+    await page.getByLabel('Client-facing report').uncheck();
+    await page.getByLabel('Overview (overview.docx)').check();
+    // The Overview uses key findings and recommendations, so they stay without the client-facing layout.
+    await page.getByLabel('Key findings').waitFor();
+    await expect(page.getByLabel('Executive summary').count()).resolves.toBe(0);
+    await expect(page.getByLabel('Why a healthy website matters').getAttribute('placeholder')).resolves.toMatch(/^A website is often the first place/);
+    await page.getByLabel('Why a healthy website matters').fill('Acme’s shop is how most members renew.');
+    // "Saved." is already showing from earlier changes, so wait for the save itself.
+    await expect
+      .poll(() => gui.db.getReportOptions(runId), { timeout: 10_000 })
+      .toMatchObject({ clientFacing: false, reports: { overview: true }, text: { whyItMatters: 'Acme’s shop is how most members renew.' } });
+
+    await page.getByLabel('Report to preview').selectOption('overview');
+    const frame = page.frameLocator('iframe[title="Report preview"]');
+    await frame.getByText('Acme’s shop is how most members renew.').waitFor({ timeout: 30_000 });
+    await frame.getByRole('heading', { name: '1. At a glance' }).waitFor();
+    await page.getByRole('button', { name: 'Hide report preview' }).click();
+    expect(await axeViolations(page)).toEqual([]);
   }, 60_000);
 });
 

@@ -8,12 +8,14 @@ import { useTitle } from '@/lib/use-title';
 import { formatDateTime } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
+import { NativeSelect } from '@/components/ui/native-select';
 import { Alert } from '@/components/ui/alert';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ReportContents } from '@/components/ReportContents';
 
 const FILE_LABELS: Record<string, string> = {
-  'report.docx': 'Word report',
+  'overview.docx': 'Overview (Word)',
+  'report.docx': 'Full findings report (Word)',
   'tickets.csv': 'Tickets (CSV)',
   'occurrences.csv': 'Occurrences (CSV)',
   'run.json': 'Raw data (JSON)',
@@ -28,7 +30,11 @@ export function ExportPage() {
   const exports = useQuery({ queryKey: ['exports', runId], queryFn: () => api.exports(runId) });
   const [preset, setPreset] = useState<string | null>(null);
   const [showPreview, setShowPreview] = useState(false);
-  const preview = useQuery({ queryKey: ['preview', runId], queryFn: () => api.reportPreview(runId), enabled: showPreview, staleTime: 0, gcTime: 0 });
+  const [previewing, setPreviewing] = useState<'technical' | 'overview'>('technical');
+  const report = useQuery({ queryKey: ['report', runId], queryFn: () => api.report(runId) });
+  const hasOverview = report.data?.options.reports.overview ?? false;
+  const shown = hasOverview ? previewing : 'technical';
+  const preview = useQuery({ queryKey: ['preview', runId, shown], queryFn: () => api.reportPreview(runId, shown), enabled: showPreview, staleTime: 0, gcTime: 0 });
   useTitle(run.data ? `Export ${run.data.project.name}` : 'Export');
 
   const chosenPreset = preset ?? settings.data?.defaults.csvPreset ?? 'prego';
@@ -47,7 +53,7 @@ export function ExportPage() {
       <div>
         <h1 className="text-2xl font-bold">Export{run.data ? ` ${run.data.project.name}` : ''}</h1>
         <p className="text-muted-foreground">
-          One folder with the Word report, tickets.csv and occurrences.csv, all cross-referenced by ticket ID. Dismissed tickets are left out.
+          One folder with the Word reports, tickets.csv and occurrences.csv, all cross-referenced by ticket ID. Dismissed tickets are left out.
         </p>
       </div>
 
@@ -116,9 +122,18 @@ export function ExportPage() {
         <Card id="report-preview">
           <CardHeader>
             <CardTitle>Report preview</CardTitle>
-            <CardDescription>A simplified view of report.docx. Layout and styling differ in Word.</CardDescription>
+            <CardDescription>A simplified view of {shown === 'overview' ? 'overview.docx' : 'report.docx'}. Layout and styling differ in Word.</CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-3">
+            {hasOverview && (
+              <div className="grid max-w-xs gap-1">
+                <Label htmlFor="preview-report">Report to preview</Label>
+                <NativeSelect id="preview-report" value={shown} onChange={(e) => setPreviewing(e.target.value as 'technical' | 'overview')}>
+                  <option value="overview">Overview</option>
+                  <option value="technical">Full findings report</option>
+                </NativeSelect>
+              </div>
+            )}
             {preview.isPending && <p>Building the preview…</p>}
             {preview.isError && (
               <Alert variant="destructive" role="alert">

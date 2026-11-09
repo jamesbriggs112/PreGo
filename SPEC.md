@@ -328,6 +328,30 @@ Critical path: T1 → T2 → T3 → T4 → T5/T7 → T9 → T10/T11 → T12, the
 | T34 | Screenshots go into report.docx only. Once an export is written, the run's screenshots and crops are deleted from Prego. The bundle has no `screenshots/` folder. | Section 7.6 `screenshots/` |
 | T35 | A chat box on the first page: describe an audit in plain English, Prego (with a local Ollama model, or a built-in reader) fills in the settings, and you confirm before it starts. | – |
 
+### Phase 6: Report pack (agreed with James, November 2026)
+
+One audit produces a pack of reports for different readers, all from the same run so they agree.
+Every site has purposes, and personas and findings are tied to them, so the Overview can weigh
+findings across reports. Everything stays passive (only what a visitor could load) and makes no
+compliance claims. Built on `dev`, a task per commit.
+
+| # | Task | Output | Done when |
+|---|---|---|---|
+| T36 | Report pack: choose which reports an audit exports. `report.docx` stays the technical report; new reports sit beside it | `core/export` + Export page | Pack choice saved per audit; each chosen report is written and listed in `run.json` |
+| T37 | Overview report: scorecard (each category's score with a plain-English line), "Why a healthy website matters" (editable standard text in Settings), key findings, top recommendations, which reports to read next | `overview.docx` | A client can read the Overview in five minutes; no compliance claims |
+| T38 | Purposes, personas and tasks: what the site serves now (suggested from content, navigation, forms and top GA pages) and what it should achieve (entered from the brief); personas with context, needs and device; tasks with a checkable success condition. Suggestions from a built-in reader and, if switched on, Ollama; the auditor edits or adds their own, including internal users | `core/audience` + GUI | Suggestions appear for a fixture site; edits are saved per project |
+| T39 | Future readiness check: AI crawler rules in robots.txt, content and links without JavaScript, structured data, answerable content (question headings, summaries, FAQs), voice (concise answers, `speakable`, consistent contact details), entity clarity, sitemap health | `core/checks/future` + `future.docx` | Each signal has a fixture page that triggers it. `llms.txt` is only read if James approves it |
+| T40 | Search and sharing: how each page appears across channels. Titles and descriptions as search snippets, Open Graph and X cards as previews for LinkedIn, Facebook, X, WhatsApp and Slack, canonical, hreflang, icons, rich-result eligibility | Check + report section | Previews render for a fixture page with and without tags |
+| T41 | Analytics, deeper: more GA4 exports (landing pages, key events, engagement by device) and Search Console CSV (queries, pages); findings weighted by the traffic of the pages they affect | `core/export/analytics` | Imports fixture CSVs; ticket priority reflects traffic |
+| T42 | Task testing: a tree test on the crawl's link structure (does each task's target sit where its labels suggest?) and an optional Ollama walkthrough per persona and task, following only links and controls a visitor can see, never submitting forms. Scored success, partial or failed, with steps against the shortest route | `core/tasks` + `audience.docx` | Fixture tasks score as expected; the walkthrough never submits a form |
+| T43 | Cross-analysis in the Overview: findings tagged with the purposes and personas they affect, and priority from severity, traffic and purpose | Overview section | A fixture audit with analytics and tasks shows a joined-up headline |
+
+Client-facing reports carry no ticket IDs or ticket index: the report is there to persuade the client to act, and tickets.csv is for the team taking action (its Report section column still points to the matching part of the report). The technical report keeps ticket IDs throughout, and `prego verify` checks each layout accordingly.
+
+Synthetic users aren't real users: task testing reports likely problems, labelled as an AI walkthrough, alongside proper usability testing, never instead of it.
+
+Inspiration: Sitebulb's client reports (scores up front, prioritised hints, developer spreadsheets), squirrelscan's "agent experience" checks, Unlighthouse for site-wide Lighthouse, and UXAgent (CHI 2025) for persona-driven LLM usability testing.
+
 ---
 
 ## 10. Evaluation

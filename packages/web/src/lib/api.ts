@@ -111,6 +111,8 @@ export interface Settings {
   branding: { companyName: string; accentColour: string };
   defaults: { viewports: string[]; perTemplate: number; concurrency: number; delayMs: number; respectRobots: boolean; csvPreset: string; checks: string[] };
   ai: { enabled: boolean; url: string; model: string };
+  /** Standard wording used in every audit's reports unless the audit changes it. */
+  report: { whyItMatters: string };
 }
 
 export interface StartRunBody {
@@ -210,7 +212,8 @@ export const api = {
   stateMap: (runId: number) => request<StateMapData>(`/api/runs/${runId}/state-map`),
   exports: (runId: number) => request<ExportSummary[]>(`/api/runs/${runId}/exports`),
   createExport: (runId: number, preset: string) => post<ExportSummary>(`/api/runs/${runId}/exports`, { preset }),
-  reportPreview: (runId: number) => request<{ html: string }>(`/api/runs/${runId}/report-preview`),
+  reportPreview: (runId: number, report: 'technical' | 'overview' = 'technical') =>
+    request<{ html: string }>(`/api/runs/${runId}/report-preview${report === 'overview' ? '?report=overview' : ''}`),
   settings: () => request<Settings & { hasLogo: boolean; exploreDefaults: { denyLabels: string[] } }>('/api/settings'),
   testOllama: (url: string) => post<{ models: string[] }>('/api/settings/ai/test', { url }),
   saveSettings: (settings: Settings) => request<Settings & { hasLogo: boolean }>('/api/settings', { method: 'PUT', body: JSON.stringify(settings) }),

@@ -7,6 +7,7 @@ import { CSV_PRESET_OPTIONS } from '@/lib/presets';
 import { useTitle } from '@/lib/use-title';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { NativeSelect } from '@/components/ui/native-select';
@@ -17,7 +18,7 @@ import { cn } from '@/lib/utils';
 // Settings are split into sections, so each screen shows only one area. One form holds them all,
 // so changes in several sections are kept until Save settings.
 const SECTIONS = [
-  { id: 'report', label: 'Report branding', hint: 'Company name, colour and logo' },
+  { id: 'report', label: 'Reports', hint: 'Branding, logo and standard wording' },
   { id: 'audits', label: 'New audit defaults', hint: 'Screen sizes, crawl and checks' },
   { id: 'exports', label: 'Exports', hint: 'tickets.csv columns' },
   { id: 'ai', label: 'AI review', hint: 'Ollama on this computer' },
@@ -84,6 +85,7 @@ function SettingsForm({ initial, section }: { initial: Settings & { hasLogo: boo
   const [aiEnabled, setAiEnabled] = useState(initial.ai.enabled);
   const [aiUrl, setAiUrl] = useState(initial.ai.url);
   const [aiModel, setAiModel] = useState(initial.ai.model);
+  const [whyItMatters, setWhyItMatters] = useState(initial.report.whyItMatters);
   const testOllama = useMutation({ mutationFn: api.testOllama });
 
   const save = useMutation({
@@ -102,6 +104,7 @@ function SettingsForm({ initial, section }: { initial: Settings & { hasLogo: boo
       branding: { companyName: companyName.trim(), accentColour: accent.replace('#', '') },
       defaults: { viewports, perTemplate: Number(perTemplate), concurrency: Number(concurrency), delayMs: Number(delay), respectRobots, csvPreset, checks },
       ai: { enabled: aiEnabled, url: aiUrl.trim(), model: aiModel.trim() },
+      report: { whyItMatters },
     });
   }
 
@@ -138,6 +141,19 @@ function SettingsForm({ initial, section }: { initial: Settings & { hasLogo: boo
         </CardContent>
       </Card>
       <LogoCard hasLogo={initial.hasLogo} />
+      <Card>
+        <CardHeader>
+          <CardTitle>Why a healthy website matters</CardTitle>
+          <CardDescription>
+            Standard wording for the Overview report, used in every audit unless the audit has its own. A blank line starts a new paragraph, and lines starting with
+            “-” are bullet points. Add figures only from sources you’re happy to cite. Clear it to go back to Prego’s wording.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-2">
+          <Label htmlFor="why-it-matters">Wording</Label>
+          <Textarea id="why-it-matters" rows={12} value={whyItMatters} onChange={(e) => setWhyItMatters(e.target.value)} maxLength={20000} />
+        </CardContent>
+      </Card>
       </>
       )}
 

@@ -115,11 +115,18 @@ the same ticket ID every time it's found.
 
 ### Report contents
 
-The Export page chooses what goes into report.docx, saved per audit:
+The Export page chooses what goes into the export, saved per audit:
 
+- **Reports in the pack**: report.docx, the full findings, is always included. Tick **Overview** to
+  add overview.docx, a short report for client leadership: scores at a glance with a plain-English
+  rating, why a healthy website matters, key findings, top recommendations and a guide to the pack.
+  The "why it matters" wording is set once in Settings → Reports and can be tailored per audit.
 - **Client-facing report** adds a contents page and your own executive summary, key findings, top
   recommendations, methodology and conclusion. Prego suggests key findings, recommendations and
-  methodology from the results, so a blank section is never empty. Off gives the technical report.
+  methodology from the results, so a blank section is never empty. A client-facing report has no
+  ticket IDs or ticket index: it's there to persuade, while tickets.csv is for the team taking action,
+  and its Report section column points to the matching part of the report. Off gives the technical
+  report, with ticket IDs throughout.
 - **Optional sections**, each with figures from Prego and room for your observations:
   - **Analytics**: traffic sources, devices, popular pages and countries from Google Analytics CSV
     exports, imported on the Export page and kept for the project. Prego keeps only the figures.

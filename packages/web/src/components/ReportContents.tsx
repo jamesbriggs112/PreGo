@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ChangeEvent, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { DEFAULT_REPORT_OPTIONS, type OptionalSection, type ReportOptions, type ReportTextKey } from '@prego/core/report-options';
+import { Link } from 'react-router';
 import { api, type RunDetail } from '@/lib/api';
 import { formatDateTime } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -10,10 +11,11 @@ import { Textarea } from '@/components/ui/textarea';
 import { Alert } from '@/components/ui/alert';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
-const WRITTEN: { key: ReportTextKey; label: string; hint: string; suggest?: 'keyFindings' | 'recommendations' | 'methodology'; rows: number }[] = [
+/** `overview`: also used by the Overview report, so shown whenever the Overview is in the pack. */
+const WRITTEN: { key: ReportTextKey; label: string; hint: string; suggest?: 'keyFindings' | 'recommendations' | 'methodology'; rows: number; overview?: boolean }[] = [
   { key: 'summary', label: 'Executive summary', hint: 'An introduction to the client, the site and the purpose of the audit. Leave blank to use Prego’s summary of the findings.', rows: 5 },
-  { key: 'keyFindings', label: 'Key findings', hint: 'One per line. Leave blank to use the suggested findings.', suggest: 'keyFindings', rows: 6 },
-  { key: 'recommendations', label: 'Top recommendations', hint: 'One per line, most important first. Leave blank to use the suggested recommendations.', suggest: 'recommendations', rows: 6 },
+  { key: 'keyFindings', label: 'Key findings', hint: 'One per line. Leave blank to use the suggested findings.', suggest: 'keyFindings', rows: 6, overview: true },
+  { key: 'recommendations', label: 'Top recommendations', hint: 'One per line, most important first. Leave blank to use the suggested recommendations.', suggest: 'recommendations', rows: 6, overview: true },
   { key: 'methodology', label: 'Methodology', hint: 'How the audit was done. Leave blank to use the suggested wording. The scope table follows it.', suggest: 'methodology', rows: 5 },
   { key: 'conclusion', label: 'Conclusion', hint: 'Optional. Leave blank to leave the Conclusion section out.', rows: 4 },
 ];
@@ -29,6 +31,7 @@ const SECTIONS: { id: OptionalSection; label: string; hint: string; missing: str
 export function ReportContents({ run }: { run: RunDetail }) {
   const queryClient = useQueryClient();
   const report = useQuery({ queryKey: ['report', run.id], queryFn: () => api.report(run.id) });
+  const settings = useQuery({ queryKey: ['settings'], queryFn: api.settings });
   const [options, setOptions] = useState<ReportOptions | null>(null);
   const current = options ?? report.data?.options ?? DEFAULT_REPORT_OPTIONS;
   const save = useMutation({
@@ -52,6 +55,7 @@ export function ReportContents({ run }: { run: RunDetail }) {
   const update = (change: (o: ReportOptions) => ReportOptions) => setOptions(change(current));
   const setText = (key: ReportTextKey, value: string) => update((o) => ({ ...o, text: { ...o.text, [key]: value } }));
   const available = report.data?.available;
+  const written = WRITTEN.filter((w) => current.clientFacing || (w.overview && current.reports.overview));
 
   return (
     <Card>
@@ -65,6 +69,35 @@ export function ReportContents({ run }: { run: RunDetail }) {
             {report.error.message}
           </Alert>
         )}
+        <fieldset className="grid gap-3">
+          <legend className="mb-1 text-sm font-medium">Reports in the pack</legend>
+          <p className="text-sm text-muted-foreground">report.docx, the full findings with ticket IDs, is always included.</p>
+          <Toggle
+            id="report-overview"
+            checked={current.reports.overview}
+            onChange={(on) => update((o) => ({ ...o, reports: { ...o.reports, overview: on } }))}
+            label="Overview (overview.docx)"
+            hint="A short report for client leadership, read first: scores at a glance, why a healthy website matters, key findings, top recommendations and a guide to the pack."
+          />
+          {current.reports.overview && (
+            <div className="grid gap-2 pl-6">
+              <Label htmlFor="report-whyItMatters">Why a healthy website matters</Label>
+              <span id="report-whyItMatters-hint" className="text-sm text-muted-foreground">
+                Leave blank to use the standard wording from <Link to="/settings?section=report" className="text-primary underline">Settings</Link>, shown here
+                faintly. Write your own to tailor it to this client.
+              </span>
+              <Textarea
+                id="report-whyItMatters"
+                aria-describedby="report-whyItMatters-hint"
+                rows={6}
+                value={current.text.whyItMatters ?? ''}
+                placeholder={settings.data?.report.whyItMatters}
+                onChange={(e) => setText('whyItMatters', e.target.value)}
+              />
+            </div>
+          )}
+        </fieldset>
+
         <Toggle
           id="client-facing"
           checked={current.clientFacing}
@@ -73,10 +106,10 @@ export function ReportContents({ run }: { run: RunDetail }) {
           hint="Adds a contents page and your own executive summary, key findings, top recommendations, methodology and conclusion. Off gives the technical report for the development team."
         />
 
-        {current.clientFacing && (
+        {written.length > 0 && (
           <fieldset className="grid gap-5 rounded-xl border p-4">
             <legend className="px-1 text-sm font-medium">Written sections</legend>
-            {WRITTEN.map((w) => (
+            {written.map((w) => (
               <div key={w.key} className="grid gap-2">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <Label htmlFor={`report-${w.key}`}>{w.label}</Label>

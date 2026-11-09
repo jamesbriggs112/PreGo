@@ -15,6 +15,8 @@ export interface VerifyResult {
  * Check an export folder's cross-references (acceptance criterion 6): every ticket ID in report.docx is
  * in tickets.csv exactly once, every ticket in tickets.csv is referenced in the report, and every
  * occurrence belongs to a ticket. Screenshots are embedded in the report, not separate files.
+ * A client-facing report has no ticket IDs at all (run.json says which layout it is): tickets.csv
+ * points to its sections instead.
  */
 export async function verifyExport(dir: string): Promise<VerifyResult> {
   const problems: string[] = [];
@@ -37,6 +39,13 @@ export async function verifyExport(dir: string): Promise<VerifyResult> {
 
   const csvIds = tickets.map((t) => t['Ticket ID']);
   const reportIds = new Set(reportText.match(TICKET_ID) ?? []);
+  const runJson = join(dir, 'run.json');
+  const clientFacing = existsSync(runJson) && (JSON.parse(readFileSync(runJson, 'utf8')) as { reportLayout?: string }).reportLayout === 'client-facing';
+  if (clientFacing) {
+    for (const id of reportIds) problems.push(`${id} is in a client-facing report.docx, which should have no ticket IDs`);
+    for (const o of occurrences) if (!csvIds.includes(o['Ticket ID'])) problems.push(`occurrences.csv refers to ${o['Ticket ID']}, which is not in tickets.csv`);
+    return { ok: problems.length === 0, problems, ticketIds: csvIds };
+  }
   for (const id of reportIds) {
     const count = csvIds.filter((c) => c === id).length;
     if (count !== 1) problems.push(`${id} is in report.docx but appears ${count} times in tickets.csv`);

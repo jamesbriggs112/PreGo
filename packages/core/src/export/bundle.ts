@@ -8,6 +8,8 @@ import { stateMapPng } from './state-map-image.js';
 import { reportCharts } from './charts.js';
 import { writeCsvFiles } from './csv.js';
 import { writeReportDocx, type ReportBranding } from './docx.js';
+import { writeOverviewDocx } from './overview.js';
+import { PACK_FILES } from './report-options.js';
 import { getSettings, reportBranding } from '../settings.js';
 
 export interface ExportOptions {
@@ -24,12 +26,13 @@ export interface ExportResult {
   /** The export's ID in the exports log. */
   id: number;
   dir: string;
-  files: { report: string; tickets: string; occurrences: string; runJson: string };
+  files: { report: string; tickets: string; occurrences: string; runJson: string; overview?: string };
   plan: ExportPlan;
 }
 
 /**
- * Write the export bundle for a run: report.docx, tickets.csv, occurrences.csv and run.json, all in
+ * Write the export bundle for a run: report.docx, tickets.csv, occurrences.csv and run.json, plus any
+ * other reports chosen for the pack (overview.docx), all in
  * one folder and cross-referenced by ticket ID. Screenshots go into the report and nowhere else: once
  * it's written, the run's screenshots are deleted from Prego.
  */
@@ -38,7 +41,7 @@ export async function exportRun(db: PregoDb, runId: number, options: ExportOptio
   const plan = buildExportPlan(db, runId);
   const runDir = runDirectory(dataDir, runId);
   const dir = options.outDir ? resolve(options.outDir) : uniqueDir(join(dataDir, 'exports', `${plan.project.slug}-${stamp(new Date())}`));
-  const files = {
+  const files: ExportResult['files'] = {
     report: join(dir, 'report.docx'),
     tickets: join(dir, 'tickets.csv'),
     occurrences: join(dir, 'occurrences.csv'),
@@ -54,13 +57,20 @@ export async function exportRun(db: PregoDb, runId: number, options: ExportOptio
     stateMap = await stateMapPng(stateMapStates(plan), plan.edges.map((e) => ({ from: e.fromLocationId, to: e.toLocationId, label: e.step.label, outcome: e.outcome })));
     writeFileSync(join(dir, 'state-map.png'), stateMap);
   }
-  await writeReportDocx(plan, runDir, files.report, options.branding ?? reportBranding(db, dataDir), { stateMap, charts: await reportCharts(plan) });
+  const branding = options.branding ?? reportBranding(db, dataDir);
+  await writeReportDocx(plan, runDir, files.report, branding, { stateMap, charts: await reportCharts(plan) });
+  if (plan.options.reports.overview) {
+    files.overview = join(dir, PACK_FILES.overview);
+    await writeOverviewDocx(plan, files.overview, getSettings(db).report.whyItMatters, branding);
+  }
   writeFileSync(
     files.runJson,
     JSON.stringify(
       {
         generatedBy: 'Prego',
         exportedAt: new Date().toISOString(),
+        reports: ['report.docx', ...(files.overview ? [PACK_FILES.overview] : [])],
+        reportLayout: plan.options.clientFacing ? 'client-facing' : 'technical',
         project: plan.project,
         run: plan.run,
         locations: plan.locations,

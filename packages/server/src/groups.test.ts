@@ -131,4 +131,21 @@ describe('report contents and analytics', () => {
     await fetch(`${base}/api/projects/${run.projectId}/analytics`, { method: 'DELETE' });
     expect(db.getProject(run.projectId)!.settings.analytics).toBeUndefined();
   });
+  it('keeps standard wording in Settings and previews the Overview', async () => {
+    const run = db.listProjects().flatMap((p) => db.listRuns(p.id)).find((r) => r.status === 'complete')!;
+    const settings = await (await fetch(`${base}/api/settings`)).json();
+    expect(settings.report.whyItMatters).toMatch(/^A website is often the first place/);
+    const { hasLogo: _logo, exploreDefaults: _explore, ...body } = settings;
+    const saved = await (await fetch(`${base}/api/settings`, json('PUT', { ...body, report: { whyItMatters: 'Our standard words.' } }))).json();
+    expect(saved.report.whyItMatters).toBe('Our standard words.');
+    // Settings saved without the wording (an older screen) keep what's there.
+    const { report: _report, ...withoutReport } = body;
+    expect((await (await fetch(`${base}/api/settings`, json('PUT', withoutReport))).json()).report.whyItMatters).toBe('Our standard words.');
+
+    const preview = await (await fetch(`${base}/api/runs/${run.id}/report-preview?report=overview`)).json();
+    expect(preview.html).toContain('Website health overview');
+    expect(preview.html).toContain('Our standard words.');
+    await fetch(`${base}/api/settings`, json('PUT', { ...body, report: { whyItMatters: '' } }));
+    expect((await (await fetch(`${base}/api/settings`)).json()).report.whyItMatters).toMatch(/^A website is often/);
+  });
 });

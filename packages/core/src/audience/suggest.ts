@@ -188,7 +188,7 @@ export function suggestAudience(facts: SiteFacts): AudienceProfile {
       const rule = RULES.find((r) => r.id === purposeId)!;
       const target = targets.get(purposeId);
       const success: TaskSuccess = rule.success ?? (target ? { kind: 'page', path: target } : { kind: 'described' });
-      tasks.push({ id: `task-${tasks.length + 1}`, personaId: id, goal: rule.task.goal, doneWhen: rule.task.doneWhen, success });
+      tasks.push({ id: `task-${tasks.length + 1}`, personaId: id, goal: rule.task.goal, doneWhen: rule.task.doneWhen, success, purposeId });
     }
   };
   const firstOf = (...ids: string[]) => ids.filter((id) => has(id));

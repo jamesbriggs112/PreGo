@@ -11,6 +11,10 @@ import { DEFAULT_REPORT_OPTIONS } from '../export/report-options.js';
 import type { AudienceProfile } from '../audience/types.js';
 import type { Location } from '../types.js';
 import { labelMatches, treeTest } from './tree.js';
+import { buildExportPlan } from '../export/plan.js';
+import { connections, focusThemes } from '../export/focus.js';
+import { overviewDocx } from '../export/overview.js';
+import { parseAnalyticsCsv } from '../export/analytics.js';
 import { walkTasks } from './walkthrough.js';
 
 const dataDir = mkdtempSync(join(tmpdir(), 'prego-tasks-'));
@@ -35,7 +39,7 @@ const profile: AudienceProfile = {
 
 beforeAll(async () => {
   site = await serveFolder('fixtures/bad-site', { substituteOrigin: true });
-  const { run } = await runAudit(db, { project: 'Acme', target: site.url, checks: ['structure'], delayMs: 0, dataDir });
+  const { run } = await runAudit(db, { project: 'Acme', target: site.url, checks: ['structure', 'axe'], delayMs: 0, dataDir });
   runId = run.id;
   db.saveProjectSettings(run.projectId, { audience: profile });
 }, 120_000);
@@ -102,6 +106,38 @@ describe('the AI walkthrough', () => {
 
   it('only talks to Ollama on this computer', async () => {
     await expect(walkTasks(profile, { startUrl: site.url, ai: { url: 'https://ollama.example.com', model: 'm' }, runDir: dataDir })).rejects.toThrow(/only talks to Ollama on this computer/);
+  });
+});
+
+describe('the cross-analysis', () => {
+  it('ties each finding to the purposes, people and tasks it gets in the way of, and ranks what to fix first', async () => {
+    const projectId = db.getRun(runId)!.projectId;
+    const withNeeds: AudienceProfile = { ...profile, personas: profile.personas.map((p) => (p.id === 'phone' ? { ...p, accessNeeds: 'Screen reader' } : p)) };
+    db.saveProjectSettings(projectId, {
+      audience: withNeeds,
+      analytics: parseAnalyticsCsv([{ name: 'devices.csv', text: 'Device category,Active users\nmobile,70\ndesktop,30\n' }, { name: 'pages.csv', text: 'Page path and screen class,Active users\n/,60\n/contact.html,40\n' }]),
+    });
+    const plan = buildExportPlan(db, runId);
+    const onContact = plan.tickets.find((t) => t.category === 'A11Y' && t.occurrenceList.some((o) => o.location.url.endsWith('/contact.html')))!;
+    expect(onContact.impact).toMatchObject({ purposeIds: ['contact'], personaIds: expect.arrayContaining(['phone']), barrierFor: ['phone'] });
+    expect(onContact.affects).toContain('Help people get in touch; On their phone (barrier)');
+    // Every task starts on the home page, so a problem there is on the route of the task that failed.
+    const onHome = plan.tickets.find((t) => t.occurrenceList.some((o) => new URL(o.location.url).pathname.match(/^\/(index\.html)?$/)))!;
+    expect(onHome.impact.blocksTaskIds).toContain('missing');
+
+    const focus = focusThemes(plan);
+    expect(focus.length).toBeGreaterThan(0);
+    expect(focus.map((f) => f.score)).toEqual([...focus.map((f) => f.score)].sort((a, b) => b - a));
+    expect(focus[0].why).toMatch(/visits|gets in the way of|barrier/);
+    const links = connections(plan);
+    expect(links).toContainEqual(expect.stringMatching(/^70% of visitors use a phone/));
+    expect(links).toContainEqual('“Help people get in touch” is a main purpose, but people may not manage to find the price list.');
+
+    const text = (await (await JSZip.loadAsync(await overviewDocx(plan, 'Why.'))).file('word/document.xml')!.async('string')).replace(/<\/w:p>/g, '\n').replace(/<[^>]+>/g, '');
+    expect(text).toMatch(/2\. Where to focus\n/);
+    expect(text).toContain('Fix these first');
+    expect(text).toMatch(/Help people get in touch\nMain\nYes\nYes\n\d of \d\n\d+\n/);
+    db.saveProjectSettings(projectId, { audience: profile, analytics: undefined });
   });
 });
 

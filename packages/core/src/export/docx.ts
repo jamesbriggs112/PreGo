@@ -359,7 +359,7 @@ function findingsSection(section: ReportSectionPlan, runDir: string, clientFacin
           children: [
             new TextRun({ text: t.ticketId, bold: true }),
             new TextRun(
-              `: ${where(t)}. ${t.severity} severity, ${t.priority}${raisedNote(t)}. ${t.occurrences} ${plural(t.occurrences, 'occurrence')} on ${t.locationsAffected} ${plural(t.locationsAffected, 'page')}${t.traffic ? `, which get ${trafficText({ ...t, priorityRaised: false })}` : ''}.`,
+              `: ${where(t)}. ${t.severity} severity, ${t.priority}${raisedNote(t)}. ${t.occurrences} ${plural(t.occurrences, 'occurrence')} on ${t.locationsAffected} ${plural(t.locationsAffected, 'page')}${t.traffic ? `, which get ${trafficText({ ...t, priorityRaised: false })}` : ''}.${t.affects ? ` Affects: ${t.affects}.` : ''}`,
             ),
           ],
         }),
@@ -389,11 +389,14 @@ function themeReach(theme: Theme): Paragraph {
   const places = [...new Set(theme.tickets.map(where).filter(Boolean))];
   const shown = places.slice(0, 5).join(', ') + (places.length > 5 ? ` and ${places.length - 5} more` : '');
   const busiest = Math.max(0, ...theme.tickets.map((t) => t.traffic ?? 0));
+  const affects = [...new Set(theme.tickets.flatMap((t) => t.affects.split('; ').filter(Boolean)))];
   return new Paragraph({
     spacing: { after: 120 },
     children: [
       new TextRun({ text: 'Where: ', bold: true }),
-      new TextRun(`${shown || 'across the site'}. ${worst} severity at worst.${busiest >= 0.01 ? ` Pages with ${Math.round(busiest * 100)}% of visits are affected.` : ''}`),
+      new TextRun(
+        `${shown || 'across the site'}. ${worst} severity at worst.${busiest >= 0.01 ? ` Pages with ${Math.round(busiest * 100)}% of visits are affected.` : ''}${affects.length ? ` Gets in the way of: ${affects.slice(0, 4).join('; ')}.` : ''}`,
+      ),
     ],
   });
 }

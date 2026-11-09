@@ -63,7 +63,9 @@ function mergeSuggestion(current: AudienceProfile, suggested: AudienceProfile): 
     if (current.personas.some((c) => same(c.name, p.name))) continue;
     const id = current.personas.some((c) => c.id === p.id) ? newId('persona') : p.id;
     personas.push({ ...p, id, purposeIds: p.purposeIds.map((x) => purposeIds.get(x) ?? x) });
-    for (const t of suggested.tasks.filter((t) => t.personaId === p.id)) tasks.push({ ...t, id: tasks.some((c) => c.id === t.id) ? newId('task') : t.id, personaId: id });
+    for (const t of suggested.tasks.filter((t) => t.personaId === p.id)) {
+      tasks.push({ ...t, id: tasks.some((c) => c.id === t.id) ? newId('task') : t.id, personaId: id, purposeId: t.purposeId && (purposeIds.get(t.purposeId) ?? t.purposeId) });
+    }
   }
   return { ...current, purposes, personas, tasks };
 }
@@ -265,6 +267,18 @@ export function AudiencePage() {
                             ))}
                           </NativeSelect>
                         </Field>
+                        {profile.purposes.length > 0 && (
+                          <Field id={`${t.id}-purpose`} label="For the purpose">
+                            <NativeSelect id={`${t.id}-purpose`} value={t.purposeId ?? ''} onChange={(e) => setTask(t.id, { purposeId: e.target.value || undefined })}>
+                              <option value="">Any of this persona’s</option>
+                              {profile.purposes.map((purpose) => (
+                                <option key={purpose.id} value={purpose.id}>
+                                  {purpose.title || 'Untitled purpose'}
+                                </option>
+                              ))}
+                            </NativeSelect>
+                          </Field>
+                        )}
                         {t.success.kind === 'page' && (
                           <Field id={`${t.id}-page`} label="Page address">
                             <Input id={`${t.id}-page`} list="audience-pages" value={t.success.path} onChange={(e) => setTask(t.id, { success: { kind: 'page', path: e.target.value } })} placeholder="/contact" />

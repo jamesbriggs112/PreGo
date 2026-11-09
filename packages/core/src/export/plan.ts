@@ -3,6 +3,7 @@ import { CATEGORIES, CATEGORY_NAMES, type Category, type Location, type Occurren
 import type { ImageState } from './state-map-image.js';
 import { DEFAULT_REPORT_OPTIONS, type OptionalSection, type ReportOptions } from './report-options.js';
 import { normalisePath, trafficByPath } from './analytics.js';
+import { impactText, ticketImpacts, type TicketImpact } from './cross.js';
 
 /** Tickets on pages that get at least this share of visits move up one priority level. */
 export const TRAFFIC_RAISE_SHARE = 0.25;
@@ -27,6 +28,10 @@ export interface PlannedTicket extends Ticket {
   traffic: number | null;
   /** The priority was raised a level because the pages get a large share of visits. `priority` is the raised one. */
   priorityRaised: boolean;
+  /** The purposes, personas and tasks it gets in the way of, and its focus score. */
+  impact: TicketImpact;
+  /** The purposes and personas it affects, by name: "Help people get in touch; On their phone (barrier)". */
+  affects: string;
 }
 
 export interface ReportSectionPlan {
@@ -166,9 +171,18 @@ export function buildExportPlan(db: PregoDb, runId: number, options: ReportOptio
         occurrenceList,
         traffic: share === null ? null : Math.round(share * 1000) / 1000,
         priorityRaised: raise,
+        impact: { purposeIds: [], personaIds: [], taskIds: [], barrierFor: [], blocksTaskIds: [], score: 0 },
+        affects: '',
       };
     });
     sections.push({ number, category, title: CATEGORY_NAMES[category], tickets: planned });
+  }
+
+  const tickets = sections.flatMap((s) => s.tickets);
+  const impacts = ticketImpacts(project.settings.audience, locations, run, tickets);
+  for (const t of tickets) {
+    t.impact = impacts.get(t.ticketId)!;
+    t.affects = impactText(t.impact, project.settings.audience);
   }
 
   return {
@@ -180,6 +194,6 @@ export function buildExportPlan(db: PregoDb, runId: number, options: ReportOptio
     locations,
     edges: db.getEdges(runId),
     sections,
-    tickets: sections.flatMap((s) => s.tickets),
+    tickets,
   };
 }

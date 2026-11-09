@@ -6,6 +6,8 @@ import type { ExportPlan } from './plan.js';
 import { listItems } from './report-options.js';
 import { suggestReportText } from './suggest.js';
 import { assessReadiness } from './readiness.js';
+import { connections, focusThemes, hasCrossData } from './focus.js';
+import { taskResults } from './audience-report.js';
 
 /** What each category's score covers, in plain English for the scorecard. */
 const COVERS: Record<Category, string> = {
@@ -84,6 +86,8 @@ export async function overviewDocx(plan: ExportPlan, whyItMatters: string, brand
         ]
       : [para('No scored checks were run in this audit.')]),
 
+    ...focusSection(plan, section),
+
     ...purposeSection(plan, section),
 
     section('Why a healthy website matters'),
@@ -110,18 +114,53 @@ export async function overviewDocx(plan: ExportPlan, whyItMatters: string, brand
   return Packer.toBuffer(brandedDocument(brand, `${plan.project.name}: Website health overview`, `${plan.project.name} overview`, children));
 }
 
+/** Where to start, and why: themes ranked by severity, traffic and what they get in the way of, and the connections between the reports. */
+function focusSection(plan: ExportPlan, section: (title: string) => Paragraph): (Paragraph | Table)[] {
+  if (!hasCrossData(plan)) return [];
+  const links = connections(plan);
+  const focus = focusThemes(plan);
+  if (!links.length && !focus.length) return [];
+  const out: (Paragraph | Table)[] = [
+    section('Where to focus'),
+    para('What the findings mean together: the problems that matter most for this site, weighed by how serious they are, how many visitors they reach, and what they stop people doing.'),
+  ];
+  for (const link of links) out.push(new Paragraph({ bullet: { level: 0 }, children: [new TextRun(link)] }));
+  if (focus.length) {
+    out.push(
+      heading('Fix these first', HeadingLevel.HEADING_2),
+      table(
+        ['', 'Problem', 'Why it matters here', 'What to do'],
+        focus.map((f, i) => [String(i + 1), f.name, f.why, f.recommendation]),
+        { fontSize: 18 },
+      ),
+    );
+  }
+  return out;
+}
+
 /** What the site is for and who it serves, when the project has purposes. Gaps are what the client wants but the site doesn't do yet. */
 export function purposeSection(plan: ExportPlan, section: (title: string) => Paragraph, withPersonas = true): (Paragraph | Table)[] {
   const audience = plan.project.settings.audience;
   if (!audience?.purposes.length) return [];
   const yes = (b: boolean) => (b ? 'Yes' : 'No');
+  // With task results and findings, each purpose shows how its tasks went and the issues in their way.
+  const results = taskResults(plan);
+  const tested = (purposeId: string) => {
+    const ids = audience.tasks.filter((t) => (t.purposeId ? t.purposeId === purposeId : audience.personas.find((p) => p.id === t.personaId)?.purposeIds.includes(purposeId))).map((t) => t.id);
+    const checked = (results?.tree ?? []).filter((r) => ids.includes(r.taskId) && r.outcome !== 'unchecked');
+    return checked.length ? `${checked.filter((r) => r.outcome === 'success').length} of ${checked.length}` : '–';
+  };
+  const issues = (purposeId: string) => String(plan.tickets.filter((t) => t.impact.purposeIds.includes(purposeId)).length);
+  const health = audience.tasks.length > 0;
   const gaps = audience.purposes.filter((p) => p.intended && !p.current);
   const out: (Paragraph | Table)[] = [
     section('What the site is for'),
     para('Every website is there to serve a purpose. These are the purposes we found on the site and the ones agreed for it, which the rest of this audit is weighed against.'),
     table(
-      ['Purpose', 'Importance', 'Does it now', 'Wanted'],
-      [...audience.purposes].sort((a, b) => (a.priority === b.priority ? 0 : a.priority === 'primary' ? -1 : 1)).map((p) => [p.title, p.priority === 'primary' ? 'Main' : 'Secondary', yes(p.current), yes(p.intended)]),
+      ['Purpose', 'Importance', 'Does it now', 'Wanted', ...(health ? ['Tasks done', 'Issues in the way'] : [])],
+      [...audience.purposes]
+        .sort((a, b) => (a.priority === b.priority ? 0 : a.priority === 'primary' ? -1 : 1))
+        .map((p) => [p.title, p.priority === 'primary' ? 'Main' : 'Secondary', yes(p.current), yes(p.intended), ...(health ? [tested(p.id), issues(p.id)] : [])]),
       { boldFirstColumn: true },
     ),
   ];

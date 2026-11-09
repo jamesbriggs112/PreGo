@@ -239,7 +239,7 @@ describe('Google Analytics import', () => {
     // Built directly rather than exported: exporting deletes the screenshots later tests use.
     const [header, ...rows] = parse(ticketsCsv(plan).replace(/^\uFEFF/, '')) as string[][];
     const traffic = header.indexOf('Traffic share');
-    expect(traffic).toBe(header.length - 1);
+    expect(header.slice(-2)).toEqual(['Traffic share', 'Affects']);
     expect(rows.some((r) => /^\d+% of visits \(priority raised\)$/.test(r[traffic]))).toBe(true);
     const zip = await JSZip.loadAsync(await reportDocx(plan, join(dataDir, 'runs', String(runId))));
     const text = (await zip.file('word/document.xml')!.async('string')).replace(/<\/w:p>/g, '\n').replace(/<[^>]+>/g, '');
@@ -367,7 +367,7 @@ describe('the Overview report', () => {
     });
     db.saveReportOptions(runId, { ...DEFAULT_REPORT_OPTIONS, reports: { overview: true, audience: false, future: false } });
     const text = await textOf(await overviewDocx(buildExportPlan(db, runId), DEFAULT_WHY_IT_MATTERS));
-    expect(text).toMatch(/2\. What the site is for\n/);
+    expect(text).toMatch(/\d\. Where to focus\n(.|\n)*\d\. What the site is for\n/);
     expect(text).toMatch(/Show and sell products\nMain\nYes\nYes\n/);
     expect(text).toContain('Gaps: the site doesn’t yet help people book a demo.');
     expect(text).toContain('Member of staff (internal): Works at Acme. Comes to find the Mark IV price.');

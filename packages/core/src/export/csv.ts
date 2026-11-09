@@ -6,13 +6,13 @@ import type { Priority } from '../types.js';
 /**
  * tickets.csv columns, in the order the spec sets (section 7.3), without the status and history
  * columns: tickets are managed in the team's own tool once exported. Screenshots are in the report.
- * Traffic share, from imported analytics, comes last.
+ * Traffic share (from imported analytics) and Affects (the purposes and personas it gets in the way of) come last.
  */
 export const TICKET_COLUMNS = [
   'Ticket ID', 'Title', 'Category', 'Severity', 'Priority', 'WCAG criterion', 'WCAG level', 'Rule ID',
   'Engine', 'Occurrences', 'Locations affected', 'Example location', 'Example selector', 'Description',
   'Why it matters', 'Steps to reproduce', 'Expected', 'Actual', 'Recommendation', 'Effort', 'Report section',
-  'Auditor notes', 'Labels', 'Traffic share',
+  'Auditor notes', 'Labels', 'Traffic share', 'Affects',
 ] as const;
 export type TicketColumn = (typeof TICKET_COLUMNS)[number];
 
@@ -55,6 +55,7 @@ function fullDescription(t: PlannedTicket): string {
     `Recommendation: ${t.recommendation}`,
     t.wcagCriterion ? `WCAG: ${t.wcagCriterion} (level ${t.wcagLevel ?? '-'})` : '',
     t.traffic !== null ? `Traffic: pages with ${trafficText(t)}` : '',
+    t.affects ? `Affects: ${t.affects}` : '',
     `Prego ticket: ${t.ticketId}, report section ${t.reportSection}`,
   ]
     .filter(Boolean)
@@ -133,6 +134,7 @@ function ticketRow(t: PlannedTicket): Row {
     'Auditor notes': t.auditorNotes,
     Labels: t.labels.join(' '),
     'Traffic share': trafficText(t),
+    Affects: t.affects,
   };
 }
 

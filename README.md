@@ -187,6 +187,21 @@ and whether they can do what they came to do.
 
 Personas aren't real users: the report says so, and recommends testing with real people.
 
+#### Where to focus (cross-analysis)
+
+With purposes and personas, or analytics page figures, every finding is tied to what it gets in the
+way of: the purposes and people whose task routes it sits on (each task can name the purpose it
+serves), whether it's a barrier for them (accessibility for someone with access needs, phone-only
+problems or performance for a phone user), and whether it's on the route of a task that didn't
+succeed. A focus score weighs severity by traffic and by those, and:
+
+- the Overview gains **Where to focus**: the connections between the reports in plain sentences
+  (for example, most visitors use phones but the phone user's task fails) and a **Fix these first**
+  table of the top themes, each with why it matters here and what to do;
+- *What the site is for* shows, for each purpose, how many of its tasks are done and how many
+  issues are in the way;
+- tickets.csv gains an **Affects** column, and the full report says what each finding affects.
+
 ### Screenshots
 
 Exporting puts the outlined screenshots into the Word report, then deletes them from Prego. The

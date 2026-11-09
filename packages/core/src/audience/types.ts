@@ -58,6 +58,8 @@ export interface UserTask {
   /** How a person would know they'd done it. */
   doneWhen: string;
   success: TaskSuccess;
+  /** The purpose this task serves, if it's one; otherwise the persona's purposes count. */
+  purposeId?: string;
 }
 
 export interface AudienceProfile {

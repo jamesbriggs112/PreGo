@@ -64,6 +64,7 @@ export function parseAudienceProfile(value: unknown): AudienceProfile {
       goal: str(t.goal, 200),
       doneWhen: str(t.doneWhen, 300),
       success: success(t.success),
+      ...(purposeIds.has(id(t.purposeId)) && { purposeId: id(t.purposeId) }),
     }));
 
   return { purposes, personas, tasks, updatedAt: new Date().toISOString() };

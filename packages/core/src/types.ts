@@ -1,6 +1,7 @@
 // Shared data model for the audit engine. Storage (db/), checks, tickets and exports all use these.
 
 import type { AudienceProfile } from './audience/types.js';
+export type { Dashboard, DashboardTile, LegalLevel, LegalSignal, LegalSummary, Rating } from './insights/dashboard.js';
 export type { AudienceProfile, AudienceSuggestion, SuggestJob, PageSignals, Persona, PersonaDevice, Purpose, TaskSuccess, UserTask } from './audience/types.js';
 
 export type Category = 'A11Y' | 'UI' | 'UX' | 'CONT' | 'PERF' | 'SEC' | 'TECH';

@@ -28,6 +28,7 @@ export { futureDocx, writeFutureDocx, hasReadiness } from './export/future-repor
 export { audienceDocx, writeAudienceDocx, hasAudience, taskResults } from './export/audience-report.js';
 export { treeTest, type TreeResult, type TaskOutcome } from './tasks/tree.js';
 export { walkTasks, type WalkResult, type WalkStep } from './tasks/walkthrough.js';
+export { buildDashboard, dashboardTiles, legalSignals, scoreLight } from './insights/dashboard.js';
 export { assessReadiness, type Readiness, type ReadinessItem } from './export/readiness.js';
 export { exportRun, runImagesDeleted, type ExportOptions, type ExportResult } from './export/bundle.js';
 export { verifyExport, type VerifyResult } from './export/verify.js';

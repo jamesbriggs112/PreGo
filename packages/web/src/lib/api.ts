@@ -1,5 +1,5 @@
 import type { Calibration, CheckCost, CheckGroup } from '@prego/core/estimate';
-import type { AnalyticsSummary, AudienceProfile, SuggestJob, Category, Location, Priority, Project, Run, Severity, Ticket } from '@prego/core/types';
+import type { AnalyticsSummary, AudienceProfile, Dashboard, SuggestJob, Category, Location, Priority, Project, Run, Severity, Ticket } from '@prego/core/types';
 import type { OptionalSection, ReportOptions } from '@prego/core/report-options';
 
 export type RunSummary = Pick<Run, 'id' | 'projectId' | 'mode' | 'target' | 'status' | 'startedAt' | 'finishedAt' | 'summary' | 'error'>;
@@ -20,6 +20,8 @@ export interface RunDetail extends RunSummary {
   settings: Record<string, unknown>;
   locations: Location[];
   scores: Scores | null;
+  /** The figures with traffic lights, and signs of possible legal risks. Null until the audit finishes. */
+  dashboard: Dashboard | null;
   /** Screenshots are deleted from Prego once the audit is exported; the report keeps them. */
   screenshotsDeleted: boolean;
 }

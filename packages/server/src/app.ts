@@ -12,6 +12,8 @@ import {
   SEVERITIES,
   TriageError,
   buildExportPlan,
+  buildDashboard,
+  type Dashboard,
   reportOutline,
   checkDefinitions,
   aiSettings,
@@ -401,6 +403,7 @@ export async function buildApp(options: AppOptions): Promise<PregoApp> {
       settings: run.settings,
       locations: db.getLocations(run.id),
       scores: run.status === 'complete' ? scoresFor(db, run) : null,
+      dashboard: run.status === 'complete' ? dashboardFor(db, run) : null,
       screenshotsDeleted: runImagesDeleted(db, run.id),
     };
   });
@@ -980,6 +983,20 @@ export function scoresFor(db: PregoDb, run: Run): Partial<Record<Category, numbe
     scores[category] = lighthouse ?? categoryScore(tickets.filter((t) => t.category === category).map((t) => t.severity));
   }
   return scores;
+}
+
+/** The results page's figures with traffic lights, and signs of possible legal risks. */
+export function dashboardFor(db: PregoDb, run: Run): Dashboard {
+  const project = db.getProject(run.projectId)!;
+  return buildDashboard({
+    run,
+    locations: db.getLocations(run.id),
+    tickets: db.getTickets(run.id).filter((t) => t.status === 'Open'),
+    scores: scoresFor(db, run),
+    checks: ((run.settings.modules as { id: string }[] | undefined) ?? []).map((m) => m.id),
+    audience: project.settings.audience,
+    analytics: project.settings.analytics,
+  });
 }
 
 function hostnameOf(host: string | undefined): string | undefined {

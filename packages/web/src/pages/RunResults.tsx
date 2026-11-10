@@ -15,6 +15,7 @@ import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, Tabl
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { RunStatusBadge } from '@/components/RunStatusBadge';
 import { SeverityBadge, StatusBadge } from '@/components/TicketBadges';
+import { LegalPanel, Tile } from '@/components/Dashboard';
 
 const STATUS_FILTERS = [
   { value: 'open', label: 'Not dismissed' },
@@ -93,29 +94,23 @@ export function RunResults({ run }: { run: RunDetail }) {
         <h2 id="summary-heading" className="sr-only">
           Summary
         </h2>
-        {Object.entries(run.scores ?? {}).map(([category, score]) => (
-          <Card key={category}>
-            <CardHeader>
-              <CardDescription>{CATEGORY_NAMES[category as Category]} score</CardDescription>
-              <CardTitle as="h3" className="text-3xl">
-                {score}
-                <span className="text-base font-normal text-muted-foreground"> / 100</span>
-              </CardTitle>
-            </CardHeader>
-          </Card>
-        ))}
-        <Stat label="Tickets" value={all.filter((t) => t.status === 'Open').length} />
-        {run.mode === 'explore' ? (
-          <Stat label="Screens audited" value={s.statesAudited ?? 0} />
-        ) : run.mode === 'journey' ? (
-          <Stat label="Journey steps audited" value={`${s.stepsReplayed} of ${s.stepsRecorded}`} />
+        {run.dashboard ? (
+          run.dashboard.tiles.map((tile) => <Tile key={tile.id} tile={tile} />)
         ) : (
           <>
-            <Stat label="Pages audited" value={`${s.pagesAudited} of ${s.pagesFound}`} />
-            <Stat label="Broken links" value={s.brokenLinks ?? 0} />
+            <Stat label="Tickets" value={all.filter((t) => t.status === 'Open').length} />
+            {run.mode === 'explore' ? (
+              <Stat label="Screens audited" value={s.statesAudited ?? 0} />
+            ) : run.mode === 'journey' ? (
+              <Stat label="Journey steps audited" value={`${s.stepsReplayed} of ${s.stepsRecorded}`} />
+            ) : (
+              <Stat label="Pages audited" value={`${s.pagesAudited} of ${s.pagesFound}`} />
+            )}
           </>
         )}
       </section>
+
+      {run.dashboard && <LegalPanel legal={run.dashboard.legal} />}
 
       <Card>
         <CardHeader>

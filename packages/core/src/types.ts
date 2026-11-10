@@ -41,6 +41,8 @@ export interface ProjectSettings {
   analytics?: AnalyticsSummary;
   /** What the site is for and who it's for: purposes, personas and their tasks. */
   audience?: AudienceProfile;
+  /** Kept at the top of the sidebar. */
+  pinned?: boolean;
 }
 
 /** What Prego keeps from Google Analytics and Search Console CSV exports. Figures only; nothing about individual people. */

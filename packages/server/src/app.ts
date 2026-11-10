@@ -261,6 +261,17 @@ export async function buildApp(options: AppOptions): Promise<PregoApp> {
     return { deleted: { project: project.name, audits: deleted.runIds.length, exports: deleted.exportDirs.length } };
   });
 
+  app.put<{ Params: { id: string }; Body: { pinned: boolean } }>(
+    '/api/projects/:id/pinned',
+    { schema: { body: { type: 'object', required: ['pinned'], additionalProperties: false, properties: { pinned: { type: 'boolean' } } } } },
+    async (request, reply) => {
+      const project = db.getProject(Number(request.params.id));
+      if (!project) return reply.code(404).send({ error: 'Project not found' });
+      db.saveProjectSettings(project.id, { pinned: request.body.pinned });
+      return { pinned: request.body.pinned };
+    },
+  );
+
   app.get<{ Params: { id: string } }>('/api/projects/:id', async (request, reply) => {
     const project = db.getProject(Number(request.params.id));
     if (!project) return reply.code(404).send({ error: 'Project not found' });
@@ -392,6 +403,43 @@ export async function buildApp(options: AppOptions): Promise<PregoApp> {
       if (error instanceof AuditInProgressError) return reply.code(409).send({ error: error.message, runId: error.runId });
       throw error;
     }
+  });
+
+  // Audit again: a new audit with the same settings as an earlier one. Concurrency and the delay between
+  // pages aren't stored with an audit, so they come from Settings. A site password is never stored, so
+  // audits that used one have to be started from the New audit form.
+  app.post<{ Params: { id: string } }>('/api/runs/:id/rerun', async (request, reply) => {
+    const run = db.getRun(Number(request.params.id));
+    if (!run) return reply.code(404).send({ error: 'Run not found' });
+    const s = run.settings as Record<string, unknown> & { basicAuth?: { username: string } | null; journey?: { name: string } | null; loginJourney?: string | null; modules?: { id: string }[] };
+    if (s.basicAuth) return reply.code(409).send({ error: 'This audit used a site password, which Prego doesn’t keep. Start it again from the New audit form.' });
+    const defaults = getSettings(db).defaults;
+    const known = new Set(checkDefinitions().map((d) => d.id));
+    const body: StartRunBody = {
+      project: db.getProject(run.projectId)!.name,
+      target: run.target,
+      mode: run.mode as StartRunBody['mode'],
+      checks: (s.modules ?? []).map((m) => m.id).filter((id) => known.has(id)),
+      ...(s.journey && { journey: s.journey.name }),
+      ...(s.loginJourney && { loginJourney: s.loginJourney }),
+      ...(run.mode === 'explore' && { maxStates: s.maxStates as number, maskSelectors: s.maskSelectors as string[], denyLabels: s.denyLabels as string[], denySelectors: s.denySelectors as string[] }),
+      viewports: s.viewports as string[],
+      emulation: s.emulation as StartRunBody['emulation'],
+      maxPages: s.maxPages as number,
+      maxDepth: s.maxDepth as number,
+      include: s.include as string[],
+      exclude: s.exclude as string[],
+      respectRobots: s.respectRobots as boolean,
+      useSitemap: s.useSitemap as boolean,
+      perTemplate: s.perTemplate as number,
+      auditAll: s.auditAll as boolean,
+      concurrency: defaults.concurrency,
+      delayMs: defaults.delayMs,
+      ...(Array.isArray(s.competitors) && s.competitors.length && { competitors: s.competitors as string[] }),
+    };
+    // Through the same route as the New audit form, so every check on the settings applies.
+    const response = await app.inject({ method: 'POST', url: '/api/runs', payload: JSON.parse(JSON.stringify(body)) });
+    return reply.code(response.statusCode).send(response.json());
   });
 
   app.get('/api/runs/active', async () => {

@@ -640,3 +640,36 @@ describe('Setting up an audit by typing', () => {
     await expect(page.getByRole('button', { name: 'Start audit' }).count()).resolves.toBe(0);
   });
 });
+
+describe('Project menu in the sidebar', () => {
+  it('opens on right-click and from the More actions button, and pins a project to the top', async () => {
+    const { page } = gui;
+    await page.goto(gui.url);
+    const projects = page.getByRole('navigation', { name: 'Projects' });
+    await projects.getByRole('link', { name: /Acme Widgets/ }).click({ button: 'right' });
+    const menu = page.getByRole('menu');
+    for (const item of ['Open latest audit', 'Audit again with the same settings', 'New audit for this project', 'Purposes and audience', 'Pin to the top', 'Delete project…']) {
+      await menu.getByRole('menuitem', { name: item }).waitFor();
+    }
+    await page.keyboard.press('Escape');
+    // An open menu hides the rest of the page from screen readers, as it should, so check with it closed.
+    expect(await axeViolations(page)).toEqual([]);
+
+    // The same menu from the keyboard-friendly button.
+    await projects.getByRole('button', { name: 'More actions for Acme Widgets' }).click();
+    await page.getByRole('menuitem', { name: 'Pin to the top' }).click();
+    await projects.getByRole('heading', { name: 'Pinned' }).waitFor();
+    await expect.poll(() => gui.db.listProjects().find((p) => p.name === 'Acme Widgets')!.settings.pinned).toBe(true);
+
+    await projects.getByRole('button', { name: 'More actions for Acme Widgets' }).click();
+    await page.getByRole('menuitem', { name: 'Unpin' }).click();
+    await expect.poll(() => projects.getByRole('heading', { name: 'Pinned' }).count()).toBe(0);
+
+    // Delete asks first, and Cancel leaves the project alone.
+    await projects.getByRole('link', { name: /Acme Widgets/ }).click({ button: 'right' });
+    await page.getByRole('menuitem', { name: 'Delete project…' }).click();
+    await page.getByRole('dialog', { name: 'Delete Acme Widgets?' }).waitFor();
+    await page.getByRole('button', { name: 'Cancel' }).click();
+    expect(gui.db.listProjects().some((p) => p.name === 'Acme Widgets')).toBe(true);
+  }, 60_000);
+});

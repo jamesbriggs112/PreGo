@@ -209,6 +209,8 @@ export const api = {
   projects: () => request<ProjectListItem[]>('/api/projects'),
   project: (id: number) => request<ProjectDetail>(`/api/projects/${id}`),
   createProject: (name: string) => post<Project>('/api/projects', { name }),
+  pinProject: (id: number, pinned: boolean) => request<{ pinned: boolean }>(`/api/projects/${id}/pinned`, { method: 'PUT', body: JSON.stringify({ pinned }) }),
+  rerun: (runId: number) => request<{ runId: number; projectId: number }>(`/api/runs/${runId}/rerun`, { method: 'POST' }),
   deleteProject: (id: number) =>
     request<{ deleted: { project: string; audits: number; exports: number } }>(`/api/projects/${id}`, { method: 'DELETE' }),
   startRun: (body: StartRunBody) => post<{ runId: number; projectId: number }>('/api/runs', body),

@@ -11,8 +11,8 @@ import { Label } from '@/components/ui/label';
 import { Alert } from '@/components/ui/alert';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { RunStatusBadge } from '@/components/RunStatusBadge';
+import { DeleteProjectDialog } from '@/components/DeleteProjectDialog';
 
 export function ProjectsPage() {
   useTitle('Projects');
@@ -131,43 +131,6 @@ export function ProjectsPage() {
 
       {deleting && <DeleteProjectDialog project={deleting} onClose={() => setDeleting(null)} />}
     </div>
-  );
-}
-
-function DeleteProjectDialog({ project, onClose }: { project: ProjectListItem; onClose: () => void }) {
-  const queryClient = useQueryClient();
-  const remove = useMutation({
-    mutationFn: () => api.deleteProject(project.id),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['projects'] });
-      onClose();
-    },
-  });
-  const audits = project.runCount === 1 ? '1 audit' : `${project.runCount} audits`;
-  return (
-    <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Delete {project.name}?</DialogTitle>
-          <DialogDescription>
-            This permanently deletes the project and its {audits}, with their screenshots, exports, recorded journeys and saved login. It can’t be undone.
-          </DialogDescription>
-        </DialogHeader>
-        {remove.isError && (
-          <Alert variant="destructive" role="alert">
-            {remove.error.message}
-          </Alert>
-        )}
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button variant="destructive" onClick={() => remove.mutate()} disabled={remove.isPending}>
-            {remove.isPending ? 'Deleting…' : 'Delete project'}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
   );
 }
 

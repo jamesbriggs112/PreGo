@@ -189,3 +189,39 @@ describe('report contents and analytics', () => {
     expect((await (await fetch(`${base}/api/settings`)).json()).report.whyItMatters).toMatch(/^A website is often/);
   });
 });
+
+describe('the project menu', () => {
+  const json = (method: string, body: unknown) => ({ method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+
+  it('pins and unpins a project', async () => {
+    const project = db.listProjects()[0];
+    expect((await fetch(`${base}/api/projects/${project.id}/pinned`, json('PUT', { pinned: true }))).status).toBe(200);
+    const listed = await (await fetch(`${base}/api/projects`)).json();
+    expect(listed.find((p: { id: number }) => p.id === project.id).settings.pinned).toBe(true);
+    await fetch(`${base}/api/projects/${project.id}/pinned`, json('PUT', { pinned: false }));
+    expect(db.getProject(project.id)!.settings.pinned).toBe(false);
+    expect((await fetch(`${base}/api/projects/9999/pinned`, json('PUT', { pinned: true }))).status).toBe(404);
+  });
+
+  it('audits again with the same settings, but not when the audit used a site password', async () => {
+    const start = await fetch(`${base}/api/runs`, json('POST', { project: 'Again', target: resolve('fixtures/bad-site'), checks: ['content'], viewports: ['mobile'], delayMs: 0, maxPages: 2 }));
+    const { runId } = await start.json();
+    await prego.jobs.get(runId)!.done;
+    const again = await fetch(`${base}/api/runs/${runId}/rerun`, { method: 'POST' });
+    expect(again.status).toBe(202);
+    const { runId: newId } = await again.json();
+    expect(newId).not.toBe(runId);
+    await prego.jobs.get(newId)!.done;
+    const [first, second] = [db.getRun(runId)!, db.getRun(newId)!];
+    expect(second).toMatchObject({ projectId: first.projectId, target: first.target, status: 'complete' });
+    expect(second.settings).toMatchObject({ viewports: ['mobile'], maxPages: 2, modules: [{ id: 'content' }] });
+
+    const secured = await fetch(`${base}/api/runs`, json('POST', { project: 'Again', target: resolve('fixtures/bad-site'), checks: ['content'], delayMs: 0, maxPages: 1, basicAuth: { username: 'u', password: 'p' } }));
+    const { runId: securedId } = await secured.json();
+    await prego.jobs.get(securedId)!.done;
+    const refused = await fetch(`${base}/api/runs/${securedId}/rerun`, { method: 'POST' });
+    expect(refused.status).toBe(409);
+    expect((await refused.json()).error).toMatch(/site password/);
+    expect((await fetch(`${base}/api/runs/9999/rerun`, { method: 'POST' })).status).toBe(404);
+  }, 180_000);
+});

@@ -25,6 +25,7 @@ import { stateMapStates, type ExportPlan, type OutlineEntry, type PlannedTicket,
 import { listItems } from './report-options.js';
 import { trafficText } from './csv.js';
 import { suggestReportText } from './suggest.js';
+import { assessReadiness } from './readiness.js';
 import { analyticsSection, competitorSection, contentSection, iaSection, type SectionContext } from './sections.js';
 
 export interface ReportBranding {
@@ -70,7 +71,8 @@ export function categoryScores(plan: ExportPlan): CategoryScore[] {
   return CATEGORIES.map((category) => {
     const tickets = plan.tickets.filter((t) => t.category === category);
     const bySeverity = Object.fromEntries(SEVERITIES.map((s) => [s, tickets.filter((t) => t.severity === s).length])) as Record<Severity, number>;
-    const score = checked.has(category) ? ((category === 'PERF' ? averagePerformance(plan.locations) : null) ?? categoryScore(tickets.map((t) => t.severity))) : null;
+    const measured = category === 'PERF' ? averagePerformance(plan.locations) : category === 'FUT' ? (assessReadiness(plan.locations)?.score ?? null) : null;
+    const score = checked.has(category) ? (measured ?? categoryScore(tickets.map((t) => t.severity))) : null;
     return { category, name: CATEGORY_NAMES[category], score, issues: tickets.length, bySeverity };
   });
 }

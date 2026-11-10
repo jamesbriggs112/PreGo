@@ -1,14 +1,15 @@
 // Shared data model for the audit engine. Storage (db/), checks, tickets and exports all use these.
 
 import type { AudienceProfile } from './audience/types.js';
+export type { HeadIcon, HeadMetrics } from './capture/head.js';
 export type { VulnDbManifest, SourceStatus, UpdateProgress } from './vulndb/types.js';
 export type { Dashboard, DashboardTile, LegalLevel, LegalSignal, LegalSummary, Rating } from './insights/dashboard.js';
 export type { AudienceProfile, AudienceSuggestion, SuggestJob, PageSignals, Persona, PersonaDevice, Purpose, TaskSuccess, UserTask } from './audience/types.js';
 
-export type Category = 'A11Y' | 'UI' | 'UX' | 'CONT' | 'PERF' | 'SEC' | 'TECH';
+export type Category = 'A11Y' | 'UI' | 'UX' | 'CONT' | 'PERF' | 'SEC' | 'TECH' | 'FUT';
 
 /** Report order for categories, also used for section numbering (4.1, 4.2, ...). */
-export const CATEGORIES: readonly Category[] = ['A11Y', 'UX', 'UI', 'CONT', 'PERF', 'SEC', 'TECH'];
+export const CATEGORIES: readonly Category[] = ['A11Y', 'UX', 'UI', 'CONT', 'PERF', 'SEC', 'TECH', 'FUT'];
 
 export const CATEGORY_NAMES: Record<Category, string> = {
   A11Y: 'Accessibility',
@@ -18,6 +19,7 @@ export const CATEGORY_NAMES: Record<Category, string> = {
   PERF: 'Performance',
   SEC: 'Security',
   TECH: 'Markup and technical',
+  FUT: 'Future readiness',
 };
 
 export type Severity = 'Critical' | 'High' | 'Medium' | 'Low';
@@ -43,6 +45,8 @@ export interface ProjectSettings {
   audience?: AudienceProfile;
   /** Kept at the top of the sidebar. */
   pinned?: boolean;
+  /** The site's icon, from the page's own <link rel="icon">, as a small data URL. */
+  icon?: { dataUrl: string; from: string; savedAt: string };
 }
 
 /** What Prego keeps from Google Analytics and Search Console CSV exports. Figures only; nothing about individual people. */

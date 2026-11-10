@@ -1,11 +1,13 @@
 import { Children, cloneElement, isValidElement, useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { PROFILES, isProfileName, type ProfileName } from '@prego/core/profiles';
 import { estimateAudit, formatEstimate, groupChecks } from '@prego/core/estimate';
 import { Clock } from 'lucide-react';
 import { api, ApiError, type CheckInfo, type JourneySummary, type Settings, type StartRunBody } from '@/lib/api';
 import { JourneyPicker } from '@/components/JourneyPicker';
+import { QueuedNotice } from '@/components/QueuedNotice';
+import { useAuditRunning } from '@/lib/use-queue';
 import { useTitle } from '@/lib/use-title';
 import { cn } from '@/lib/utils';
 import { CHECK_FEEDS, sectionChecks } from '@/lib/check-sections';
@@ -104,9 +106,14 @@ function NewAuditForm({ defaults, defaultDenyLabels }: { defaults?: Settings['de
   }, [step]);
   const stepIndex = STEPS.findIndex((s) => s.id === step);
 
+  const queryClient = useQueryClient();
+  const running = useAuditRunning();
   const start = useMutation({
     mutationFn: api.startRun,
-    onSuccess: ({ runId }) => navigate(`/runs/${runId}`),
+    onSuccess: (result) => {
+      if (result.queued) void queryClient.invalidateQueries({ queryKey: ['queue'] });
+      else navigate(`/runs/${result.runId}`);
+    },
   });
 
   // Offer the denylist and masks this project used last time, unless they've been edited here.
@@ -591,6 +598,8 @@ function NewAuditForm({ defaults, defaultDenyLabels }: { defaults?: Settings['de
         </Card>
       )}
 
+      {step === 'review' && start.data?.queued && <QueuedNotice queued={start.data.queued} runningId={start.data.runId} />}
+
       {step === 'review' && start.isError && (
         <Alert variant="destructive" role="alert">
           {start.error.message}{' '}
@@ -609,8 +618,8 @@ function NewAuditForm({ defaults, defaultDenyLabels }: { defaults?: Settings['de
           </Button>
         )}
         {step === 'review' ? (
-          <Button type="submit" size="lg" disabled={start.isPending || allProblems.length > 0}>
-            {start.isPending ? 'Starting…' : 'Start audit'}
+          <Button type="submit" size="lg" disabled={start.isPending || allProblems.length > 0 || !!start.data?.queued}>
+            {start.isPending ? 'Starting…' : running ? 'Add to queue' : 'Start audit'}
           </Button>
         ) : (
           <Button type="submit" size="lg">

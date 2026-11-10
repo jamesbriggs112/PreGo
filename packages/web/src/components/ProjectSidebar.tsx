@@ -1,10 +1,12 @@
 import { useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ClipboardCopy, Download, FolderOpen, Info, Pin, PinOff, Play, RotateCw, SquarePen, Trash2, Users } from 'lucide-react';
+import { ClipboardCopy, Download, FolderOpen, Info, ListOrdered, Pin, PinOff, Play, RotateCw, SquarePen, Trash2, Users, X } from 'lucide-react';
 import { api, type ProjectListItem } from '@/lib/api';
 import { cn, formatDateTime } from '@/lib/utils';
 import { Logo } from '@/components/Logo';
+import { ProjectIcon } from '@/components/ProjectIcon';
+import { ordinal, useQueue } from '@/lib/use-queue';
 import { ProjectContextMenu, ProjectMenuButton, type MenuAction } from '@/components/ProjectMenu';
 import { DeleteProjectDialog } from '@/components/DeleteProjectDialog';
 import { Button } from '@/components/ui/button';
@@ -30,6 +32,8 @@ export function ProjectSidebar({ onNavigate }: { onNavigate?: () => void }) {
     .filter((p) => !p.settings.pinned)
     .sort((a, b) => lastActive(b).localeCompare(lastActive(a)))
     .slice(0, RECENT);
+  const queue = useQueue();
+  const queuedFor = (p: ProjectListItem) => queue.data?.find((q) => q.project.trim().toLowerCase() === p.name.toLowerCase());
   const [deleting, setDeleting] = useState<ProjectListItem | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
 
@@ -44,21 +48,30 @@ export function ProjectSidebar({ onNavigate }: { onNavigate?: () => void }) {
   });
   const rerun = useMutation({
     mutationFn: (runId: number) => api.rerun(runId),
-    onSuccess: async ({ runId }) => {
+    onSuccess: async (result) => {
+      // Another audit is running: this one waits in the queue, shown above the projects.
+      if (result.queued) return queryClient.invalidateQueries({ queryKey: ['queue'] });
       await queryClient.invalidateQueries({ queryKey: ['projects'] });
-      go(`/runs/${runId}`);
+      go(`/runs/${result.runId}`);
     },
+    onError: (error) => setProblem(error.message),
+  });
+  const unqueue = useMutation({
+    mutationFn: (id: number) => api.unqueue(id),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['queue'] }),
     onError: (error) => setProblem(error.message),
   });
 
   const actionsFor = (p: ProjectListItem): MenuAction[] => {
     const last = p.lastRun;
     const running = last?.status === 'running';
+    const waiting = queuedFor(p);
     const complete = last?.status === 'complete';
     const isUrl = !!last && /^https?:\/\//.test(last.target);
     return [
       ...(last ? [{ kind: 'item' as const, label: running ? 'Watch the audit' : 'Open latest audit', icon: <FolderOpen />, onSelect: () => go(`/runs/${last.id}`) }] : []),
-      ...(last ? [{ kind: 'item' as const, label: 'Audit again with the same settings', icon: <RotateCw />, onSelect: () => rerun.mutate(last.id), disabled: running || rerun.isPending }] : []),
+      ...(last ? [{ kind: 'item' as const, label: 'Audit again with the same settings', icon: <RotateCw />, onSelect: () => rerun.mutate(last.id), disabled: running || !!waiting || rerun.isPending }] : []),
+      ...(waiting ? [{ kind: 'item' as const, label: 'Remove from the queue', icon: <X />, onSelect: () => unqueue.mutate(waiting.id) }] : []),
       { kind: 'item', label: 'New audit for this project', icon: <Play />, onSelect: () => go(`/audits/new?project=${encodeURIComponent(p.name)}`) },
       ...(complete ? [{ kind: 'item' as const, label: 'Export report and tickets', icon: <Download />, onSelect: () => go(`/runs/${last.id}/export`) }] : []),
       { kind: 'item', label: 'Purposes and audience', icon: <Users />, onSelect: () => go(`/projects/${p.id}/audience`) },
@@ -82,13 +95,18 @@ export function ProjectSidebar({ onNavigate }: { onNavigate?: () => void }) {
         {/* The menu wraps a plain element: passing NavLink's class function through the trigger would turn it into text. */}
         <ProjectContextMenu actions={actions}>
           <div>
-            <NavLink to={projectLink(p)} className={({ isActive }) => cn(item({ isActive }), 'grid gap-0 pr-9')} onClick={onNavigate}>
+            <NavLink to={projectLink(p)} className={({ isActive }) => cn(item({ isActive }), 'grid grid-cols-[auto_1fr] gap-x-2.5 gap-y-0 pr-9')} onClick={onNavigate}>
+              <ProjectIcon project={p} className="row-span-2 mt-0.5" />
               <span className="flex items-center gap-1 truncate">
                 {p.settings.pinned && <Pin className="size-3 shrink-0 text-muted-foreground" aria-label="Pinned" />}
                 <span className="truncate">{p.name}</span>
               </span>
               <span className="truncate text-xs font-normal text-muted-foreground">
-                {p.lastRun ? `${p.lastRun.status === 'running' ? 'Auditing now' : `Last audit ${formatDateTime(p.lastRun.startedAt)}`}` : 'No audits yet'}
+                {queuedFor(p)
+                  ? `Queued, ${ordinal(queuedFor(p)!.position)} in line`
+                  : p.lastRun
+                    ? `${p.lastRun.status === 'running' ? 'Auditing now' : `Last audit ${formatDateTime(p.lastRun.startedAt)}`}`
+                    : 'No audits yet'}
               </span>
             </NavLink>
           </div>
@@ -112,6 +130,31 @@ export function ProjectSidebar({ onNavigate }: { onNavigate?: () => void }) {
       </NavLink>
       <nav aria-label="Projects" className="flex min-h-0 flex-1 flex-col">
         <div className="min-h-0 flex-1 overflow-y-auto">
+          {!!queue.data?.length && (
+            <>
+              <h2 className="px-3 pb-1 text-xs font-semibold tracking-wide text-muted-foreground uppercase">Queue</h2>
+              <ul className="mb-3 grid gap-0.5">
+                {queue.data.map((q) => (
+                  <li key={q.id} className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm">
+                    <ListOrdered aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
+                    <span className="grid min-w-0 flex-1">
+                      <span className="truncate">{q.project}</span>
+                      <span className="truncate text-xs text-muted-foreground">Waiting, {ordinal(q.position)} in line</span>
+                    </span>
+                    <button
+                      type="button"
+                      aria-label={`Remove ${q.project} from the queue`}
+                      title="Remove from the queue"
+                      className="grid size-7 shrink-0 place-items-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
+                      onClick={() => unqueue.mutate(q.id)}
+                    >
+                      <X aria-hidden="true" className="size-4" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
           {pinned.length > 0 && (
             <>
               <h2 className="px-3 pb-1 text-xs font-semibold tracking-wide text-muted-foreground uppercase">Pinned</h2>

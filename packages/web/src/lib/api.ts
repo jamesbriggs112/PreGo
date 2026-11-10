@@ -183,6 +183,18 @@ export interface AuditPlan {
   estimate: string;
 }
 
+/** An audit waiting for the running one to finish. */
+export interface QueuedAudit {
+  id: number;
+  project: string;
+  target: string;
+  queuedAt: string;
+  position: number;
+}
+
+/** Starting an audit either starts it or, while another is running, puts it in the queue. */
+export type StartResult = { runId: number; projectId: number; queued?: undefined } | { queued: QueuedAudit; runId: number | null };
+
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -210,10 +222,12 @@ export const api = {
   project: (id: number) => request<ProjectDetail>(`/api/projects/${id}`),
   createProject: (name: string) => post<Project>('/api/projects', { name }),
   pinProject: (id: number, pinned: boolean) => request<{ pinned: boolean }>(`/api/projects/${id}/pinned`, { method: 'PUT', body: JSON.stringify({ pinned }) }),
-  rerun: (runId: number) => request<{ runId: number; projectId: number }>(`/api/runs/${runId}/rerun`, { method: 'POST' }),
+  rerun: (runId: number) => request<StartResult>(`/api/runs/${runId}/rerun`, { method: 'POST' }),
   deleteProject: (id: number) =>
     request<{ deleted: { project: string; audits: number; exports: number } }>(`/api/projects/${id}`, { method: 'DELETE' }),
-  startRun: (body: StartRunBody) => post<{ runId: number; projectId: number }>('/api/runs', body),
+  startRun: (body: StartRunBody) => post<StartResult>('/api/runs', body),
+  queue: () => request<QueuedAudit[]>('/api/queue'),
+  unqueue: (id: number) => request<null>(`/api/queue/${id}`, { method: 'DELETE' }),
   planAudit: (text: string) => post<AuditPlan>('/api/assistant/plan', { text }),
   vulnDb: () => request<VulnDbStatus>('/api/vulndb'),
   updateVulnDb: () => request<VulnDbStatus>('/api/vulndb/update', { method: 'POST' }),

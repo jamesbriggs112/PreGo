@@ -14,6 +14,7 @@ import { runStep, type Journey, type JourneyStep } from '../journeys/journey.js'
 import { crawlSite, type FailedPage } from '../crawl/crawler.js';
 import { extractStructure, groupTemplates, samplePages } from '../crawl/templates.js';
 import { captureCrop, captureFullPage } from '../capture/capture.js';
+import { iconDataUrl, readHead, saveShareImage } from '../capture/head.js';
 import { describeComponent } from '../tickets/component.js';
 import { buildTickets } from '../tickets/build.js';
 import { serveFolder, type StaticServer } from '../serve/static-server.js';
@@ -225,6 +226,7 @@ export async function runAudit(db: PregoDb, options: AuditOptions): Promise<Audi
       ...(discovery.modules ?? []),
     ];
     const firstViewport = viewportName(viewports[0], options.emulation);
+    const head: HeadCapture = { shareImages: new Map(), iconTried: false };
     activeModules = modules;
     const timings: AuditTimings = { discoveryMs: Date.now() - discoveryStarted, pageViews: 0, openMs: 0, checks: {} };
 
@@ -236,7 +238,7 @@ export async function runAudit(db: PregoDb, options: AuditOptions): Promise<Audi
     await runPool(jobs, mode === 'crawl' ? (options.concurrency ?? 2) : 1, async ({ location, profile }) => {
       throwIfAborted(options.signal);
       try {
-        const result = await auditLocation(db, () => discovery.open(location, profile), run, runDir, location, modules, options.maxCropsPerLocation ?? 100, firstViewport, timings);
+        const result = await auditLocation(db, () => discovery.open(location, profile), run, runDir, location, modules, options.maxCropsPerLocation ?? 100, firstViewport, timings, head);
         done++;
         emit({ type: 'location-audited', url: location.title && mode !== 'crawl' ? location.title : location.url, viewport: result.viewport, findings: result.findings, done, total: jobs.length, screenshot: result.screenshot });
       } catch (error) {
@@ -360,6 +362,41 @@ export interface AuditTimings {
   viewports?: number;
 }
 
+/** Shared across a run's pages: share images already saved (by address), and whether the site's icon was looked for. */
+interface HeadCapture {
+  shareImages: Map<string, Promise<string | null>>;
+  iconTried: boolean;
+}
+
+/**
+ * Record what the page's head says (title, description, share tags, icons) for the Previews tab, save
+ * its share image, and keep the site's icon with the project. Only files the page links to are fetched.
+ */
+async function captureHead(db: PregoDb, page: OpenedPage['page'], run: Run, runDir: string, location: Location, head: HeadCapture) {
+  try {
+    const metrics = await readHead(page);
+    const image = metrics.og.image ?? metrics.twitter.image;
+    const saved = (db.getLocation(location.id)!.metrics.sharing as { image?: { url: string; file: string | null } | null } | undefined)?.image;
+    if (image && saved?.url === image && saved.file) metrics.shareImage = saved.file;
+    else if (image) {
+      if (!head.shareImages.has(image)) {
+        const n = head.shareImages.size + 1;
+        head.shareImages.set(image, n > 50 ? Promise.resolve(null) : saveShareImage(page, image, (ext) => ({ relative: join('previews', `share-${n}.${ext}`), full: join(runDir, 'previews', `share-${n}.${ext}`) })));
+      }
+      metrics.shareImage = await head.shareImages.get(image)!;
+    }
+    db.updateLocation(location.id, { metrics: { ...db.getLocation(location.id)!.metrics, head: metrics } });
+    // The icon of the first top-level page that links one stands for the project in lists.
+    if (!head.iconTried && location.depth === 0 && metrics.icons.length) {
+      head.iconTried = true;
+      const icon = await iconDataUrl(page, metrics.icons);
+      if (icon) db.saveProjectSettings(run.projectId, { icon: { ...icon, savedAt: new Date().toISOString() } });
+    }
+  } catch {
+    // Previews are extras: a page that won't give up its head shouldn't stop the audit.
+  }
+}
+
 async function auditLocation(
   db: PregoDb,
   open: () => Promise<OpenedPage>,
@@ -370,6 +407,7 @@ async function auditLocation(
   maxCrops: number,
   firstViewport: string,
   timings: AuditTimings,
+  head: HeadCapture,
 ): Promise<{ viewport: string; findings: number; screenshot: string }> {
   const opening = Date.now();
   const opened = await open();
@@ -400,6 +438,8 @@ async function auditLocation(
       );
       timings.checks[module.id] = (timings.checks[module.id] ?? 0) + Date.now() - started;
     }
+    // After the checks, so the share image the sharing check saved can be used rather than fetched again.
+    if (opened.viewport === firstViewport && (location.kind === 'page' || location.depth === 0)) await captureHead(db, opened.page, run, runDir, location, head);
     for (const [module, own] of byModule) {
       if (!module.dedupe) continue;
       const others = [...byModule].filter(([m]) => m !== module).flatMap(([, f]) => f);

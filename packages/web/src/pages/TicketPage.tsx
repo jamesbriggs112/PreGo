@@ -26,7 +26,7 @@ export function TicketPage() {
   const ticket = useQuery({ queryKey: ['ticket', runId, ticketId], queryFn: () => api.ticket(runId, ticketId) });
   useTitle(ticket.data ? `${ticket.data.ticketId}: ${ticket.data.title}` : ticketId);
 
-  const backTo = `/runs/${runId}${from ? `?${from}` : ''}`;
+  const backTo = `/runs/${runId}?${from ?? 'tab=tickets'}`;
   return (
     <div className="space-y-6">
       <Link to={backTo} className="inline-flex items-center gap-1 text-sm text-primary underline-offset-2 hover:underline">

@@ -224,4 +224,30 @@ describe('the project menu', () => {
     expect((await refused.json()).error).toMatch(/site password/);
     expect((await fetch(`${base}/api/runs/9999/rerun`, { method: 'POST' })).status).toBe(404);
   }, 180_000);
+
+  it('starts queued audits in turn when the one before finishes', async () => {
+    const body = (project: string) => json('POST', { project, target: resolve('fixtures/bad-site'), checks: ['content'], viewports: ['mobile'], delayMs: 0, maxPages: 1 });
+    const first = await (await fetch(`${base}/api/runs`, body('Queue one'))).json();
+    const second = await (await fetch(`${base}/api/runs`, body('Queue two'))).json();
+    const third = await (await fetch(`${base}/api/runs`, body('Queue three'))).json();
+    expect(second.queued).toMatchObject({ project: 'Queue two', position: 1 });
+    expect(third.queued).toMatchObject({ project: 'Queue three', position: 2 });
+    expect(second.runId).toBe(first.runId);
+
+    await prego.jobs.get(first.runId)!.done;
+    // The second starts by itself; the third waits for it.
+    let active: { runId: number } | null = null;
+    for (let i = 0; i < 100 && !active; i++) {
+      active = await (await fetch(`${base}/api/runs/active`)).json();
+      if (!active) await new Promise((r) => setTimeout(r, 50));
+    }
+    expect(db.getRun(active!.runId)).toMatchObject({ status: 'running' });
+    expect(db.getProject(db.getRun(active!.runId)!.projectId)!.name).toBe('Queue two');
+    expect(await (await fetch(`${base}/api/queue`)).json()).toMatchObject([{ project: 'Queue three', position: 1 }]);
+    await prego.jobs.get(active!.runId)!.done;
+    for (let i = 0; i < 100 && (await (await fetch(`${base}/api/queue`)).json()).length; i++) await new Promise((r) => setTimeout(r, 50));
+    const last = (await (await fetch(`${base}/api/runs/active`)).json()) as { runId: number } | null;
+    if (last) await prego.jobs.get(last.runId)!.done;
+    expect(db.listProjects().map((p) => p.name)).toEqual(expect.arrayContaining(['Queue one', 'Queue two', 'Queue three']));
+  }, 180_000);
 });

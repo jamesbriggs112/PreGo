@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Clock } from 'lucide-react';
 import { PROFILES, type ProfileName } from '@prego/core/profiles';
 import { api, type AuditPlan } from '@/lib/api';
@@ -8,6 +8,8 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Alert } from '@/components/ui/alert';
 import { Textarea } from '@/components/ui/textarea';
+import { QueuedNotice } from '@/components/QueuedNotice';
+import { useAuditRunning } from '@/lib/use-queue';
 
 /**
  * Describe an audit in plain English. Prego reads it into settings and shows them for confirmation;
@@ -17,7 +19,15 @@ export function AuditAssistant() {
   const navigate = useNavigate();
   const [text, setText] = useState('');
   const plan = useMutation({ mutationFn: api.planAudit });
-  const start = useMutation({ mutationFn: api.startRun, onSuccess: ({ runId }) => navigate(`/runs/${runId}`) });
+  const queryClient = useQueryClient();
+  const running = useAuditRunning();
+  const start = useMutation({
+    mutationFn: api.startRun,
+    onSuccess: (result) => {
+      if (result.queued) void queryClient.invalidateQueries({ queryKey: ['queue'] });
+      else navigate(`/runs/${result.runId}`);
+    },
+  });
 
   function onSubmit(event: FormEvent) {
     event.preventDefault();
@@ -69,7 +79,8 @@ export function AuditAssistant() {
           {plan.error.message}
         </Alert>
       )}
-      <div aria-live="polite">{plan.data && <Confirmation plan={plan.data} onChange={() => changeSettings(plan.data.run)} onStart={() => start.mutate(plan.data.run)} starting={start.isPending} />}</div>
+      <div aria-live="polite">{plan.data && <Confirmation plan={plan.data} onChange={() => changeSettings(plan.data.run)} onStart={() => start.mutate(plan.data.run)} starting={start.isPending} queues={running} queued={!!start.data?.queued} />}</div>
+      {start.data?.queued && <QueuedNotice queued={start.data.queued} runningId={start.data.runId} />}
       {start.isError && (
         <Alert variant="destructive" role="alert">
           {start.error.message}
@@ -79,7 +90,7 @@ export function AuditAssistant() {
   );
 }
 
-function Confirmation({ plan, onStart, onChange, starting }: { plan: AuditPlan; onStart: () => void; onChange: () => void; starting: boolean }) {
+function Confirmation({ plan, onStart, onChange, starting, queues, queued }: { plan: AuditPlan; onStart: () => void; onChange: () => void; starting: boolean; queues: boolean; queued: boolean }) {
   const { run } = plan;
   const limit = run.maxStates ?? run.maxPages;
   const noun = run.mode === 'explore' ? 'screens' : 'pages';
@@ -127,8 +138,8 @@ function Confirmation({ plan, onStart, onChange, starting }: { plan: AuditPlan; 
       <p className="text-xs text-muted-foreground">{plan.source === 'ollama' ? 'Read by the AI model running on this computer.' : 'Read by Prego’s built-in reader.'}</p>
       <div className="flex flex-wrap gap-3">
         {plan.problems.length === 0 && (
-          <Button onClick={onStart} disabled={starting}>
-            {starting ? 'Starting…' : 'Start audit'}
+          <Button onClick={onStart} disabled={starting || queued}>
+            {starting ? 'Starting…' : queued ? 'Queued' : queues ? 'Add to queue' : 'Start audit'}
           </Button>
         )}
         <Button variant="outline" onClick={onChange}>

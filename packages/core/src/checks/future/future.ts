@@ -8,11 +8,11 @@ import { guidanceFor } from '../guidance.js';
 // robots.txt and the sitemap) and asks nothing of the site that an ordinary crawler wouldn't.
 
 const RULES: Record<string, { severity: Severity; category: Category; siteWide: boolean }> = {
-  'content-needs-javascript': { severity: 'Medium', category: 'TECH', siteWide: false },
-  'structured-data-invalid': { severity: 'Medium', category: 'TECH', siteWide: false },
-  'structured-data-missing': { severity: 'Low', category: 'CONT', siteWide: true },
-  'organisation-data-missing': { severity: 'Low', category: 'CONT', siteWide: true },
-  'sitemap-no-dates': { severity: 'Low', category: 'TECH', siteWide: true },
+  'content-needs-javascript': { severity: 'Medium', category: 'FUT', siteWide: false },
+  'structured-data-invalid': { severity: 'Medium', category: 'FUT', siteWide: false },
+  'structured-data-missing': { severity: 'Low', category: 'FUT', siteWide: true },
+  'organisation-data-missing': { severity: 'Low', category: 'FUT', siteWide: true },
+  'sitemap-no-dates': { severity: 'Low', category: 'FUT', siteWide: true },
 };
 
 /** AI crawlers and the companies behind them. Blocking them is a choice, so the report shows it rather than raising tickets. */

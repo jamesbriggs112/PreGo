@@ -78,7 +78,8 @@ export function buildDashboard(input: DashboardInput): Dashboard {
 export function dashboardTiles(input: DashboardInput, legal: LegalSummary = legalSignals(input)): DashboardTile[] {
   const { run, locations, tickets, scores } = input;
   const s = run.summary as Record<string, number>;
-  const tiles: DashboardTile[] = Object.entries(scores).map(([category, score]) => ({
+  // Future readiness has its own tile below, with the same score.
+  const tiles: DashboardTile[] = Object.entries(scores).filter(([category]) => category !== 'FUT').map(([category, score]) => ({
     id: `score-${category}`,
     label: `${CATEGORY_NAMES[category as Category]} score`,
     value: String(score),

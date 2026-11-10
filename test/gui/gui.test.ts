@@ -116,7 +116,16 @@ describe('Live run screen', () => {
     await expect(page.getByText(/\d+ of 10 page checks done/).count()).resolves.toBe(1);
     expect(await page.getByRole('listitem').filter({ hasText: 'Checked' }).count()).toBeGreaterThan(0);
 
+    // Another audit started meanwhile waits in the queue, shown in the sidebar, and can be taken out.
+    const queuedRes = await page.request.post(`${gui.url}api/runs`, { data: { project: 'Queued Co', target: fixture, delayMs: 0 } });
+    expect((await queuedRes.json()).queued).toMatchObject({ project: 'Queued Co', position: 1 });
+    const queued = page.getByRole('navigation', { name: 'Projects' }).getByText('Queued Co');
+    await queued.waitFor();
+    await page.getByText('Waiting, 1st in line').waitFor();
+
     expect(await axeViolations(page)).toEqual([]);
+    await page.getByRole('button', { name: 'Remove Queued Co from the queue' }).click();
+    await expect.poll(() => queued.count()).toBe(0);
 
     await page.getByRole('button', { name: 'Stop audit' }).click();
     await page.getByText('This audit was stopped before it finished.').waitFor({ timeout: 30_000 });
@@ -134,6 +143,7 @@ describe('Results and ticket triage', () => {
     await page.goto(`${gui.url}runs/${runId}`);
     await page.getByRole('heading', { name: 'Audit of Acme Widgets' }).waitFor();
     await page.getByText('Accessibility score').waitFor();
+    await page.getByRole('tab', { name: /^Tickets/ }).click();
     const total = gui.db.getTickets(runId).length;
     await expect.poll(() => rows().count()).toBe(total);
 
@@ -199,6 +209,23 @@ describe('Results and ticket triage', () => {
     expect(gui.db.getTicket(runId, keep.ticketId)!.occurrences).toBe(keep.occurrences + drop.occurrences);
     merged = { keep: keep.ticketId, drop: drop.ticketId };
   });
+
+  it('shows search and share previews, and every page with its tickets', async () => {
+    const { page } = gui;
+    await page.goto(`${gui.url}runs/${runId}?tab=previews`);
+    await page.getByRole('figure', { name: 'Search result preview' }).waitFor();
+    await page.getByRole('figure', { name: 'Link preview' }).waitFor();
+    await page.getByRole('heading', { name: 'Tags on this page' }).waitFor();
+    expect(await axeViolations(page)).toEqual([]);
+
+    await page.getByRole('tab', { name: 'Pages' }).click();
+    await page.getByRole('heading', { name: 'Pages', level: 2 }).or(page.getByText(/ of \d+ audited\./)).first().waitFor();
+    expect(await page.locator('tbody tr').count()).toBe(gui.db.getLocations(runId).length);
+    expect(await axeViolations(page)).toEqual([]);
+    await page.getByRole('button', { name: /^Show the \d+ tickets on / }).first().click();
+    await expect.poll(() => new URL(page.url()).searchParams.get('tab')).toBe('tickets');
+    expect(new URL(page.url()).searchParams.get('page')).toBeTruthy();
+  }, 60_000);
 
   it('carries every change into the next export', async () => {
     const { keep, drop } = merged;
@@ -494,6 +521,7 @@ describe('Scripted journeys (criterion 4)', () => {
     await page.goto(`${gui.url}runs/${journeyRun}`);
     await page.getByText('Journey steps audited').waitFor();
     await expect(page.getByText('4 of 4').count()).resolves.toBe(1);
+    await page.getByRole('tab', { name: /^Tickets/ }).click();
     await page.getByLabel('Step', { exact: true }).selectOption({ label: 'Step 3: Click the “Contact” link' });
     await expect.poll(() => page.locator('tbody tr').filter({ hasText: 'Form fields have no label' }).count()).toBe(1);
     expect(await axeViolations(page)).toEqual([]);

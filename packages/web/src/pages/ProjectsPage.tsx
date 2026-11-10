@@ -12,6 +12,7 @@ import { Alert } from '@/components/ui/alert';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { RunStatusBadge } from '@/components/RunStatusBadge';
+import { ProjectIcon } from '@/components/ProjectIcon';
 import { DeleteProjectDialog } from '@/components/DeleteProjectDialog';
 
 export function ProjectsPage() {
@@ -76,7 +77,12 @@ export function ProjectsPage() {
               <TableBody>
                 {projects.data.map((project) => (
                   <TableRow key={project.id}>
-                    <TableCell className="font-medium">{project.name}</TableCell>
+                    <TableCell className="font-medium">
+                      <span className="flex items-center gap-2">
+                        <ProjectIcon project={project} />
+                        {project.name}
+                      </span>
+                    </TableCell>
                     <TableCell>{project.lastRun ? formatDateTime(project.lastRun.startedAt) : 'Never audited'}</TableCell>
                     <TableCell>{project.lastRun ? <RunStatusBadge status={project.lastRun.status} /> : '–'}</TableCell>
                     <TableCell>{project.scores?.A11Y ?? '–'}</TableCell>

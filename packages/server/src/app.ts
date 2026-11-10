@@ -6,6 +6,7 @@ import JSZip from 'jszip';
 import mammoth from 'mammoth';
 import {
   CATEGORIES,
+  assessReadiness,
   PregoDb,
   CSV_PRESETS,
   DEFAULT_DENY_LABELS,
@@ -94,7 +95,7 @@ export interface PregoApp {
 
 const LOCAL_HOSTNAMES = new Set(['localhost', '127.0.0.1', '[::1]', '::1']);
 
-const IMAGE_TYPES: Record<string, string> = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg' };
+const IMAGE_TYPES: Record<string, string> = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp', '.avif': 'image/avif' };
 
 /** Body of POST /api/runs. Credentials are passed to the audit and never stored. */
 interface StartRunBody {
@@ -247,6 +248,7 @@ export async function buildApp(options: AppOptions): Promise<PregoApp> {
     const project = db.getProject(Number(request.params.id));
     if (!project) return reply.code(404).send({ error: 'Project not found' });
     if (jobs.activeJob?.projectId === project.id) return reply.code(409).send({ error: 'Stop the running audit before deleting this project.' });
+    jobs.unqueueProject(project.name);
     const deleted = db.deleteProject(project.id)!;
     // Only ever remove files inside the data folder.
     const root = resolve(dataDir) + sep;
@@ -361,7 +363,7 @@ export async function buildApp(options: AppOptions): Promise<PregoApp> {
       if (checks.includes('tasks') && !project?.settings.audience?.tasks.length) {
         return reply.code(400).send({ error: 'The task walkthrough needs personas and tasks. Set them up on this project’s Purposes and audience page first.' });
       }
-      const job = await jobs.start({
+      const outcome = await jobs.startOrQueue({
         ai,
         project: body.project.trim(),
         target,
@@ -389,16 +391,19 @@ export async function buildApp(options: AppOptions): Promise<PregoApp> {
         delayMs: body.delayMs,
         basicAuth: body.basicAuth?.username ? body.basicAuth : undefined,
         competitors: body.competitors,
+      }, (job) => {
+        // Remember the explorer's denylist and masks for this project's next audit.
+        if (explore) {
+          db.saveProjectSettings(job.projectId, {
+            ...(body.denyLabels && { denyLabels: clean(body.denyLabels) }),
+            ...(body.denySelectors && { denySelectors: clean(body.denySelectors) }),
+            ...(body.maskSelectors && { maskSelectors: clean(body.maskSelectors) }),
+          });
+        }
       });
-      // Remember the explorer's denylist and masks for this project's next audit.
-      if (explore) {
-        db.saveProjectSettings(job.projectId, {
-          ...(body.denyLabels && { denyLabels: clean(body.denyLabels) }),
-          ...(body.denySelectors && { denySelectors: clean(body.denySelectors) }),
-          ...(body.maskSelectors && { maskSelectors: clean(body.maskSelectors) }),
-        });
-      }
-      return reply.code(202).send({ runId: job.runId, projectId: job.projectId });
+      // Another audit is running: this one waits its turn.
+      if ('queued' in outcome) return reply.code(202).send({ queued: outcome.queued, runId: jobs.activeJob?.runId ?? null });
+      return reply.code(202).send({ runId: outcome.job.runId, projectId: outcome.job.projectId });
     } catch (error) {
       if (error instanceof AuditInProgressError) return reply.code(409).send({ error: error.message, runId: error.runId });
       throw error;
@@ -440,6 +445,14 @@ export async function buildApp(options: AppOptions): Promise<PregoApp> {
     // Through the same route as the New audit form, so every check on the settings applies.
     const response = await app.inject({ method: 'POST', url: '/api/runs', payload: JSON.parse(JSON.stringify(body)) });
     return reply.code(response.statusCode).send(response.json());
+  });
+
+  // Audits waiting for the running one to finish. Held in memory only.
+  app.get('/api/queue', async () => jobs.queued.map((q, i) => ({ ...q, position: i + 1 })));
+
+  app.delete<{ Params: { id: string } }>('/api/queue/:id', async (request, reply) => {
+    if (!jobs.unqueue(Number(request.params.id))) return reply.code(404).send({ error: 'That audit isn’t in the queue any more. It may have started.' });
+    return reply.code(204).send();
   });
 
   app.get('/api/runs/active', async () => {
@@ -1092,8 +1105,9 @@ export function scoresFor(db: PregoDb, run: Run): Partial<Record<Category, numbe
   const scores: Partial<Record<Category, number>> = {};
   for (const category of CATEGORIES) {
     if (!checked.has(category)) continue;
-    const lighthouse = category === 'PERF' ? averagePerformance(db.getLocations(run.id)) : null;
-    scores[category] = lighthouse ?? categoryScore(tickets.filter((t) => t.category === category).map((t) => t.severity));
+    // Performance uses Lighthouse's score and Future readiness its checklist score, when there are figures.
+    const measured = category === 'PERF' ? averagePerformance(db.getLocations(run.id)) : category === 'FUT' ? (assessReadiness(db.getLocations(run.id))?.score ?? null) : null;
+    scores[category] = measured ?? categoryScore(tickets.filter((t) => t.category === category).map((t) => t.severity));
   }
   return scores;
 }

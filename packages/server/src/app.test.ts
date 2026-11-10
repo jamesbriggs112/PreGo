@@ -91,16 +91,22 @@ describe('starting an audit', () => {
     expect((await post('/api/runs', { project: 'Acme', target: fixture, colour: 'red' })).status).toBe(400);
   });
 
-  it('runs in the background, streams progress and refuses a second audit meanwhile', async () => {
+  it('runs in the background, streams progress and queues a second audit meanwhile', async () => {
     const res = await post('/api/runs', { project: 'Acme', target: fixture, delayMs: 0, viewports: ['desktop'] });
     expect(res.status).toBe(202);
     const { runId } = await res.json();
     completedRunId = runId;
     expect(await (await api('/api/runs/active')).json()).toMatchObject({ runId });
 
+    // A second audit waits its turn; taking it out of the queue means it never starts.
     const busy = await post('/api/runs', { project: 'Acme', target: fixture });
-    expect(busy.status).toBe(409);
-    expect(await busy.json()).toMatchObject({ runId });
+    expect(busy.status).toBe(202);
+    const queued = await busy.json();
+    expect(queued).toMatchObject({ runId, queued: { project: 'Acme', target: fixture, position: 1 } });
+    expect(await (await api('/api/queue')).json()).toMatchObject([{ id: queued.queued.id, position: 1 }]);
+    expect((await fetch(`${base}/api/queue/${queued.queued.id}`, { method: 'DELETE' })).status).toBe(204);
+    expect(await (await api('/api/queue')).json()).toEqual([]);
+    expect((await fetch(`${base}/api/queue/${queued.queued.id}`, { method: 'DELETE' })).status).toBe(404);
 
     const events = await readEvents(runId);
     expect(events[0]).toMatchObject({ type: 'started', runId });

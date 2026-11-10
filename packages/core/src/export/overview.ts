@@ -18,6 +18,7 @@ const COVERS: Record<Category, string> = {
   PERF: 'How quickly pages load and respond (Lighthouse)',
   SEC: 'HTTPS, security settings and cookies that protect visitors and the organisation',
   TECH: 'Valid code, working links and other technical health',
+  FUT: 'Whether search engines, AI assistants and voice search can read and understand the site',
 };
 
 /** A plain-English reading of a score. */

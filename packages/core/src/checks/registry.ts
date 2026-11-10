@@ -197,7 +197,7 @@ const definitions: CheckDefinition[] = [
     id: 'future',
     name: 'Future readiness',
     description: 'How ready the site is for AI assistants, answer engines and voice search: which AI crawlers robots.txt allows, how much content needs JavaScript, structured data, question-and-answer content and sitemap dates. Reads only what the site publishes.',
-    categories: ['TECH', 'CONT'],
+    categories: ['FUT'],
     defaultOn: true,
     cost: { seconds: [0.1, 0.5], perPage: true },
     create: (context) => futureModule(context.startUrl),

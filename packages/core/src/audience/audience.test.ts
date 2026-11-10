@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { PregoDb } from '../db/database.js';
 import { runAudit } from '../audit/run-audit.js';
-import { siteFacts, suggestAudience, suggestAudienceFor, askOllamaForAudience, type SiteFacts } from './suggest.js';
+import { siteFacts, suggestAudience, suggestAudienceFor, askOllamaForAudience, progressOf, type SiteFacts, type SuggestProgress } from './suggest.js';
 import { parseAudienceProfile } from './profile.js';
 
 const dataDir = mkdtempSync(join(tmpdir(), 'prego-audience-'));
@@ -104,6 +104,64 @@ describe('suggestions from Ollama', () => {
     expect(fallback).toMatchObject({ source: 'reader', note: expect.stringMatching(/no purposes or personas/) });
     expect((await suggestAudienceFor(facts, undefined)).source).toBe('reader');
     await expect(askOllamaForAudience({ url: 'https://ollama.example.com', model: 'm' }, facts, fake(answer))).rejects.toThrow(/only talks to Ollama on this computer/);
+  });
+});
+
+describe('streaming the model’s answer', () => {
+  const facts: SiteFacts = { name: 'Acme', navigation: [], pages: [{ path: '/', title: 'Home', headings: [] }], searches: [] };
+  const answer = JSON.stringify({
+    purposes: [{ title: 'Sell widgets', description: '', primary: true, evidence: [] }],
+    personas: [{ name: 'Sam', summary: '', context: '', device: 'mobile', accessNeeds: '', internal: false, purposes: [1], tasks: [] }],
+  });
+  // Ollama streams one JSON line per few tokens; split the answer into pieces, and the lines across reads.
+  const streamed = (text: string, opts: { hang?: boolean } = {}) =>
+    (async (_url: unknown, init: RequestInit) => {
+      const lines = text.match(/.{1,25}/gs)!.map((c) => JSON.stringify({ message: { content: c }, done: false }) + '\n').join('');
+      const bytes = new TextEncoder().encode(lines);
+      const body = new ReadableStream<Uint8Array>({
+        async start(controller) {
+          for (let i = 0; i < bytes.length; i += 40) controller.enqueue(bytes.slice(i, i + 40));
+          if (opts.hang) {
+            init.signal?.addEventListener('abort', () => controller.error(new DOMException('aborted', 'AbortError')));
+            return;
+          }
+          controller.close();
+        },
+      });
+      return new Response(body);
+    }) as unknown as typeof fetch;
+
+  it('joins the streamed pieces and reports progress as it goes', async () => {
+    const seen: SuggestProgress[] = [];
+    const profile = await askOllamaForAudience({ url: 'http://127.0.0.1:11434', model: 'm' }, facts, { fetchImpl: streamed(answer), onProgress: (p) => seen.push(p) });
+    expect(profile.personas.map((p) => p.name)).toEqual(['Sam']);
+    expect(seen.map((p) => p.stage)).toEqual(expect.arrayContaining(['purposes', 'personas']));
+    expect(seen.at(-1)).toMatchObject({ stage: 'personas', personas: 1, characters: answer.length });
+  });
+
+  it('stops when asked and falls back to Prego’s own suggestions', async () => {
+    const controller = new AbortController();
+    const pending = suggestAudienceFor(facts, { url: 'http://127.0.0.1:11434', model: 'm' }, { fetchImpl: streamed(answer.slice(0, 60), { hang: true }), signal: controller.signal, onProgress: () => controller.abort() });
+    await expect(pending).resolves.toMatchObject({ source: 'reader', note: expect.stringMatching(/You stopped the AI model/) });
+  });
+
+  it('asks once more when the model answers with empty lists', async () => {
+    const bodies: { messages: { role: string }[]; options: { temperature: number; num_predict: number } }[] = [];
+    const answers = [JSON.stringify({ purposes: [], personas: [] }), answer];
+    const fetchImpl = (async (_url: unknown, init: RequestInit) => {
+      bodies.push(JSON.parse(init.body as string));
+      return new Response(JSON.stringify({ message: { content: answers.shift() } }));
+    }) as unknown as typeof fetch;
+    const profile = await askOllamaForAudience({ url: 'http://127.0.0.1:11434', model: 'm' }, facts, { fetchImpl });
+    expect(profile.personas.map((p) => p.name)).toEqual(['Sam']);
+    expect(bodies.map((b) => b.messages.map((m) => m.role))).toEqual([['user'], ['user', 'assistant', 'user']]);
+    expect(bodies[1].options).toMatchObject({ temperature: 0.5, num_predict: 6000 });
+  });
+
+  it('reads the stage from partial answers', () => {
+    expect(progressOf('')).toMatchObject({ stage: 'starting' });
+    expect(progressOf('{"purposes":[{"title":"A"')).toMatchObject({ stage: 'purposes', personas: 0 });
+    expect(progressOf('{"purposes":[],"personas":[{"name":"A","tasks":[]},{"name": "B"')).toMatchObject({ stage: 'personas', personas: 2 });
   });
 });
 

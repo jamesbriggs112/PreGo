@@ -77,3 +77,16 @@ export interface AudienceSuggestion {
   /** Why the AI suggestion wasn't used, if it wasn't. */
   note?: string;
 }
+
+/** A suggestion being worked out in the background, as the server reports it. */
+export interface SuggestJob {
+  id: number;
+  status: 'running' | 'done';
+  /** Whether the AI model is writing it (slow) or Prego's own rules (instant). */
+  ai: boolean;
+  startedAt: string;
+  /** Seconds since it started, or how long it took. */
+  seconds: number;
+  progress: { stage: 'starting' | 'purposes' | 'personas'; personas: number; characters: number } | null;
+  suggestion: AudienceSuggestion | null;
+}

@@ -149,7 +149,9 @@ async function readPage(page: Page, deny: string[]): Promise<{ options: Option[]
       text: body.replace(/\s+/g, ' ').trim().slice(0, 1200),
     };
   }, deny);
-  return { ...read, options: read.options.map((o, i) => ({ ...o, n: i + 1 })) as Option[] };
+  // File downloads (PDFs, documents, media) aren't pages to walk through, so they're never offered.
+  const pages = read.options.filter((o) => !o.href || !DOWNLOAD.test(new URL(o.href).pathname));
+  return { ...read, options: pages.map((o, i) => ({ ...o, n: i + 1 })) as Option[] };
 }
 
 export async function walkTasks(profile: AudienceProfile, options: WalkOptions): Promise<WalkResult[]> {

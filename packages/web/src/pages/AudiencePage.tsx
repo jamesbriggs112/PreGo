@@ -1,8 +1,8 @@
 import { useState, type ReactNode } from 'react';
 import { Link, useParams } from 'react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Plus, Sparkles, Trash2 } from 'lucide-react';
-import type { AudienceProfile, Persona, PersonaDevice, Purpose, TaskSuccess, UserTask } from '@prego/core/types';
+import { ArrowLeft, CircleStop, Loader2, Plus, Sparkles, Trash2 } from 'lucide-react';
+import type { AudienceProfile, AudienceSuggestion, Persona, PersonaDevice, Purpose, SuggestJob, TaskSuccess, UserTask } from '@prego/core/types';
 import { api } from '@/lib/api';
 import { useTitle } from '@/lib/use-title';
 import { Button } from '@/components/ui/button';
@@ -70,6 +70,14 @@ function mergeSuggestion(current: AudienceProfile, suggested: AudienceProfile): 
   return { ...current, purposes, personas, tasks };
 }
 
+/** What the AI model is doing, and for how long, in a few words. */
+function progressText(job: SuggestJob): string {
+  const time = job.seconds < 60 ? `${job.seconds}s` : `${Math.floor(job.seconds / 60)}m ${String(job.seconds % 60).padStart(2, '0')}s`;
+  const p = job.progress;
+  const stage = !p || p.stage === 'starting' ? 'Reading the audit' : p.stage === 'purposes' ? 'Working out what the site is for' : `Writing persona ${Math.max(1, p.personas)}`;
+  return `${stage}… (${time})`;
+}
+
 /** A project's purposes, personas and tasks: suggested from its latest audit, then edited here. */
 export function AudiencePage() {
   const projectId = Number(useParams().projectId);
@@ -80,13 +88,34 @@ export function AudiencePage() {
   const [dirty, setDirty] = useState(false);
   useTitle(project.data ? `Purposes and audience: ${project.data.name}` : 'Purposes and audience');
 
+  // Suggesting runs in the background on the server; this page watches the job it started (or one
+  // already running when it opened) and adds the result to the draft when it's done.
+  const [watching, setWatching] = useState<number | null>(null);
+  const [added, setAdded] = useState<AudienceSuggestion | null>(null);
+  const job = useQuery({
+    queryKey: ['suggest', projectId],
+    queryFn: () => api.suggestJob(projectId),
+    refetchInterval: (query) => (query.state.data?.status === 'running' ? 1000 : false),
+  });
   const suggest = useMutation({
     mutationFn: () => api.suggestAudience(projectId),
-    onSuccess: (suggestion) => {
-      setDraft((d) => mergeSuggestion(d ?? audience.data?.profile ?? EMPTY, suggestion.profile));
-      setDirty(true);
+    onSuccess: (started) => {
+      setAdded(null);
+      setWatching(started.id);
+      queryClient.setQueryData(['suggest', projectId], started);
     },
   });
+  const stop = useMutation({ mutationFn: () => api.stopSuggest(projectId), onSuccess: () => job.refetch() });
+  const current: SuggestJob | null | undefined = job.data;
+  if (current?.status === 'running' && watching === null) setWatching(current.id);
+  if (current && current.id === watching && current.status === 'done' && current.suggestion) {
+    const suggestion = current.suggestion;
+    setWatching(-1);
+    setAdded(suggestion);
+    setDraft((d) => mergeSuggestion(d ?? audience.data?.profile ?? EMPTY, suggestion.profile));
+    setDirty(true);
+  }
+  const running = suggest.isPending || current?.status === 'running';
   const save = useMutation({
     mutationFn: (profile: AudienceProfile) => api.saveAudience(projectId, profile),
     onSuccess: ({ profile }) => {
@@ -129,18 +158,30 @@ export function AudiencePage() {
       )}
 
       <div className="flex flex-wrap items-center gap-3">
-        <Button type="button" variant="outline" onClick={() => suggest.mutate()} disabled={suggest.isPending || !audience.data?.latestRunId}>
-          <Sparkles aria-hidden="true" /> {suggest.isPending ? 'Suggesting…' : profile.purposes.length ? 'Add suggestions from the latest audit' : 'Suggest from the latest audit'}
+        <Button type="button" variant="outline" onClick={() => suggest.mutate()} disabled={running || !audience.data?.latestRunId}>
+          {running ? <Loader2 className="animate-spin" aria-hidden="true" /> : <Sparkles aria-hidden="true" />}{' '}
+          {running ? 'Suggesting…' : profile.purposes.length ? 'Add suggestions from the latest audit' : 'Suggest from the latest audit'}
         </Button>
+        {current?.status === 'running' && current.ai && (
+          <Button type="button" variant="ghost" onClick={() => stop.mutate()} disabled={stop.isPending}>
+            <CircleStop aria-hidden="true" /> Stop and use Prego’s quick suggestions
+          </Button>
+        )}
         {audience.data && !audience.data.latestRunId && <span className="text-sm text-muted-foreground">Run an audit of this site first, then Prego can suggest.</span>}
         <p role="status" className="text-sm text-muted-foreground">
-          {suggest.isSuccess && (suggest.data.source === 'ai' ? 'Added suggestions from the AI model on this computer. Check them before saving.' : 'Added Prego’s suggestions. Check them before saving.')}
+          {current?.status === 'running' && current.ai && <>{progressText(current)} </>}
+          {added && (added.source === 'ai' ? 'Added suggestions from the AI model on this computer. Check them before saving.' : 'Added Prego’s suggestions. Check them before saving.')}
         </p>
       </div>
-      {suggest.data?.note && <Alert role="note">{suggest.data.note}</Alert>}
-      {suggest.isError && (
+      {current?.status === 'running' && current.ai && (
+        <p className="text-sm text-muted-foreground">
+          The AI model on this computer is reading the audit and writing purposes, personas and tasks. This usually takes a minute or two; you can keep editing meanwhile.
+        </p>
+      )}
+      {added?.note && <Alert role="note">{added.note}</Alert>}
+      {(suggest.isError || stop.isError) && (
         <Alert variant="destructive" role="alert">
-          {suggest.error.message}
+          {(suggest.error ?? stop.error)?.message}
         </Alert>
       )}
 

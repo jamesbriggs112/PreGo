@@ -1,5 +1,5 @@
 import type { Calibration, CheckCost, CheckGroup } from '@prego/core/estimate';
-import type { AnalyticsSummary, AudienceProfile, AudienceSuggestion, Category, Location, Priority, Project, Run, Severity, Ticket } from '@prego/core/types';
+import type { AnalyticsSummary, AudienceProfile, SuggestJob, Category, Location, Priority, Project, Run, Severity, Ticket } from '@prego/core/types';
 import type { OptionalSection, ReportOptions } from '@prego/core/report-options';
 
 export type RunSummary = Pick<Run, 'id' | 'projectId' | 'mode' | 'target' | 'status' | 'startedAt' | 'finishedAt' | 'summary' | 'error'>;
@@ -203,7 +203,9 @@ export const api = {
   importAnalytics: (projectId: number, files: { name: string; text: string }[]) =>
     request<{ analytics: AnalyticsSummary }>(`/api/projects/${projectId}/analytics`, { method: 'PUT', body: JSON.stringify({ files }) }),
   audience: (projectId: number) => request<{ profile: AudienceProfile | null; latestRunId: number | null; pages: string[] }>(`/api/projects/${projectId}/audience`),
-  suggestAudience: (projectId: number) => post<AudienceSuggestion>(`/api/projects/${projectId}/audience/suggest`),
+  suggestAudience: (projectId: number) => post<SuggestJob>(`/api/projects/${projectId}/audience/suggest`),
+  suggestJob: (projectId: number) => request<SuggestJob | null>(`/api/projects/${projectId}/audience/suggest`),
+  stopSuggest: (projectId: number) => request<{ stopping: boolean }>(`/api/projects/${projectId}/audience/suggest`, { method: 'DELETE' }),
   saveAudience: (projectId: number, profile: AudienceProfile) =>
     request<{ profile: AudienceProfile }>(`/api/projects/${projectId}/audience`, { method: 'PUT', body: JSON.stringify(profile) }),
   removeAnalytics: (projectId: number) => request<{ analytics: null }>(`/api/projects/${projectId}/analytics`, { method: 'DELETE' }),

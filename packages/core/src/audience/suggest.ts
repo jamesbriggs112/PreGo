@@ -295,7 +295,74 @@ Use British English. Don't invent facts about the organisation.
 
 `;
 
-const TIMEOUT_MS = 180_000;
+/** Give up if the model goes quiet for this long, or runs for longer than the total. */
+const IDLE_MS = 90_000;
+const TOTAL_MS = 10 * 60_000;
+
+/** How far the model has got, from the text it's written so far. */
+export interface SuggestProgress {
+  stage: 'starting' | 'purposes' | 'personas';
+  /** Personas started so far. */
+  personas: number;
+  characters: number;
+}
+
+export function progressOf(text: string): SuggestProgress {
+  const at = text.indexOf('"personas"');
+  if (at === -1) return { stage: text.includes('"purposes"') ? 'purposes' : 'starting', personas: 0, characters: text.length };
+  return { stage: 'personas', personas: (text.slice(at).match(/"name"\s*:/g) ?? []).length, characters: text.length };
+}
+
+export interface AskOptions {
+  fetchImpl?: typeof fetch;
+  signal?: AbortSignal;
+  onProgress?: (progress: SuggestProgress) => void;
+}
+
+/** Ollama's streamed chat answer, joined up. Stops when the model goes quiet, runs too long or is cancelled. */
+async function streamChat(url: URL, body: object, { fetchImpl = fetch, signal, onProgress }: AskOptions): Promise<string> {
+  const controller = new AbortController();
+  let reason = '';
+  const stop = (why: string) => {
+    reason ||= why;
+    controller.abort();
+  };
+  let idle = setTimeout(() => stop('the model stopped answering'), IDLE_MS);
+  const total = setTimeout(() => stop('it took longer than 10 minutes'), TOTAL_MS);
+  const cancel = () => stop('stopped');
+  signal?.addEventListener('abort', cancel);
+  if (signal?.aborted) cancel();
+  try {
+    const res = await fetchImpl(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: controller.signal, body: JSON.stringify({ ...body, stream: true }) });
+    if (!res.ok) throw new Error(`Ollama answered ${res.status}: ${(await res.text()).slice(0, 200)}`);
+    let text = '';
+    let buffer = '';
+    const take = (line: string) => {
+      if (!line.trim()) return;
+      const chunk = JSON.parse(line) as { message?: { content?: string }; error?: string };
+      if (chunk.error) throw new Error(chunk.error);
+      text += chunk.message?.content ?? '';
+    };
+    const decoder = new TextDecoder();
+    for await (const part of res.body as unknown as AsyncIterable<Uint8Array>) {
+      clearTimeout(idle);
+      idle = setTimeout(() => stop('the model stopped answering'), IDLE_MS);
+      buffer += decoder.decode(part, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() ?? '';
+      lines.forEach(take);
+      onProgress?.(progressOf(text));
+    }
+    take(buffer);
+    return text;
+  } catch (error) {
+    throw reason ? new Error(reason) : error;
+  } finally {
+    clearTimeout(idle);
+    clearTimeout(total);
+    signal?.removeEventListener('abort', cancel);
+  }
+}
 
 function factsText(facts: SiteFacts): string {
   const lines = [`Site: ${facts.name}`, `Main navigation: ${facts.navigation.map((n) => `${n.label}${n.path ? ` (${n.path})` : ''}`).join('; ') || 'none found'}`, 'Pages:'];
@@ -309,17 +376,29 @@ function factsText(facts: SiteFacts): string {
 }
 
 /** Ask the local Ollama model for purposes, personas and tasks. Exported for tests. */
-export async function askOllamaForAudience(settings: AiSettings, facts: SiteFacts, fetchImpl: typeof fetch = fetch): Promise<AudienceProfile> {
-  const base = assertLocalOllama(settings.url);
-  const res = await fetchImpl(new URL('/api/chat', base), {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    signal: AbortSignal.timeout(TIMEOUT_MS),
-    body: JSON.stringify({ model: settings.model, stream: false, format: SCHEMA, options: { temperature: 0.2 }, messages: [{ role: 'user', content: PROMPT + factsText(facts) }] }),
-  });
-  if (!res.ok) throw new Error(`Ollama answered ${res.status}: ${(await res.text()).slice(0, 200)}`);
-  const body = (await res.json()) as { message?: { content?: string } };
-  const answer = JSON.parse(body.message?.content ?? '{}') as {
+export async function askOllamaForAudience(settings: AiSettings, facts: SiteFacts, options: AskOptions | typeof fetch = {}): Promise<AudienceProfile> {
+  const opts = typeof options === 'function' ? { fetchImpl: options } : options;
+  const url = new URL('/api/chat', assertLocalOllama(settings.url));
+  const messages = [{ role: 'user', content: PROMPT + factsText(facts) }];
+  // num_predict caps a runaway answer; a full one is around 2,000 tokens.
+  const ask = (temperature: number) => streamChat(url, { model: settings.model, format: SCHEMA, options: { temperature, num_predict: MAX_TOKENS }, messages }, opts);
+  const first = await ask(0.2);
+  const profile = profileFromAnswer(first, facts);
+  if (profile) return profile;
+  // Small models sometimes answer with empty lists, which the format allows. Asking again with a
+  // nudge fixes it; requiring a minimum in the format instead makes Ollama run away.
+  messages.push({ role: 'assistant', content: first }, { role: 'user', content: RETRY });
+  const second = profileFromAnswer(await ask(0.5), facts);
+  if (second) return second;
+  throw new Error('the model’s answer had no purposes or personas');
+}
+
+const MAX_TOKENS = 6000;
+const RETRY = 'That answer was empty. Answer again with 3 to 7 purposes and 4 or 5 personas, each with their tasks, from the facts above.';
+
+/** The profile from the model's JSON answer, or null when it has no purposes or personas. */
+function profileFromAnswer(content: string, facts: SiteFacts): AudienceProfile | null {
+  const answer = JSON.parse(content || '{}') as {
     purposes?: { title?: unknown; description?: unknown; primary?: unknown; evidence?: unknown }[];
     personas?: { name?: unknown; summary?: unknown; context?: unknown; device?: unknown; accessNeeds?: unknown; internal?: unknown; purposes?: unknown; tasks?: { goal?: unknown; doneWhen?: unknown; page?: unknown }[] }[];
   };
@@ -359,16 +438,17 @@ export async function askOllamaForAudience(settings: AiSettings, facts: SiteFact
       tasks.push({ id: `task-${tasks.length + 1}`, personaId: id, goal: str(t.goal, 200), doneWhen: str(t.doneWhen, 200), success: path ? { kind: 'page', path } : { kind: 'described' } });
     }
   }
-  if (!purposes.length || !personas.length) throw new Error('the model’s answer had no purposes or personas');
+  if (!purposes.length || !personas.length) return null;
   return { purposes, personas, tasks, updatedAt: new Date().toISOString() };
 }
 
 /** A suggestion from Ollama when it's switched on, or from the built-in reader. */
-export async function suggestAudienceFor(facts: SiteFacts, ai: AiSettings | undefined, fetchImpl: typeof fetch = fetch): Promise<AudienceSuggestion> {
+export async function suggestAudienceFor(facts: SiteFacts, ai: AiSettings | undefined, options: AskOptions | typeof fetch = {}): Promise<AudienceSuggestion> {
   if (!ai) return { profile: suggestAudience(facts), source: 'reader' };
   try {
-    return { profile: await askOllamaForAudience(ai, facts, fetchImpl), source: 'ai' };
+    return { profile: await askOllamaForAudience(ai, facts, options), source: 'ai' };
   } catch (error) {
+    if ((error as Error).message === 'stopped') return { profile: suggestAudience(facts), source: 'reader', note: 'You stopped the AI model, so these are Prego’s own suggestions.' };
     return { profile: suggestAudience(facts), source: 'reader', note: `Ollama didn’t give a usable answer (${(error as Error).message}), so these are Prego’s own suggestions.` };
   }
 }

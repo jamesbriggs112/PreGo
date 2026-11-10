@@ -60,6 +60,7 @@ import {
   type Category,
   type ProfileName,
   type Run,
+  type SuggestJob,
 } from '@prego/core';
 import { AuditInProgressError, JobRunner, type JobEvent } from './jobs.js';
 import { planAudit, recentCalibration } from './assistant.js';
@@ -648,12 +649,39 @@ export async function buildApp(options: AppOptions): Promise<PregoApp> {
     return { profile: project.settings.audience ?? null, latestRunId: run?.id ?? null, pages: [...new Set(pages)].sort() };
   });
 
+  // Suggestions run in the background: with AI on, the model can take a few minutes, so the page
+  // checks on progress and can stop it. One job per project, kept until the next one starts.
+  type Job = Omit<SuggestJob, 'seconds'> & { controller: AbortController; finishedAt?: number };
+  const suggestJobs = new Map<number, Job>();
+  const jobView = ({ controller: _controller, finishedAt, ...job }: Job): SuggestJob => ({ ...job, seconds: Math.round(((finishedAt ?? Date.now()) - Date.parse(job.startedAt)) / 1000) });
+  let nextJobId = 1;
   app.post<{ Params: { id: string } }>('/api/projects/:id/audience/suggest', async (request, reply) => {
     const project = db.getProject(Number(request.params.id));
     if (!project) return reply.code(404).send({ error: 'Project not found' });
     const run = latestCompleteRun(project.id);
     if (!run) return reply.code(409).send({ error: 'Run an audit of this site first: suggestions come from what Prego finds on it.' });
-    return suggestAudienceFor(siteFacts(project, db.getLocations(run.id)), aiSettings(getSettings(db)));
+    const running = suggestJobs.get(project.id);
+    if (running?.status === 'running') return jobView(running);
+    const ai = aiSettings(getSettings(db));
+    const job: Job = { id: nextJobId++, status: 'running', ai: !!ai, startedAt: new Date().toISOString(), progress: null, suggestion: null, controller: new AbortController() };
+    suggestJobs.set(project.id, job);
+    const finished = suggestAudienceFor(siteFacts(project, db.getLocations(run.id)), ai, { signal: job.controller.signal, onProgress: (progress) => (job.progress = progress) }).then((suggestion) => {
+      job.suggestion = suggestion;
+      job.status = 'done';
+      job.finishedAt = Date.now();
+    });
+    // Without AI it's instant, so answer with the result straight away.
+    if (!ai) await finished;
+    return jobView(job);
+  });
+  app.get<{ Params: { id: string } }>('/api/projects/:id/audience/suggest', async (request) => {
+    const job = suggestJobs.get(Number(request.params.id));
+    return job ? jobView(job) : null;
+  });
+  app.delete<{ Params: { id: string } }>('/api/projects/:id/audience/suggest', async (request) => {
+    const job = suggestJobs.get(Number(request.params.id));
+    job?.controller.abort();
+    return { stopping: job?.status === 'running' };
   });
 
   app.put<{ Params: { id: string }; Body: unknown }>('/api/projects/:id/audience', { schema: { body: { type: 'object' } }, bodyLimit: 512 * 1024 }, async (request, reply) => {

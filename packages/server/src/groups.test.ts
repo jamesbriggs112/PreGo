@@ -145,9 +145,12 @@ describe('report contents and analytics', () => {
     const empty = await (await fetch(`${base}/api/projects/${run.projectId}/audience`)).json();
     expect(empty).toMatchObject({ profile: null, latestRunId: expect.any(Number), pages: expect.arrayContaining([expect.stringMatching(/^\//)]) });
 
-    const suggestion = await (await fetch(`${base}/api/projects/${run.projectId}/audience/suggest`, json('POST', {}))).json();
-    expect(suggestion.source).toBe('reader');
+    // Without AI, the job is done straight away and the latest one can be read back.
+    const job = await (await fetch(`${base}/api/projects/${run.projectId}/audience/suggest`, json('POST', {}))).json();
+    expect(job).toMatchObject({ status: 'done', ai: false, suggestion: { source: 'reader' } });
+    const suggestion = job.suggestion;
     expect(suggestion.profile.personas.length).toBeGreaterThan(0);
+    expect((await (await fetch(`${base}/api/projects/${run.projectId}/audience/suggest`)).json()).id).toBe(job.id);
     // Suggesting doesn't save anything.
     expect(db.getProject(run.projectId)!.settings.audience).toBeUndefined();
 

@@ -12,6 +12,7 @@ const dataDir = mkdtempSync(join(tmpdir(), 'prego-golive-'));
 let db: PregoDb;
 let staging: Server;
 let origin: string;
+const unlinked: string[] = [];
 
 // A site with every staging leftover. Unknown paths return the home page with 200, like a misconfigured CMS.
 const HOME = `<!doctype html><html lang="en"><head><title>Home</title>
@@ -25,7 +26,9 @@ beforeAll(async () => {
   db = new PregoDb(':memory:');
   staging = createServer((req, res) => {
     if (req.url === '/robots.txt') return res.writeHead(200, { 'Content-Type': 'text/plain' }).end('User-agent: *\nDisallow: /\n');
-    if (req.url === '/favicon.ico' || req.url === '/sitemap.xml') return res.writeHead(404).end();
+    if (req.url === '/sitemap.xml') return res.writeHead(404).end();
+    // Prego shouldn't ask for anything the site doesn't link to, beyond robots.txt and the sitemap.
+    if (req.url !== '/' && !['/contact'].includes(req.url ?? '')) unlinked.push(req.url ?? '');
     res.writeHead(200, { 'Content-Type': 'text/html', 'X-Robots-Tag': 'noindex' }).end(HOME);
   });
   await new Promise<void>((done) => staging.listen(0, '127.0.0.1', done));
@@ -42,10 +45,11 @@ describe('go-live mistakes', () => {
   it('finds every staging leftover on a site that has them', async () => {
     const { run } = await runAudit(db, { project: 'Staging', target: origin, checks: ['golive'], delayMs: 0, dataDir, respectRobots: false, maxPages: 3 });
     const tickets = db.getTickets(run.id);
-    expect(tickets.map((t) => t.ruleId).sort()).toEqual(['no-analytics', 'no-favicon', 'no-sitemap', 'noindex', 'placeholder-text', 'robots-blocks-all', 'soft-404', 'staging-canonical', 'staging-links', 'staging-links']);
+    expect(tickets.map((t) => t.ruleId).sort()).toEqual(['no-analytics', 'no-favicon', 'no-sitemap', 'noindex', 'placeholder-text', 'robots-blocks-all', 'staging-canonical', 'staging-links', 'staging-links']);
     const hosts = tickets.filter((t) => t.ruleId === 'staging-links').map((t) => t.actual);
     expect(hosts.some((f) => f.includes('localhost:8080'))).toBe(true);
     expect(hosts.some((f) => f.includes('staging.example.org'))).toBe(true);
+    expect(unlinked).toEqual([]);
     expect(tickets.find((t) => t.ruleId === 'noindex')).toMatchObject({ severity: 'High', category: 'TECH' });
   }, 120_000);
 

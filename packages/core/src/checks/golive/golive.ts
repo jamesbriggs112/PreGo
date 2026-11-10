@@ -12,7 +12,6 @@ const RULES: Record<string, { severity: Severity; category: Category; siteWide: 
   'staging-links': { severity: 'Medium', category: 'TECH', siteWide: true },
   'staging-canonical': { severity: 'Medium', category: 'TECH', siteWide: true },
   'placeholder-text': { severity: 'Medium', category: 'CONT', siteWide: false },
-  'soft-404': { severity: 'Medium', category: 'TECH', siteWide: true },
   'no-sitemap': { severity: 'Low', category: 'TECH', siteWide: true },
   'no-favicon': { severity: 'Low', category: 'TECH', siteWide: true },
   'no-analytics': { severity: 'Low', category: 'TECH', siteWide: true },
@@ -133,11 +132,9 @@ export function goLiveModule(): CheckModule {
         const robotsText = robots?.ok() ? await robots.text() : '';
         if (robotsBlocksAll(robotsText)) out.push(finding('robots-blocks-all', 'robots.txt has “User-agent: *” with “Disallow: /”.'));
         if (!/^\s*sitemap:/im.test(robotsText) && !(await get('/sitemap.xml'))?.ok()) out.push(finding('no-sitemap', 'No sitemap.xml, and robots.txt doesn’t point to one.'));
-        // An address that can't exist, as a mistyped link would be.
-        const missing = `/prego-page-that-does-not-exist-${Date.now().toString(36)}`;
-        const notFound = await get(missing);
-        if (notFound && notFound.status() < 300) out.push(finding('soft-404', `${origin}${missing} returned ${notFound.status()} instead of 404.`));
-        if (!facts.icon && !(await get('/favicon.ico'))?.ok()) out.push(finding('no-favicon', 'No <link rel="icon">, and /favicon.ico is missing.'));
+        // Only addresses the site links to, or that crawlers are expected to read (robots.txt and the
+        // sitemap), are requested: no made-up addresses, and no guessing at /favicon.ico.
+        if (!facts.icon) out.push(finding('no-favicon', 'The start page doesn’t link an icon with <link rel="icon">.'));
       }
       return out;
     },

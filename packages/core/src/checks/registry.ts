@@ -123,7 +123,7 @@ const definitions: CheckDefinition[] = [
   {
     id: 'security',
     name: 'Security headers and certificate',
-    description: 'HTTPS, the certificate’s expiry and trust, outdated TLS versions, security headers (with the CSP checked by Google’s CSP Evaluator), cookie flags, mixed content and version disclosure. Passive: nothing is attacked.',
+    description: 'HTTPS, the certificate’s expiry and trust (from the browser’s own connection), security headers (with the CSP checked by Google’s CSP Evaluator), cookie flags, mixed content and version disclosure. Passive: nothing is attacked.',
     categories: ['SEC'],
     defaultOn: true,
     cost: { seconds: [0.02, 0.1], perPage: true },
@@ -205,7 +205,7 @@ const definitions: CheckDefinition[] = [
   {
     id: 'golive',
     name: 'Go-live mistakes',
-    description: 'Staging leftovers (noindex, robots.txt blocking everything, links to staging addresses), placeholder text, missing pages that don’t return 404, and a missing sitemap, favicon or analytics.',
+    description: 'Staging leftovers (noindex, robots.txt blocking everything, links to staging addresses), placeholder text, and a missing sitemap, linked favicon or analytics. Requests only robots.txt, the sitemap and pages the site links to.',
     categories: ['TECH', 'CONT'],
     defaultOn: true,
     cost: { seconds: [0.05, 0.2], perPage: true },

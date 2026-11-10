@@ -125,13 +125,13 @@ describe('CSP Evaluator', () => {
 
 describe('certificates and TLS', () => {
   const now = new Date('2026-10-30T12:00:00Z');
-  const report = { host: 'example.org', validTo: new Date('2027-06-01T00:00:00Z'), authorized: true, error: null, legacyProtocol: null };
+  const report = { host: 'example.org', validTo: new Date('2027-06-01T00:00:00Z'), authorized: true, error: null };
 
-  it('reports expired, expiring, untrusted certificates and old protocols', () => {
+  it('reports expired, expiring and untrusted certificates', () => {
     expect(analyseTls(report, now)).toEqual([]);
     expect(analyseTls({ ...report, validTo: new Date('2026-11-10T00:00:00Z') }, now)).toEqual([{ ruleId: 'certificate-expiring', detail: 'The certificate for example.org expires in 10 days (2026-11-10).' }]);
     expect(analyseTls({ ...report, validTo: new Date('2026-10-01T00:00:00Z'), authorized: false, error: 'CERT_HAS_EXPIRED' }, now).map((p) => p.ruleId)).toEqual(['certificate-expired']);
-    expect(analyseTls({ ...report, authorized: false, error: 'DEPTH_ZERO_SELF_SIGNED_CERT', legacyProtocol: 'TLSv1' }, now).map((p) => p.ruleId)).toEqual(['certificate-untrusted', 'old-tls']);
+    expect(analyseTls({ ...report, authorized: false, error: 'DEPTH_ZERO_SELF_SIGNED_CERT' }, now).map((p) => p.ruleId)).toEqual(['certificate-untrusted']);
   });
 
   it('reads a real certificate over a TLS connection', async () => {
@@ -142,7 +142,7 @@ describe('certificates and TLS', () => {
       await new Promise<void>((done) => server.listen(0, '127.0.0.1', done));
       try {
         const tls = await checkTls('localhost', (server.address() as AddressInfo).port);
-        expect(tls).toMatchObject({ host: 'localhost', authorized: false, legacyProtocol: null });
+        expect(tls).toMatchObject({ host: 'localhost', authorized: false });
         expect(tls.error).toMatch(/SELF_SIGNED/);
         expect(analyseTls(tls).map((p) => p.ruleId)).toEqual(['certificate-expiring', 'certificate-untrusted']);
       } finally {

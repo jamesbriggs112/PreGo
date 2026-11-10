@@ -45,8 +45,11 @@ export interface ProjectSettings {
   audience?: AudienceProfile;
   /** Kept at the top of the sidebar. */
   pinned?: boolean;
-  /** The site's icon, from the page's own <link rel="icon">, as a small data URL. */
-  icon?: { dataUrl: string; from: string; savedAt: string };
+  /**
+   * A picture for the project in lists, saved in the data folder's icons folder: the site's linked icon,
+   * else its logo, else its share image. Only files the site links to are fetched.
+   */
+  icon?: { file: string; from: string; kind: 'icon' | 'logo' | 'share-image'; savedAt: string };
 }
 
 /** What Prego keeps from Google Analytics and Search Console CSV exports. Figures only; nothing about individual people. */

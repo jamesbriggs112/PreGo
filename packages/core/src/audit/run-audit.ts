@@ -1,6 +1,6 @@
-import { existsSync, statSync } from 'node:fs';
+import { existsSync, rmSync, statSync } from 'node:fs';
 import { openVulnDb } from '../vulndb/store.js';
-import { join, resolve } from 'node:path';
+import { basename, join, resolve } from 'node:path';
 import type { PregoDb } from '../db/database.js';
 import { BrowserSession, sessionPath, type BasicAuth, type OpenedPage } from '../browser/session.js';
 import { exploreApp, openScreen } from '../explore/explorer.js';
@@ -14,7 +14,7 @@ import { runStep, type Journey, type JourneyStep } from '../journeys/journey.js'
 import { crawlSite, type FailedPage } from '../crawl/crawler.js';
 import { extractStructure, groupTemplates, samplePages } from '../crawl/templates.js';
 import { captureCrop, captureFullPage } from '../capture/capture.js';
-import { iconDataUrl, readHead, saveShareImage } from '../capture/head.js';
+import { readHead, saveShareImage, saveSiteImage, siteImageCandidates, SITE_IMAGE_RANK, type SiteImageKind } from '../capture/head.js';
 import { describeComponent } from '../tickets/component.js';
 import { buildTickets } from '../tickets/build.js';
 import { serveFolder, type StaticServer } from '../serve/static-server.js';
@@ -226,7 +226,7 @@ export async function runAudit(db: PregoDb, options: AuditOptions): Promise<Audi
       ...(discovery.modules ?? []),
     ];
     const firstViewport = viewportName(viewports[0], options.emulation);
-    const head: HeadCapture = { shareImages: new Map(), iconTried: false };
+    const head: HeadCapture = { shareImages: new Map(), siteImage: null, tried: new Set(), iconsDir: join(dataDir, 'icons') };
     activeModules = modules;
     const timings: AuditTimings = { discoveryMs: Date.now() - discoveryStarted, pageViews: 0, openMs: 0, checks: {} };
 
@@ -362,10 +362,14 @@ export interface AuditTimings {
   viewports?: number;
 }
 
-/** Shared across a run's pages: share images already saved (by address), and whether the site's icon was looked for. */
+/** Shared across a run's pages: share images already saved (by address), and the project's picture so far. */
 interface HeadCapture {
   shareImages: Map<string, Promise<string | null>>;
-  iconTried: boolean;
+  /** The kind of picture saved for the project in this run, if any. */
+  siteImage: SiteImageKind | null;
+  /** Picture addresses already tried, so each is fetched once. */
+  tried: Set<string>;
+  iconsDir: string;
 }
 
 /**
@@ -386,11 +390,20 @@ async function captureHead(db: PregoDb, page: OpenedPage['page'], run: Run, runD
       metrics.shareImage = await head.shareImages.get(image)!;
     }
     db.updateLocation(location.id, { metrics: { ...db.getLocation(location.id)!.metrics, head: metrics } });
-    // The icon of the first top-level page that links one stands for the project in lists.
-    if (!head.iconTried && location.depth === 0 && metrics.icons.length) {
-      head.iconTried = true;
-      const icon = await iconDataUrl(page, metrics.icons);
-      if (icon) db.saveProjectSettings(run.projectId, { icon: { ...icon, savedAt: new Date().toISOString() } });
+    // A picture to stand for the project in lists: the site's icon, else its logo, else its share image.
+    // Top-level pages only; a better kind found on a later page replaces a lesser one.
+    if (location.depth === 0 && head.siteImage !== 'icon') {
+      const better = siteImageCandidates(metrics).filter((c) => !head.tried.has(c.href) && (!head.siteImage || SITE_IMAGE_RANK[c.kind] > SITE_IMAGE_RANK[head.siteImage]));
+      for (const candidate of better) {
+        head.tried.add(candidate.href);
+        const saved = await saveSiteImage(page, candidate.href, join(head.iconsDir, `${run.projectId}-${Date.now().toString(36)}`));
+        if (!saved) continue;
+        const previous = db.getProject(run.projectId)?.settings.icon?.file;
+        db.saveProjectSettings(run.projectId, { icon: { file: basename(saved), from: candidate.href, kind: candidate.kind, savedAt: new Date().toISOString() } });
+        if (previous && previous !== basename(saved)) rmSync(join(head.iconsDir, basename(previous)), { force: true });
+        head.siteImage = candidate.kind;
+        break;
+      }
     }
   } catch {
     // Previews are extras: a page that won't give up its head shouldn't stop the audit.

@@ -255,7 +255,7 @@ export function legalSignals(input: DashboardInput): LegalSummary {
 
   // Security of personal data in transit.
   if (ran('security', 'libraries', 'software')) {
-    const insecure = tickets.filter((t) => ['no-https', 'mixed-content', 'certificate-expired', 'old-tls'].includes(t.ruleId));
+    const insecure = tickets.filter((t) => ['no-https', 'mixed-content', 'certificate-expired', 'old-tls'] /* old-tls: earlier audits */.includes(t.ruleId));
     // Serious known vulnerabilities in what the site runs, and software with no more security fixes.
     const vulnerable = tickets.filter((t) => ['vulnerable-library', 'vulnerable-software'].includes(t.ruleId) && (t.severity === 'Critical' || t.severity === 'High'));
     const unsupported = tickets.filter((t) => t.ruleId === 'end-of-life-software');

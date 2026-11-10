@@ -95,6 +95,15 @@ export interface PregoApp {
 
 const LOCAL_HOSTNAMES = new Set(['localhost', '127.0.0.1', '[::1]', '::1']);
 
+const ICON_TYPES: Record<string, string> = {
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp',
+  '.avif': 'image/avif',
+  '.svg': 'image/svg+xml',
+  '.ico': 'image/x-icon',
+};
 const IMAGE_TYPES: Record<string, string> = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp', '.avif': 'image/avif' };
 
 /** Body of POST /api/runs. Credentials are passed to the audit and never stored. */
@@ -260,6 +269,7 @@ export async function buildApp(options: AppOptions): Promise<PregoApp> {
     for (const dir of deleted.exportDirs) remove(dir);
     remove(journeysDir(dataDir, project.slug));
     remove(sessionPath(dataDir, project.slug));
+    if (project.settings.icon?.file) remove(join(dataDir, 'icons', basename(project.settings.icon.file)));
     return { deleted: { project: project.name, audits: deleted.runIds.length, exports: deleted.exportDirs.length } };
   });
 
@@ -273,6 +283,16 @@ export async function buildApp(options: AppOptions): Promise<PregoApp> {
       return { pinned: request.body.pinned };
     },
   );
+
+  // The project's picture (the site's icon, logo or share image), saved during its audits.
+  app.get<{ Params: { id: string } }>('/api/projects/:id/icon', async (request, reply) => {
+    const file = db.getProject(Number(request.params.id))?.settings.icon?.file;
+    const path = file ? join(dataDir, 'icons', basename(file)) : null;
+    const type = path ? ICON_TYPES[extname(path).toLowerCase()] : undefined;
+    if (!path || !type || !existsSync(path)) return reply.code(404).send({ error: 'No icon' });
+    // SVG is only ever shown in an <img>, where its scripts don't run; the policy stops it being opened as a page that runs them.
+    return reply.type(type).header('Cache-Control', 'private, max-age=86400').header('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'").send(createReadStream(path));
+  });
 
   app.get<{ Params: { id: string } }>('/api/projects/:id', async (request, reply) => {
     const project = db.getProject(Number(request.params.id));

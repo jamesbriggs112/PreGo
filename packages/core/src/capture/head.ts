@@ -23,6 +23,8 @@ export interface HeadMetrics {
   og: { title: string | null; description: string | null; image: string | null; imageAlt: string | null; siteName: string | null; type: string | null; url: string | null };
   twitter: { card: string | null; title: string | null; description: string | null; image: string | null };
   icons: HeadIcon[];
+  /** Logos the page links: the organisation's logo in its structured data, then a logo image in the header. */
+  logos: string[];
   /** The share image, saved in the run folder, when the page links one. */
   shareImage?: string | null;
 }
@@ -65,7 +67,36 @@ export function readHead(page: Page): Promise<HeadMetrics> {
         image: absolute(meta('meta[name="twitter:image"]')),
       },
       icons,
+      logos: [...structuredLogos(), ...headerLogos()].map((href) => absolute(href)).filter((href, i, all): href is string => !!href && /^https?:/.test(href) && all.indexOf(href) === i),
     };
+
+    function structuredLogos(): string[] {
+      const out: string[] = [];
+      const visit = (node: unknown) => {
+        if (!node || typeof node !== 'object') return;
+        if (Array.isArray(node)) return node.forEach(visit);
+        const record = node as Record<string, unknown>;
+        const logo = record.logo;
+        if (typeof logo === 'string') out.push(logo);
+        else if (logo && typeof logo === 'object' && typeof (logo as Record<string, unknown>).url === 'string') out.push((logo as Record<string, string>).url);
+        if (record['@graph']) visit(record['@graph']);
+      };
+      for (const script of document.querySelectorAll('script[type="application/ld+json"]')) {
+        try {
+          visit(JSON.parse(script.textContent ?? ''));
+        } catch {
+          // Unreadable structured data is the future readiness check's business.
+        }
+      }
+      return out;
+    }
+
+    function headerLogos(): string[] {
+      return [...document.querySelectorAll('header img, nav img, [class*="header" i] img, [id*="header" i] img')]
+        .filter((img) => /logo/i.test([img.getAttribute('alt'), img.getAttribute('class'), img.getAttribute('id'), img.getAttribute('src'), img.closest('[class*="logo" i]') ? 'logo' : ''].join(' ')))
+        .map((img) => (img as HTMLImageElement).currentSrc || img.getAttribute('src') || '')
+        .slice(0, 2);
+    }
   });
 }
 
@@ -116,12 +147,25 @@ export async function fetchLinkedImage(page: Page, url: string, maxBytes: number
   }
 }
 
-/** The site's icon as a data URL, small enough to keep with the project. */
-export async function iconDataUrl(page: Page, icons: HeadIcon[]): Promise<{ dataUrl: string; from: string } | null> {
-  const icon = bestIcon(icons);
-  if (!icon) return null;
-  const file = await fetchLinkedImage(page, icon.href, 64 * 1024);
-  return file ? { dataUrl: `data:${file.type};base64,${file.body.toString('base64')}`, from: icon.href } : null;
+/** What a project's picture is: the site's icon, its logo, or its share image, best first. */
+export type SiteImageKind = 'icon' | 'logo' | 'share-image';
+export const SITE_IMAGE_RANK: Record<SiteImageKind, number> = { icon: 3, logo: 2, 'share-image': 1 };
+
+/** The pictures this page links that could stand for the site, best first. */
+export function siteImageCandidates(head: HeadMetrics): { kind: SiteImageKind; href: string }[] {
+  const icon = bestIcon(head.icons);
+  const share = head.og.image ?? head.twitter.image;
+  return [...(icon ? [{ kind: 'icon' as const, href: icon.href }] : []), ...head.logos.map((href) => ({ kind: 'logo' as const, href })), ...(share ? [{ kind: 'share-image' as const, href: share }] : [])];
+}
+
+/** Save a picture the page links into `path` (no extension). Returns the saved file's name, or null. */
+export async function saveSiteImage(page: Page, href: string, path: string): Promise<string | null> {
+  const file = await fetchLinkedImage(page, href, 2 * 1024 * 1024);
+  if (!file) return null;
+  const full = `${path}.${file.ext}`;
+  mkdirSync(dirname(full), { recursive: true });
+  writeFileSync(full, file.body);
+  return full;
 }
 
 /** Save the page's share image into the run folder. Returns its path, or null. */

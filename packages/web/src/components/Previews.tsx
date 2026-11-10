@@ -5,6 +5,7 @@ import type { RunDetail } from '@/lib/api';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { NativeSelect } from '@/components/ui/native-select';
+import { projectIconUrl } from '@/components/ProjectIcon';
 
 // How each page might look in search results and when its link is shared, from the tags in its head.
 // Search engines and apps shorten and sometimes rewrite these, so the previews are approximate.
@@ -106,7 +107,8 @@ export function Previews({ run }: { run: RunDetail }) {
 function SearchPreview({ run, location, data }: { run: RunDetail; location: Location; data: PreviewData }) {
   const url = new URL(location.url);
   const crumbs = [url.hostname, ...url.pathname.split('/').filter(Boolean)].join(' › ');
-  const icon = run.project.settings.icon?.dataUrl;
+  // Only a real icon: a logo or share image wouldn't be what Google shows.
+  const icon = run.project.settings.icon?.kind === 'icon' ? projectIconUrl(run.project) : null;
   return (
     <Card>
       <CardHeader>

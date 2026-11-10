@@ -22,7 +22,6 @@ const SEVERITY: Record<string, Severity> = {
   'certificate-expired': 'High',
   'certificate-untrusted': 'High',
   'certificate-expiring': 'Medium',
-  'old-tls': 'Medium',
 };
 
 // Google's CSP Evaluator (Apache-2.0), the same library Lighthouse uses.
@@ -116,7 +115,6 @@ export function analyseTls(report: TlsReport, now = new Date()): { ruleId: strin
     else if (days < 30) out.push({ ruleId: 'certificate-expiring', detail: `The certificate for ${report.host} expires in ${days} day${days === 1 ? '' : 's'} (${report.validTo.toISOString().slice(0, 10)}).` });
   }
   if (!report.authorized && report.error && !/expired/i.test(report.error)) out.push({ ruleId: 'certificate-untrusted', detail: `Browsers won’t trust the certificate for ${report.host}: ${report.error}.` });
-  if (report.legacyProtocol) out.push({ ruleId: 'old-tls', detail: `${report.host} still accepts ${report.legacyProtocol}, which browsers no longer allow.` });
   return out;
 }
 

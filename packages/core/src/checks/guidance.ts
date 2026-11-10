@@ -563,6 +563,7 @@ const PREGO: Record<string, RuleGuidance> = {
     recommendation: 'Replace the placeholder with final copy, or hide the section until the copy is ready.',
     effort: 'Small',
   },
+  // No longer checked: it meant requesting an address the site doesn't link to. Kept for earlier audits' tickets.
   'soft-404': {
     title: 'Missing pages don’t return a “not found” status',
     description: 'An address that doesn’t exist returned a success status instead of 404.',
@@ -579,7 +580,7 @@ const PREGO: Record<string, RuleGuidance> = {
   },
   'no-favicon': {
     title: 'The site has no favicon',
-    description: 'No icon is linked from the page and /favicon.ico is missing.',
+    description: 'The page doesn’t link an icon with <link rel="icon">. Prego doesn’t request /favicon.ico, so an icon that’s only there may be missed.',
     whyItMatters: 'Browser tabs, bookmarks and search results show a blank or default icon, which looks unfinished.',
     recommendation: 'Add a favicon and link it from every page with <link rel="icon">.',
     effort: 'Small',
@@ -605,6 +606,7 @@ const PREGO: Record<string, RuleGuidance> = {
     recommendation: 'Install a certificate from a trusted authority that covers this address, including the intermediate certificates.',
     effort: 'Small',
   },
+  // No longer checked: it meant a handshake offering only old protocols. Kept for earlier audits' tickets.
   'old-tls': {
     title: 'The server still accepts outdated encryption',
     description: 'The server accepts TLS 1.0 or 1.1, which have known weaknesses and are no longer supported by browsers.',

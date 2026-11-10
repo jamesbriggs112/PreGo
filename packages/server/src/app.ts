@@ -12,6 +12,7 @@ import {
   SEVERITIES,
   TriageError,
   buildExportPlan,
+  reportOutline,
   checkDefinitions,
   aiSettings,
   assertLocalOllama,
@@ -615,9 +616,19 @@ export async function buildApp(options: AppOptions): Promise<PregoApp> {
 
   // Report contents: the client-facing layout, optional sections and written text, per audit.
 
+  // `outline` is the developer report's sections and `clientOutline` the client report's.
   const reportState = (runId: number) => {
     const plan = buildExportPlan(db, runId);
-    return { options: plan.options, available: plan.available, outline: plan.outline, suggestions: suggestReportText(plan), hasReadiness: hasReadiness(plan), hasAudience: hasAudience(plan) };
+    const run = db.getRun(runId)!;
+    return {
+      options: plan.options,
+      available: plan.available,
+      outline: reportOutline(run, { ...plan.options, clientFacing: false }, plan.available),
+      clientOutline: reportOutline(run, { ...plan.options, clientFacing: true }, plan.available),
+      suggestions: suggestReportText(plan),
+      hasReadiness: hasReadiness(plan),
+      hasAudience: hasAudience(plan),
+    };
   };
 
   app.get<{ Params: { id: string } }>('/api/runs/:id/report', async (request, reply) => {
@@ -788,14 +799,18 @@ export async function buildApp(options: AppOptions): Promise<PregoApp> {
       .send(zip.generateNodeStream({ type: 'nodebuffer', streamFiles: true, compression: 'DEFLATE' }));
   });
 
-  // The Word report as HTML, for previewing before export.
-  // `?report=overview` previews the Overview instead of report.docx.
+  // The Word report as HTML, for previewing before export: report.docx (the developer report) by default,
+  // or `?report=client`, `overview`, `audience` or `future`.
   app.get<{ Params: { id: string }; Querystring: { report?: string } }>('/api/runs/:id/report-preview', async (request, reply) => {
     const runId = Number(request.params.id);
     const run = db.getRun(runId);
     if (!run) return reply.code(404).send({ error: 'Run not found' });
     if (run.status !== 'complete') return reply.code(409).send({ error: 'Only finished audits have a report.' });
-    const plan = buildExportPlan(db, runId);
+    const stored = buildExportPlan(db, runId);
+    // The developer and client previews each use their own layout; the other reports follow the saved choice.
+    const report = request.query.report ?? 'technical';
+    const clientFacing = report === 'client' ? true : report === 'technical' ? false : stored.options.clientFacing;
+    const plan = clientFacing === stored.options.clientFacing ? stored : buildExportPlan(db, runId, { ...stored.options, clientFacing });
     if (request.query.report === 'audience') {
       const { value } = await mammoth.convertToHtml({ buffer: await audienceDocx(plan, runDirectory(dataDir, runId), reportBranding(db, dataDir)) });
       return { html: value };
@@ -878,6 +893,7 @@ export async function buildApp(options: AppOptions): Promise<PregoApp> {
 }
 
 const EXPORT_FILES: Record<string, string> = {
+  'client-report.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   'overview.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   'future.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   'audience.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',

@@ -15,8 +15,8 @@ export interface VerifyResult {
  * Check an export folder's cross-references (acceptance criterion 6): every ticket ID in report.docx is
  * in tickets.csv exactly once, every ticket in tickets.csv is referenced in the report, and every
  * occurrence belongs to a ticket. Screenshots are embedded in the report, not separate files.
- * A client-facing report has no ticket IDs at all (run.json says which layout it is): tickets.csv
- * points to its sections instead.
+ * The client report (client-report.docx) must have no ticket IDs at all. Exports from before it had its
+ * own file put the client layout in report.docx instead, which run.json records.
  */
 export async function verifyExport(dir: string): Promise<VerifyResult> {
   const problems: string[] = [];
@@ -25,9 +25,15 @@ export async function verifyExport(dir: string): Promise<VerifyResult> {
   }
   if (problems.length) return { ok: false, problems, ticketIds: [] };
 
-  const zip = await JSZip.loadAsync(readFileSync(join(dir, 'report.docx')));
-  const xml = await zip.file('word/document.xml')!.async('string');
-  const reportText = xml.replace(/<\/w:p>/g, '\n').replace(/<[^>]+>/g, '');
+  const docText = async (file: string) => {
+    const zip = await JSZip.loadAsync(readFileSync(join(dir, file)));
+    const xml = await zip.file('word/document.xml')!.async('string');
+    return xml.replace(/<\/w:p>/g, '\n').replace(/<[^>]+>/g, '');
+  };
+  const reportText = await docText('report.docx');
+  if (existsSync(join(dir, 'client-report.docx'))) {
+    for (const id of new Set((await docText('client-report.docx')).match(TICKET_ID) ?? [])) problems.push(`${id} is in client-report.docx, which should have no ticket IDs`);
+  }
 
   const readCsv = (file: string) => {
     const rows = parse(readFileSync(join(dir, file), 'utf8').replace(/^\uFEFF/, '')) as string[][];

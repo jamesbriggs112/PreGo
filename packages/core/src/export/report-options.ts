@@ -1,6 +1,7 @@
-// What goes into an export's reports: which reports are in the pack, a client-facing layout for
-// report.docx with written sections, and optional sections (analytics, content and tone, information
-// architecture, competitors). Chosen on the Export page and kept per audit.
+// What goes into an export's reports: which reports are in the pack (the developer report, report.docx,
+// is always there; a client report with written sections can go alongside it), and optional sections
+// (analytics, content and tone, information architecture, competitors). Chosen on the Export page and
+// kept per audit.
 
 /** Written text the auditor can add. Empty means Prego's own wording (or the section is left out). */
 export const REPORT_TEXT_KEYS = ['summary', 'keyFindings', 'recommendations', 'methodology', 'conclusion', 'analytics', 'content', 'ia', 'competitors', 'whyItMatters', 'future', 'audience'] as const;
@@ -13,13 +14,17 @@ export type OptionalSection = (typeof OPTIONAL_SECTIONS)[number];
 export const PACK_REPORTS = ['overview', 'audience', 'future'] as const;
 export type PackReport = (typeof PACK_REPORTS)[number];
 
+/** The client report's file. report.docx is always the developer report, with ticket IDs. */
+export const CLIENT_FILE = 'client-report.docx';
+
 /** File name of each report in the pack. */
 export const PACK_FILES: Record<PackReport, string> = { overview: 'overview.docx', audience: 'audience.docx', future: 'future.docx' };
 
 export interface ReportOptions {
   /**
-   * For clients: a contents page, and an executive summary, key findings, top recommendations,
-   * methodology and conclusion in the auditor's own words. Off gives the technical report.
+   * Also write the client report (client-report.docx): a contents page, and an executive summary,
+   * key findings, top recommendations, methodology and conclusion in the auditor's own words, with no
+   * ticket IDs. The developer report (report.docx) is written either way.
    */
   clientFacing: boolean;
   /** Reports in the pack besides report.docx. */

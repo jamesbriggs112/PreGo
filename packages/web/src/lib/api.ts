@@ -142,11 +142,14 @@ export interface StartRunBody {
   basicAuth?: { username: string; password: string };
 }
 
-/** What goes in report.docx for one audit, with the sections that have something to show. */
+/** What goes in an audit's reports, with the sections that have something to show. */
 export interface ReportState {
   options: ReportOptions;
   available: Record<OptionalSection, boolean>;
+  /** The developer report's sections (report.docx). */
   outline: { id: string; number: number; title: string }[];
+  /** The client report's sections (client-report.docx). */
+  clientOutline: { id: string; number: number; title: string }[];
   suggestions: { keyFindings: string; recommendations: string; methodology: string };
   /** The Search and sharing or Future readiness check ran, so future.docx has something to show. */
   hasReadiness: boolean;
@@ -154,7 +157,7 @@ export interface ReportState {
   hasAudience: boolean;
 }
 
-export type PreviewReport = 'technical' | 'overview' | 'audience' | 'future';
+export type PreviewReport = 'technical' | 'client' | 'overview' | 'audience' | 'future';
 
 /** An audit read from a typed request, waiting for the person to confirm it. */
 export interface AuditPlan {

@@ -11,7 +11,7 @@ import { writeReportDocx, type ReportBranding } from './docx.js';
 import { writeOverviewDocx } from './overview.js';
 import { hasReadiness, writeFutureDocx } from './future-report.js';
 import { hasAudience, writeAudienceDocx } from './audience-report.js';
-import { PACK_FILES } from './report-options.js';
+import { CLIENT_FILE, PACK_FILES } from './report-options.js';
 import { getSettings, reportBranding } from '../settings.js';
 
 export interface ExportOptions {
@@ -28,19 +28,22 @@ export interface ExportResult {
   /** The export's ID in the exports log. */
   id: number;
   dir: string;
-  files: { report: string; tickets: string; occurrences: string; runJson: string; overview?: string; audience?: string; future?: string };
+  files: { report: string; tickets: string; occurrences: string; runJson: string; client?: string; overview?: string; audience?: string; future?: string };
   plan: ExportPlan;
 }
 
 /**
- * Write the export bundle for a run: report.docx, tickets.csv, occurrences.csv and run.json, plus any
- * other reports chosen for the pack (overview.docx, audience.docx, future.docx), all in
+ * Write the export bundle for a run: report.docx (the developer report), tickets.csv, occurrences.csv
+ * and run.json, plus any other reports chosen for the pack (client-report.docx, overview.docx,
+ * audience.docx, future.docx), all in
  * one folder and cross-referenced by ticket ID. Screenshots go into the report and nowhere else: once
  * it's written, the run's screenshots are deleted from Prego.
  */
 export async function exportRun(db: PregoDb, runId: number, options: ExportOptions = {}): Promise<ExportResult> {
   const dataDir = resolve(options.dataDir ?? defaultDataDir());
   const plan = buildExportPlan(db, runId);
+  // report.docx and the CSVs always use the developer layout, so ticket IDs and report sections match.
+  const developer = plan.options.clientFacing ? buildExportPlan(db, runId, { ...plan.options, clientFacing: false }) : plan;
   const runDir = runDirectory(dataDir, runId);
   const dir = options.outDir ? resolve(options.outDir) : uniqueDir(join(dataDir, 'exports', `${plan.project.slug}-${stamp(new Date())}`));
   const files: ExportResult['files'] = {
@@ -52,7 +55,7 @@ export async function exportRun(db: PregoDb, runId: number, options: ExportOptio
   mkdirSync(dir, { recursive: true });
 
   const preset = options.preset ?? getSettings(db).defaults.csvPreset;
-  writeCsvFiles(plan, files, preset);
+  writeCsvFiles(developer, files, preset);
   // Interactive audits get a state map diagram, in the report and as its own file.
   let stateMap: Buffer | undefined;
   if (plan.run.mode === 'explore') {
@@ -60,7 +63,12 @@ export async function exportRun(db: PregoDb, runId: number, options: ExportOptio
     writeFileSync(join(dir, 'state-map.png'), stateMap);
   }
   const branding = options.branding ?? reportBranding(db, dataDir);
-  await writeReportDocx(plan, runDir, files.report, branding, { stateMap, charts: await reportCharts(plan) });
+  const charts = await reportCharts(developer);
+  await writeReportDocx(developer, runDir, files.report, branding, { stateMap, charts });
+  if (plan.options.clientFacing) {
+    files.client = join(dir, CLIENT_FILE);
+    await writeReportDocx(plan, runDir, files.client, branding, { stateMap, charts });
+  }
   if (plan.options.reports.overview) {
     files.overview = join(dir, PACK_FILES.overview);
     await writeOverviewDocx(plan, files.overview, getSettings(db).report.whyItMatters, branding);
@@ -79,12 +87,12 @@ export async function exportRun(db: PregoDb, runId: number, options: ExportOptio
       {
         generatedBy: 'Prego',
         exportedAt: new Date().toISOString(),
-        reports: ['report.docx', ...(['overview', 'audience', 'future'] as const).filter((r) => files[r]).map((r) => PACK_FILES[r])],
-        reportLayout: plan.options.clientFacing ? 'client-facing' : 'technical',
+        reports: ['report.docx', ...(files.client ? [CLIENT_FILE] : []), ...(['overview', 'audience', 'future'] as const).filter((r) => files[r]).map((r) => PACK_FILES[r])],
+        reportLayout: 'technical',
         project: plan.project,
         run: plan.run,
         locations: plan.locations,
-        tickets: plan.tickets.map(({ occurrenceList, screenshotFile: _file, ...ticket }) => ({
+        tickets: developer.tickets.map(({ occurrenceList, screenshotFile: _file, ...ticket }) => ({
           ...ticket,
           occurrences: occurrenceList.map(({ location, crop: _crop, screenshotFile: _shot, ...o }) => ({ ...o, url: location.url })),
         })),

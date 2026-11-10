@@ -242,14 +242,16 @@ describe('Settings and Export screens', () => {
     await page.getByRole('heading', { name: /^Export/, level: 1 }).waitFor();
     // This audit was exported in an earlier test, which deleted its screenshots.
     await page.getByRole('note').getByText(/screenshots were deleted when it was first exported/).waitFor();
-    // The saved preset is preselected.
+    // The developer report is always in the export; its settings hold the CSV format, with the saved preset preselected.
+    await expect(page.getByLabel('Developer report and tickets').isDisabled()).resolves.toBe(true);
+    await page.getByRole('button', { name: 'Customise Developer report and tickets' }).click();
     await expect(page.getByLabel('Jira').isChecked()).resolves.toBe(true);
     await page.getByLabel('Prego standard columns').check();
     await page.getByRole('button', { name: 'Create export' }).click();
     await page.getByRole('status').getByText(/Export ready/).waitFor({ timeout: 60_000 });
     expect(await axeViolations(page)).toEqual([]);
 
-    const [report] = await Promise.all([page.waitForEvent('download'), page.getByRole('link', { name: 'Full findings report (Word)' }).click()]);
+    const [report] = await Promise.all([page.waitForEvent('download'), page.getByRole('link', { name: 'Developer report (Word)' }).click()]);
     const docx = await JSZip.loadAsync(readFileSync((await report.path())!));
     expect(await docx.file('word/document.xml')!.async('string')).toContain('Four Agency');
 
@@ -268,69 +270,82 @@ describe('Settings and Export screens', () => {
 
   it('previews the report', async () => {
     const { page } = gui;
-    await page.getByRole('button', { name: 'Preview the report' }).click();
+    await page.getByRole('button', { name: 'Preview Developer report and tickets' }).click();
     const frame = page.frameLocator('iframe[title="Report preview"]');
     await frame.getByText('Executive summary').first().waitFor({ timeout: 30_000 });
     await expect(frame.getByText('Four Agency').count()).resolves.toBeGreaterThan(0);
   });
 
-  it('switches to a client-facing report with written sections and optional sections', async () => {
+  it('adds the client report alongside the developer report, with written and extra sections', async () => {
     const { page } = gui;
-    await page.getByLabel('Client-facing report').check();
-    await page.getByRole('group', { name: 'Written sections' }).waitFor();
+    await page.getByLabel('Client report').check();
+    await expect.poll(() => gui.db.getReportOptions(runId).clientFacing, { timeout: 10_000 }).toBe(true);
+    await page.getByRole('button', { name: 'Customise Client report' }).click();
     await page.getByLabel('Executive summary').fill('Acme is launching a new widget shop.');
     await page.getByRole('button', { name: 'Fill in the suggestion for key findings' }).click();
     await expect(page.getByLabel('Key findings').inputValue()).resolves.toMatch(/^- Accessibility: \d+ issues/);
     await page.getByLabel('Information architecture').check();
     await page.getByLabel('Your observations').fill('The structure is flat.');
-    await page.getByRole('status').getByText('Saved.').waitFor();
-    await page.getByText(/Sections in the report.*Information architecture/s).waitFor();
-    expect(gui.db.getReportOptions(runId)).toMatchObject({ clientFacing: true, include: { ia: true }, text: { summary: 'Acme is launching a new widget shop.', ia: 'The structure is flat.' } });
-    // axe can't look inside the sandboxed preview, so check the page with it closed.
-    await page.getByRole('button', { name: 'Hide report preview' }).click();
+    await page.getByText(/Sections in this report.*Information architecture/s).waitFor();
+    await expect
+      .poll(() => gui.db.getReportOptions(runId), { timeout: 10_000 })
+      .toMatchObject({ clientFacing: true, include: { ia: true }, text: { summary: 'Acme is launching a new widget shop.', ia: 'The structure is flat.' } });
     expect(await axeViolations(page)).toEqual([]);
 
-    await page.getByRole('button', { name: 'Preview the report' }).click();
+    await page.getByRole('button', { name: 'Preview Client report' }).click();
     const frame = page.frameLocator('iframe[title="Report preview"]');
     await frame.getByText('Acme is launching a new widget shop.').waitFor({ timeout: 30_000 });
     await frame.getByRole('heading', { name: /^\d+\. Information architecture$/ }).waitFor();
-  }, 60_000);
+    // The developer report keeps its own layout, with ticket IDs.
+    await page.getByRole('button', { name: 'Preview Developer report and tickets' }).click();
+    await frame.getByText(/PRG-[A-Z0-9]+-\d{3}/).first().waitFor({ timeout: 30_000 });
+  }, 90_000);
 
-  it('adds the Overview to the pack, with its own wording and preview', async () => {
+  it('adds the leadership summary, with its own wording and preview', async () => {
     const { page } = gui;
-    await page.getByLabel('Client-facing report').uncheck();
-    await page.getByLabel('Overview (overview.docx)').check();
-    // The Overview uses key findings and recommendations, so they stay without the client-facing layout.
+    await page.getByLabel('Leadership summary').check();
+    await page.getByRole('button', { name: 'Customise Leadership summary' }).click();
     await page.getByLabel('Key findings').waitFor();
     await expect(page.getByLabel('Executive summary').count()).resolves.toBe(0);
     await expect(page.getByLabel('Why a healthy website matters').getAttribute('placeholder')).resolves.toMatch(/^A website is often the first place/);
     await page.getByLabel('Why a healthy website matters').fill('Acme’s shop is how most members renew.');
-    // "Saved." is already showing from earlier changes, so wait for the save itself.
     await expect
       .poll(() => gui.db.getReportOptions(runId), { timeout: 10_000 })
-      .toMatchObject({ clientFacing: false, reports: { overview: true }, text: { whyItMatters: 'Acme’s shop is how most members renew.' } });
+      .toMatchObject({ clientFacing: true, reports: { overview: true }, text: { whyItMatters: 'Acme’s shop is how most members renew.' } });
 
-    await page.getByLabel('Report to preview').selectOption('overview');
+    await page.getByRole('button', { name: 'Preview Leadership summary' }).click();
     const frame = page.frameLocator('iframe[title="Report preview"]');
     await frame.getByText('Acme’s shop is how most members renew.').waitFor({ timeout: 30_000 });
     await frame.getByRole('heading', { name: '1. At a glance' }).waitFor();
-    await page.getByRole('button', { name: 'Hide report preview' }).click();
+    await page.getByRole('button', { name: 'Close' }).click();
+    await page.getByRole('button', { name: /^Create export \(3 reports\)$/ }).waitFor();
     expect(await axeViolations(page)).toEqual([]);
   }, 60_000);
 
-  it('adds the Search, sharing and future readiness report, with previews of shared links', async () => {
+  it('adds the Search and future readiness report, with previews of shared links', async () => {
     const { page } = gui;
-    await page.getByLabel('Search, sharing and future readiness (future.docx)').check();
-    await page.getByLabel('Your observations').first().waitFor();
+    await page.getByLabel('Search and future readiness').check();
     await expect.poll(() => gui.db.getReportOptions(runId).reports, { timeout: 10_000 }).toMatchObject({ overview: true, future: true });
-    await page.getByRole('button', { name: 'Preview the report' }).click();
-    await page.getByLabel('Report to preview').selectOption('future');
+    await page.getByRole('button', { name: 'Customise Search and future readiness' }).click();
+    await page.getByLabel('Your observations').waitFor();
+    await page.getByRole('button', { name: 'Preview Search and future readiness' }).click();
     const frame = page.frameLocator('iframe[title="Report preview"]');
     await frame.getByRole('heading', { name: '2. How the site looks in search and when shared' }).waitFor({ timeout: 60_000 });
     await expect(frame.locator('img').count()).resolves.toBeGreaterThan(0);
-    await page.getByRole('button', { name: 'Hide report preview' }).click();
+    await page.getByRole('button', { name: 'Close' }).click();
     expect(await axeViolations(page)).toEqual([]);
   }, 90_000);
+
+  it('exports the client report as its own file, with no ticket IDs', async () => {
+    const { page } = gui;
+    await page.getByRole('button', { name: /^Create export/ }).click();
+    await page.getByRole('status').getByText(/Export ready/).waitFor({ timeout: 60_000 });
+    const [client] = await Promise.all([page.waitForEvent('download'), page.getByRole('link', { name: 'Client report (Word)' }).click()]);
+    const xml = await (await JSZip.loadAsync(readFileSync((await client.path())!))).file('word/document.xml')!.async('string');
+    expect(xml).toContain('Acme is launching a new widget shop.');
+    expect(xml).not.toMatch(/PRG-[A-Z0-9]+-\d{3}/);
+    await page.getByRole('link', { name: 'Developer report (Word)' }).waitFor();
+  }, 120_000);
 
   it('suggests purposes and personas from the audit, and saves the auditor’s changes', async () => {
     const { page } = gui;
@@ -359,14 +374,13 @@ describe('Settings and Export screens', () => {
   it('adds the Audience and tasks report, with the navigation test of each task', async () => {
     const { page } = gui;
     await page.goto(`${gui.url}runs/${runId}/export`);
-    await page.getByLabel('Audience and tasks (audience.docx)').check();
+    await page.getByLabel('Audience and tasks').check();
     await expect.poll(() => gui.db.getReportOptions(runId).reports.audience, { timeout: 10_000 }).toBe(true);
-    await page.getByRole('button', { name: 'Preview the report' }).click();
-    await page.getByLabel('Report to preview').selectOption('audience');
+    await page.getByRole('button', { name: 'Preview Audience and tasks' }).click();
     const frame = page.frameLocator('iframe[title="Report preview"]');
     await frame.getByRole('heading', { name: '3. People and their tasks' }).waitFor({ timeout: 60_000 });
     await frame.getByText(/^Navigation test: (Done|Partly|Not done|Not tested)\./).first().waitFor();
-    await page.getByRole('button', { name: 'Hide report preview' }).click();
+    await page.getByRole('button', { name: 'Close' }).click();
     expect(await axeViolations(page)).toEqual([]);
   }, 90_000);
 });
@@ -545,6 +559,23 @@ describe('Test groups', () => {
     await expect(page.getByRole('group', { name: 'Test group' }).getByRole('radio', { checked: true }).count()).resolves.toBe(0);
     expect(await axeViolations(page)).toEqual([]);
   }, 120_000);
+
+  it('selects and clears every check, or every check under a heading', async () => {
+    const { page } = gui;
+    await page.getByRole('button', { name: 'Clear all', exact: true }).click();
+    await page.getByText(/^0 of \d+ checks selected$/).waitFor();
+    await page.getByText('Choose at least one check.').waitFor();
+    await page.getByRole('button', { name: 'Select all Accessibility checks' }).click();
+    await expect(page.getByLabel('Accessibility (axe-core)').isChecked()).resolves.toBe(true);
+    await expect(page.getByLabel('Accessibility, second engine (IBM)').isChecked()).resolves.toBe(true);
+    await expect(page.getByLabel('HTML validity', { exact: true }).isChecked()).resolves.toBe(false);
+    await page.getByRole('button', { name: 'Select all', exact: true }).click();
+    const count = await page.getByText(/^\d+ of \d+ checks selected$/).textContent();
+    const [ticked, total] = count!.match(/\d+/g)!;
+    expect(ticked).toBe(total);
+    await expect(page.getByLabel('HTML validity', { exact: true }).isChecked()).resolves.toBe(true);
+    expect(await axeViolations(page)).toEqual([]);
+  }, 60_000);
 });
 
 

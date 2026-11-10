@@ -120,7 +120,9 @@ describe('report contents and analytics', () => {
     expect(before.suggestions.recommendations).toEqual(expect.any(String));
 
     const saved = await (await fetch(`${base}/api/runs/${run.id}/report`, json('PUT', { clientFacing: true, include: { analytics: true }, text: { summary: 'Hello' } }))).json();
-    expect(saved.outline.map((o: { title: string }) => o.title).slice(0, 2)).toEqual(['Executive summary', 'Methodology']);
+    // The client report has its own outline; the developer report keeps its layout.
+    expect(saved.clientOutline.map((o: { title: string }) => o.title).slice(0, 2)).toEqual(['Executive summary', 'Methodology']);
+    expect(saved.outline.map((o: { title: string }) => o.title).slice(0, 2)).toEqual(['Executive summary', 'Scope and method']);
     expect(db.getReportOptions(run.id)).toMatchObject({ clientFacing: true, text: { summary: 'Hello' } });
 
     const ga = 'Device category,Active users\nmobile,10\ndesktop,5\n';

@@ -4,10 +4,11 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { PROFILES, isProfileName, type ProfileName } from '@prego/core/profiles';
 import { estimateAudit, formatEstimate, groupChecks } from '@prego/core/estimate';
 import { Clock } from 'lucide-react';
-import { api, ApiError, type JourneySummary, type Settings, type StartRunBody } from '@/lib/api';
+import { api, ApiError, type CheckInfo, type JourneySummary, type Settings, type StartRunBody } from '@/lib/api';
 import { JourneyPicker } from '@/components/JourneyPicker';
 import { useTitle } from '@/lib/use-title';
 import { cn } from '@/lib/utils';
+import { CHECK_FEEDS, sectionChecks } from '@/lib/check-sections';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -496,37 +497,7 @@ function NewAuditForm({ defaults, defaultDenyLabels }: { defaults?: Settings['de
               </div>
             </fieldset>
           )}
-          <fieldset className="grid gap-3 sm:grid-cols-2">
-            <legend className="sr-only">Checks to run</legend>
-            {checkList.data?.map((check) => (
-              <div key={check.id} className="flex items-start gap-2">
-                <Checkbox
-                  id={`check-${check.id}`}
-                  disabled={!check.available}
-                  checked={checks.includes(check.id) && check.available}
-                  onCheckedChange={(state) => setChecks((current) => (state === true ? [...current, check.id] : current.filter((c) => c !== check.id)))}
-                  aria-describedby={`check-${check.id}-hint`}
-                  className="mt-0.5"
-                />
-                <div className="grid gap-0.5">
-                  <Label htmlFor={`check-${check.id}`}>{check.name}</Label>
-                  <span id={`check-${check.id}-hint`} className="text-sm text-muted-foreground">
-                    {check.description}
-                    {check.slow && ' Adds several seconds per page.'}
-                    {!check.available && (
-                      <>
-                        {' '}
-                        <Link to="/settings" className="font-medium underline">
-                          Switch it on in Settings
-                        </Link>
-                        .
-                      </>
-                    )}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </fieldset>
+          {checkList.data && <CheckList checks={checkList.data} selected={checks} onChange={setChecks} />}
           {checks.length === 0 && (
             <p className="mt-2 text-sm text-destructive" role="alert">
               Choose at least one check.
@@ -576,6 +547,7 @@ function NewAuditForm({ defaults, defaultDenyLabels }: { defaults?: Settings['de
                   value: [viewports.map((v) => PROFILES[v].label).join(', ') || 'None', ...EMULATION.filter((e) => emulation[e.key]).map((e) => e.label.toLowerCase())].join('; '),
                 },
                 { to: 'tests' as const, term: 'Tests', value: testsSummary(checks, checkGroups.data?.groups ?? [], checkList.data ?? []) },
+                { to: 'tests' as const, term: 'Reports', value: checks.length ? reportsFrom(checks) : 'None' },
                 {
                   to: 'scope' as const,
                   term: 'Scope',
@@ -663,6 +635,91 @@ function testsSummary(checks: string[], groups: { id: string; name: string }[], 
   });
   if (group) return `${group.name} (${checks.length} ${checks.length === 1 ? 'check' : 'checks'})`;
   return available.filter((c) => checks.includes(c.id)).map((c) => c.name).join(', ');
+}
+
+/**
+ * Every check under a heading, with Select all and Clear all for the lot and for each heading.
+ * Checks that need setting up first can't be ticked, so "all" means every check that can run.
+ */
+function CheckList({ checks, selected, onChange }: { checks: CheckInfo[]; selected: string[]; onChange: (ids: string[]) => void }) {
+  const usable = (list: CheckInfo[]) => list.filter((c) => c.available).map((c) => c.id);
+  const ticked = usable(checks).filter((id) => selected.includes(id)).length;
+  const total = usable(checks).length;
+  const set = (ids: string[], on: boolean) => onChange(on ? [...new Set([...selected, ...ids])] : selected.filter((id) => !ids.includes(id)));
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl bg-muted px-4 py-2.5">
+        <p className="text-sm font-medium" aria-live="polite">
+          {ticked} of {total} checks selected
+        </p>
+        <div className="ml-auto flex gap-2">
+          <Button type="button" variant="outline" size="sm" onClick={() => set(usable(checks), true)} disabled={ticked === total}>
+            Select all
+          </Button>
+          <Button type="button" variant="outline" size="sm" onClick={() => onChange([])} disabled={selected.length === 0}>
+            Clear all
+          </Button>
+        </div>
+      </div>
+      {sectionChecks(checks).map((section) => {
+        const ids = usable(section.checks);
+        const all = ids.length > 0 && ids.every((id) => selected.includes(id));
+        return (
+          <fieldset key={section.name} className="grid gap-3 rounded-xl border p-4 sm:grid-cols-2">
+            <legend className="sr-only">{section.name}</legend>
+            <div className="flex flex-wrap items-center justify-between gap-2 sm:col-span-2">
+              <h3 className="text-sm font-semibold" aria-hidden="true">
+                {section.name}
+              </h3>
+              {ids.length > 1 && (
+                <Button type="button" variant="link" size="sm" className="h-auto p-0" onClick={() => set(ids, !all)}>
+                  {all ? 'Clear all' : 'Select all'}
+                  <span className="sr-only"> {section.name} checks</span>
+                </Button>
+              )}
+            </div>
+            {section.checks.map((check) => (
+              <div key={check.id} className="flex items-start gap-2">
+                <Checkbox
+                  id={`check-${check.id}`}
+                  disabled={!check.available}
+                  checked={selected.includes(check.id) && check.available}
+                  onCheckedChange={(state) => set([check.id], state === true)}
+                  aria-describedby={`check-${check.id}-hint`}
+                  className="mt-0.5"
+                />
+                <div className="grid gap-0.5">
+                  <Label htmlFor={`check-${check.id}`}>{check.name}</Label>
+                  <span id={`check-${check.id}-hint`} className="text-sm text-muted-foreground">
+                    {check.description}
+                    {check.slow && ' Adds several seconds per page.'}
+                    {CHECK_FEEDS[check.id] && <span className="font-medium text-foreground"> {CHECK_FEEDS[check.id]}</span>}
+                    {!check.available && (
+                      <>
+                        {' '}
+                        <Link to="/settings" className="font-medium underline">
+                          Switch it on in Settings
+                        </Link>
+                        .
+                      </>
+                    )}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </fieldset>
+        );
+      })}
+    </div>
+  );
+}
+
+/** The reports an audit with these checks can produce, by name. */
+function reportsFrom(checks: string[]): string {
+  const reports = ['Leadership summary', 'Client report', 'Developer report and tickets', 'Audience and tasks (with personas set up)'];
+  if (checks.includes('sharing') || checks.includes('future')) reports.push('Search and future readiness');
+  return reports.join(', ');
 }
 
 function Field({ id, label, hint, children }: { id: string; label: string; hint?: string; children: ReactNode }) {

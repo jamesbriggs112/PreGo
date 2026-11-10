@@ -13,6 +13,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { NativeSelect } from '@/components/ui/native-select';
 import { Alert } from '@/components/ui/alert';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { AnalyticsImport } from '@/components/AnalyticsImport';
 
 const EMPTY: AudienceProfile = { purposes: [], personas: [], tasks: [], updatedAt: '' };
 
@@ -349,6 +350,19 @@ export function AudiencePage() {
           <option key={p} value={p} />
         ))}
       </datalist>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Visitor figures</CardTitle>
+          <CardDescription>
+            Google Analytics and Search Console exports, for the Analytics section of the reports and to weigh issues by how many people see them. Imports save straight
+            away and are used by every audit of this project.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <AnalyticsImport projectId={projectId} />
+        </CardContent>
+      </Card>
 
       <div className="sticky bottom-0 flex flex-wrap items-center gap-3 border-t bg-background py-3">
         <Button type="button" onClick={() => save.mutate(profile)} disabled={save.isPending || !dirty}>

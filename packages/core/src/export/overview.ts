@@ -44,14 +44,9 @@ export async function overviewDocx(plan: ExportPlan, whyItMatters: string, brand
   const unit = plan.run.mode === 'explore' ? 'screen' : plan.run.mode === 'journey' ? 'journey step' : 'page';
   const pack: string[][] = [
     ['overview.docx', 'This summary', 'Leadership and anyone new to the audit'],
-    ['report.docx', 'Every issue found, grouped by category and theme, with examples, why each matters and what to do', 'Project and development teams'],
-    [
-      'tickets.csv',
-      plan.options.clientFacing
-        ? 'One row per issue, ready to import into a ticketing tool. Its Report section column points to the matching part of report.docx'
-        : 'One row per issue, ready to import into a ticketing tool. Ticket IDs match report.docx',
-      'Development team',
-    ],
+    ...(plan.options.clientFacing ? [['client-report.docx', 'The full findings for the client team: every issue, grouped by category and theme, with why each matters and what to do', 'Client team and project leads']] : []),
+    ['report.docx', 'Every issue found, with ticket IDs, examples, why each matters and what to do', 'Project and development teams'],
+    ['tickets.csv', 'One row per issue, ready to import into a ticketing tool. Ticket IDs match report.docx', 'Development team'],
     ['occurrences.csv', 'Every place each issue was found', 'Development team'],
   ];
   if (plan.options.reports.audience && plan.project.settings.audience?.personas.length) {

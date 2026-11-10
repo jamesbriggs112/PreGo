@@ -49,8 +49,8 @@ tablet,40
 Grand total,2040
 `;
 
-async function reportText(dir: string) {
-  const zip = await JSZip.loadAsync(readFileSync(join(dir, 'report.docx')));
+async function reportText(dir: string, file = 'report.docx') {
+  const zip = await JSZip.loadAsync(readFileSync(join(dir, file)));
   return { zip, text: (await zip.file('word/document.xml')!.async('string')).replace(/<\/w:p>/g, '\n').replace(/<[^>]+>/g, '') };
 }
 
@@ -252,8 +252,8 @@ describe('Google Analytics import', () => {
   }, 120_000);
 });
 
-describe('the client-facing report', () => {
-  it('has a contents page, the written sections and every optional section, numbered in order', async () => {
+describe('the client report', () => {
+  it('is its own file, with a contents page, the written sections and every optional section, numbered in order', async () => {
     db.saveProjectSettings(db.getRun(runId)!.projectId, { analytics: parseAnalyticsCsv([{ name: 'traffic.csv', text: GA_CHANNELS }]) });
     db.saveReportOptions(runId, {
       clientFacing: true,
@@ -266,7 +266,7 @@ describe('the client-facing report', () => {
       },
     });
     const exported = await exportRun(db, runId, { dataDir, outDir: join(dataDir, 'client') });
-    const { zip, text } = await reportText(exported.dir);
+    const { zip, text } = await reportText(exported.dir, 'client-report.docx');
     const headings = [...text.matchAll(/^(\d+)\. (.+)$/gm)].map((m) => `${m[1]}. ${m[2]}`);
     const expected = [
       '1. Executive summary',
@@ -305,10 +305,14 @@ describe('the client-facing report', () => {
     expect(text).toMatch(/Where: .+\. (Critical|High|Medium|Low) severity at worst\./);
     expect(await verifyExport(exported.dir)).toMatchObject({ ok: true, problems: [] });
 
-    // Ticket report sections follow the findings section's number.
+    // report.docx is still the developer report, with ticket IDs, and tickets.csv points to its sections.
+    const developer = (await reportText(exported.dir)).text;
+    expect(developer).toMatch(/PRG-[A-Z0-9]+-\d{3}/);
+    expect(developer).toContain('5. Findings by category');
     const [header, ...rows] = parse(readFileSync(exported.files.tickets, 'utf8').replace(/^\uFEFF/, '')) as string[][];
     const section = header.indexOf('Report section');
-    expect(rows.every((r) => /^4\.\d+$/.test(r[section]))).toBe(true);
+    expect(rows.every((r) => /^5\.\d+$/.test(r[section]))).toBe(true);
+    expect(JSON.parse(readFileSync(exported.files.runJson, 'utf8')).reports).toEqual(['report.docx', 'client-report.docx']);
   }, 120_000);
 
   it('the technical report leaves the written sections and empty optional sections out', () => {

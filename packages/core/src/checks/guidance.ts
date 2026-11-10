@@ -614,10 +614,24 @@ const PREGO: Record<string, RuleGuidance> = {
   },
   'vulnerable-library': {
     title: 'The site uses a JavaScript library with known security holes',
-    description: 'A library the site loads is a version with publicly known vulnerabilities, according to the Retire.js database.',
+    description: 'A library the site loads is a version with publicly known vulnerabilities, according to the Retire.js and OSV.dev databases.',
     whyItMatters: 'Attackers look for these versions because the weaknesses and how to use them are published.',
     recommendation: 'Update the library to the version named in the ticket or later, then retest the pages that use it.',
     effort: 'Medium',
+  },
+  'vulnerable-software': {
+    title: 'The site may run software with known security holes',
+    description: 'The server or content management system names a version that public vulnerability databases (the NVD and OSV.dev) list as affected by known vulnerabilities.',
+    whyItMatters: 'Attackers scan for sites announcing vulnerable versions, especially ones on CISA’s list of vulnerabilities being exploited. The version shown can be out of date or patched by the host, so it needs confirming.',
+    recommendation: 'Confirm the version with whoever hosts or maintains the site. If it’s right, update to a supported release with the fixes, and stop the server announcing its version.',
+    effort: 'Medium',
+  },
+  'end-of-life-software': {
+    title: 'The site uses software that no longer gets security fixes',
+    description: 'A version the site uses has reached the end of its support, according to endoflife.date, so new vulnerabilities in it won’t be fixed.',
+    whyItMatters: 'Unsupported software collects unfixed weaknesses over time, and security reviews and insurers often treat it as a risk in itself.',
+    recommendation: 'Plan an upgrade to a supported release. Some hosts and Linux distributions extend support, so check with them first.',
+    effort: 'Large',
   },
   'trackers-before-consent': {
     title: 'Tracking starts before visitors agree to it',

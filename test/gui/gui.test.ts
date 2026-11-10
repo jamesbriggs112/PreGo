@@ -235,6 +235,19 @@ describe('Settings and Export screens', () => {
     await expect(page.getByLabel('Pages audited per template').inputValue()).resolves.toBe('2');
   }, 60_000);
 
+  it('shows the vulnerability data and saves the weekly update choice, without downloading', async () => {
+    const { page } = gui;
+    await page.goto(`${gui.url}settings?section=security`);
+    await page.getByRole('heading', { name: 'Vulnerability data' }).waitFor();
+    await page.getByText(/Not downloaded yet: audits use the copy that came with Prego/).waitFor();
+    await page.getByRole('button', { name: 'Update now' }).waitFor();
+    await page.getByLabel('Update automatically every week').uncheck();
+    await expect.poll(() => gui.db.getSetting('vulnDbAutoUpdate')).toBe(false);
+    await page.getByLabel('Update automatically every week').check();
+    await expect.poll(() => gui.db.getSetting('vulnDbAutoUpdate')).toBe(true);
+    expect(await axeViolations(page)).toEqual([]);
+  }, 30_000);
+
   it('creates an export, downloads each file and the zip, with branding in the report', async () => {
     const { page } = gui;
     await page.goto(`${gui.url}runs/${runId}`);

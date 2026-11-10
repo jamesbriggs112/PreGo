@@ -13,6 +13,10 @@ import {
   TriageError,
   buildExportPlan,
   buildDashboard,
+  readManifest,
+  updateVulnDb,
+  vulnDbAgeDays,
+  type UpdateProgress,
   type Dashboard,
   reportOutline,
   checkDefinitions,
@@ -79,6 +83,8 @@ export interface AppOptions {
   dummyData?: DummyData;
   /** How journeys are recorded. Default: Playwright's code generator (tests swap in a fake). */
   recorder?: Recorder;
+  /** Refresh the vulnerability data in the background when it's a week old (if the auditor allows). Off in tests. */
+  vulnDbAutoUpdate?: boolean;
 }
 
 export interface PregoApp {
@@ -548,6 +554,65 @@ export async function buildApp(options: AppOptions): Promise<PregoApp> {
   );
 
   // Settings
+
+  // Vulnerability data: a local copy of public databases, refreshed on request or weekly. Downloads
+  // name only a fixed list of common software, never anything about an audited site.
+  type VulnJob = { controller: AbortController; progress: UpdateProgress | null; startedAt: string; finishedAt: string | null; error: string | null };
+  let vulnJob: VulnJob | null = null;
+  const autoUpdate = () => db.getSetting<boolean>('vulnDbAutoUpdate') ?? true;
+  const vulnStatus = () => ({
+    manifest: readManifest(dataDir),
+    ageDays: vulnDbAgeDays(dataDir),
+    autoUpdate: autoUpdate(),
+    updating: !!vulnJob && !vulnJob.finishedAt,
+    progress: vulnJob?.finishedAt ? null : (vulnJob?.progress ?? null),
+    error: vulnJob?.error ?? null,
+  });
+  const startVulnUpdate = () => {
+    if (vulnJob && !vulnJob.finishedAt) return;
+    const job: VulnJob = { controller: new AbortController(), progress: null, startedAt: new Date().toISOString(), finishedAt: null, error: null };
+    vulnJob = job;
+    updateVulnDb(dataDir, { signal: job.controller.signal, onProgress: (p) => (job.progress = p) })
+      .then((manifest) => {
+        const failed = manifest.sources.filter((s) => s.error);
+        if (failed.length) job.error = `Couldn’t update ${failed.map((s) => s.name).join(', ')}. The previous copy is kept.`;
+      })
+      .catch((error: Error) => (job.error = job.controller.signal.aborted ? 'Stopped. The previous copy is kept.' : `The update failed: ${error.message}. The previous copy is kept.`))
+      .finally(() => (job.finishedAt = new Date().toISOString()));
+  };
+  app.get('/api/vulndb', async () => vulnStatus());
+  app.post('/api/vulndb/update', async () => {
+    startVulnUpdate();
+    return vulnStatus();
+  });
+  app.delete('/api/vulndb/update', async () => {
+    vulnJob?.controller.abort();
+    return vulnStatus();
+  });
+  app.put<{ Body: { autoUpdate: boolean } }>(
+    '/api/vulndb',
+    { schema: { body: { type: 'object', required: ['autoUpdate'], additionalProperties: false, properties: { autoUpdate: { type: 'boolean' } } } } },
+    async (request) => {
+      db.setSetting('vulnDbAutoUpdate', request.body.autoUpdate);
+      return vulnStatus();
+    },
+  );
+  if (options.vulnDbAutoUpdate) {
+    // Check now and every six hours; update when the data is missing or a week old.
+    const check = () => {
+      const age = vulnDbAgeDays(dataDir);
+      if (autoUpdate() && (age === null || age >= 7)) startVulnUpdate();
+    };
+    const first = setTimeout(check, 15_000);
+    const timer = setInterval(check, 6 * 3_600_000);
+    first.unref();
+    timer.unref();
+    app.addHook('onClose', async () => {
+      clearTimeout(first);
+      clearInterval(timer);
+      vulnJob?.controller.abort();
+    });
+  }
 
   app.get('/api/settings', async () => ({ ...getSettings(db), hasLogo: existsSync(logoPath(dataDir)), exploreDefaults: { denyLabels: DEFAULT_DENY_LABELS } }));
 

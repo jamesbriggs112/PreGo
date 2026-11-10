@@ -18,7 +18,8 @@ describe('outdated JavaScript libraries', () => {
   it('recognises libraries by file name and by content, and leaves current versions alone', () => {
     expect(scanScript('https://example.org/js/jquery-1.8.1.min.js', null).map((c) => `${c.component}@${c.version}`)).toEqual(['jquery@1.8.1']);
     expect(scanScript('https://example.org/js/vendor.js', '/*! jQuery v2.2.4 | (c) jQuery Foundation | jquery.org/license */').map((c) => c.version)).toEqual(['2.2.4']);
-    expect(scanScript('https://example.org/js/jquery-3.7.1.min.js', null)).toEqual([]);
+    // Current versions are recognised too, so newer advisories and end-of-life dates can be checked, but have no known vulnerabilities.
+    expect(scanScript('https://example.org/js/jquery-3.7.1.min.js', null).flatMap((c) => c.vulnerabilities ?? [])).toEqual([]);
   });
 
   it('raises one site-wide ticket per vulnerable library, naming the version that fixes it', async () => {

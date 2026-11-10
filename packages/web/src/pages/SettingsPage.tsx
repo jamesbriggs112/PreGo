@@ -14,6 +14,7 @@ import { NativeSelect } from '@/components/ui/native-select';
 import { Alert } from '@/components/ui/alert';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
+import { VulnDbSettings } from '@/components/VulnDbSettings';
 
 // Settings are split into sections, so each screen shows only one area. One form holds them all,
 // so changes in several sections are kept until Save settings.
@@ -22,6 +23,7 @@ const SECTIONS = [
   { id: 'audits', label: 'New audit defaults', hint: 'Screen sizes, crawl and checks' },
   { id: 'exports', label: 'Exports', hint: 'tickets.csv columns' },
   { id: 'ai', label: 'AI review', hint: 'Ollama on this computer' },
+  { id: 'security', label: 'Vulnerability data', hint: 'Known security holes, kept up to date' },
 ] as const;
 type SectionId = (typeof SECTIONS)[number]['id'];
 
@@ -63,7 +65,7 @@ export function SettingsPage() {
               {settings.error.message}
             </Alert>
           )}
-          {settings.data && <SettingsForm initial={settings.data} section={section} />}
+          {section === 'security' ? <VulnDbSettings /> : settings.data && <SettingsForm initial={settings.data} section={section} />}
         </div>
       </div>
     </div>

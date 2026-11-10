@@ -17,7 +17,7 @@ export const CHECK_GROUPS: CheckGroup[] = [
   { id: 'future', name: 'Search, sharing and future readiness', description: 'How the site appears in search and when shared, and how ready it is for AI assistants, answer engines and voice search.', checks: ['content', 'sharing', 'future', 'structure'] },
   { id: 'design', name: 'Design and browsers', description: 'Visual consistency, and Firefox and Safari rendering.', checks: ['ui', 'browsers'] },
   { id: 'performance', name: 'Performance', description: 'Lighthouse performance, best-practice and SEO scores.', checks: ['lighthouse'] },
-  { id: 'security', name: 'Security', description: 'Passive checks only: headers, certificate, cookies, CSP, outdated libraries and tracking before consent. Nothing is attacked.', checks: ['security', 'libraries', 'privacy'] },
+  { id: 'security', name: 'Security', description: 'Passive checks only: headers, certificate, cookies, CSP, outdated libraries, known vulnerable or unsupported software, and tracking before consent. Nothing is attacked.', checks: ['security', 'libraries', 'software', 'privacy'] },
   { id: 'full', name: 'Full audit', description: 'Every check.', checks: [] },
 ];
 

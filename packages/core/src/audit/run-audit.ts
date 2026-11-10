@@ -1,4 +1,5 @@
 import { existsSync, statSync } from 'node:fs';
+import { openVulnDb } from '../vulndb/store.js';
 import { join, resolve } from 'node:path';
 import type { PregoDb } from '../db/database.js';
 import { BrowserSession, sessionPath, type BasicAuth, type OpenedPage } from '../browser/session.js';
@@ -219,6 +220,7 @@ export async function runAudit(db: PregoDb, options: AuditOptions): Promise<Audi
           onRequest: options.onRequest,
           ai: options.ai,
           runDir,
+          dataDir,
         })),
       ...(discovery.modules ?? []),
     ];
@@ -321,6 +323,8 @@ export async function runAudit(db: PregoDb, options: AuditOptions): Promise<Audi
       ...discovery.summary,
       ...(compared && { competitors: compared }),
       ...(walked && { walkthrough: walked }),
+      // Which vulnerability data the security checks used, so the report can say how current it was.
+      ...(modules.some((m) => m.id === 'libraries' || m.id === 'software') && { vulnDbDate: openVulnDb(dataDir).date }),
       findings: db.getRawFindings(run.id).length,
       tickets: db.getTickets(run.id).length,
       timings: { ...timings, totalMs: Date.now() - new Date(run.startedAt).getTime(), locations: toAudit.length, viewports: viewports.length },

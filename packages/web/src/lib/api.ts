@@ -1,5 +1,5 @@
 import type { Calibration, CheckCost, CheckGroup } from '@prego/core/estimate';
-import type { AnalyticsSummary, AudienceProfile, Dashboard, SuggestJob, Category, Location, Priority, Project, Run, Severity, Ticket } from '@prego/core/types';
+import type { AnalyticsSummary, AudienceProfile, Dashboard, SuggestJob, UpdateProgress, VulnDbManifest, Category, Location, Priority, Project, Run, Severity, Ticket } from '@prego/core/types';
 import type { OptionalSection, ReportOptions } from '@prego/core/report-options';
 
 export type RunSummary = Pick<Run, 'id' | 'projectId' | 'mode' | 'target' | 'status' | 'startedAt' | 'finishedAt' | 'summary' | 'error'>;
@@ -159,6 +159,16 @@ export interface ReportState {
   hasAudience: boolean;
 }
 
+/** The local vulnerability data: its sources and dates, and any update in progress. */
+export interface VulnDbStatus {
+  manifest: VulnDbManifest | null;
+  ageDays: number | null;
+  autoUpdate: boolean;
+  updating: boolean;
+  progress: UpdateProgress | null;
+  error: string | null;
+}
+
 export type PreviewReport = 'technical' | 'client' | 'overview' | 'audience' | 'future';
 
 /** An audit read from a typed request, waiting for the person to confirm it. */
@@ -203,6 +213,10 @@ export const api = {
     request<{ deleted: { project: string; audits: number; exports: number } }>(`/api/projects/${id}`, { method: 'DELETE' }),
   startRun: (body: StartRunBody) => post<{ runId: number; projectId: number }>('/api/runs', body),
   planAudit: (text: string) => post<AuditPlan>('/api/assistant/plan', { text }),
+  vulnDb: () => request<VulnDbStatus>('/api/vulndb'),
+  updateVulnDb: () => request<VulnDbStatus>('/api/vulndb/update', { method: 'POST' }),
+  stopVulnDbUpdate: () => request<VulnDbStatus>('/api/vulndb/update', { method: 'DELETE' }),
+  setVulnDbAutoUpdate: (autoUpdate: boolean) => request<VulnDbStatus>('/api/vulndb', { method: 'PUT', body: JSON.stringify({ autoUpdate }) }),
   report: (runId: number) => request<ReportState>(`/api/runs/${runId}/report`),
   saveReport: (runId: number, options: ReportOptions) => request<ReportState>(`/api/runs/${runId}/report`, { method: 'PUT', body: JSON.stringify(options) }),
   importAnalytics: (projectId: number, files: { name: string; text: string }[]) =>

@@ -15,6 +15,7 @@ import { brokenLinksModule } from './links/links.js';
 import { ibmModule } from './ibm/ibm.js';
 import { goLiveModule } from './golive/golive.js';
 import { librariesModule } from './libraries/libraries.js';
+import { softwareModule } from './software/software.js';
 import { privacyModule } from './privacy/privacy.js';
 import { spellingModule } from './spelling/spelling.js';
 import { browsersModule } from './browsers/browsers.js';
@@ -35,6 +36,8 @@ export interface CheckFactoryContext {
   onRequest?: (url: string) => void;
   /** The run's folder, for checks that keep images for the report (deleted on export). */
   runDir?: string;
+  /** Prego's data folder, for the local vulnerability data. */
+  dataDir?: string;
 }
 
 export interface CheckDefinition {
@@ -129,11 +132,20 @@ const definitions: CheckDefinition[] = [
   {
     id: 'libraries',
     name: 'Outdated JavaScript libraries',
-    description: 'Scripts the pages load, checked against the Retire.js database of libraries with published vulnerabilities (a copy kept on this computer).',
+    description: 'Scripts the pages load, checked against Retire.js and OSV.dev advisories, CISA’s list of exploited vulnerabilities and end-of-life dates (a copy kept on this computer).',
     categories: ['SEC'],
     defaultOn: true,
     cost: { seconds: [0.05, 0.5], perPage: true },
-    create: () => librariesModule(),
+    create: (context) => librariesModule({ dataDir: context.dataDir }),
+  },
+  {
+    id: 'software',
+    name: 'Known vulnerable software',
+    description: 'Server software and CMS versions named in headers and the generator tag (Apache, nginx, PHP, OpenSSL, WordPress, Drupal, Joomla), checked against a local copy of the NVD, OSV.dev, CISA’s exploited list and end-of-life dates. Passive: nothing is probed.',
+    categories: ['SEC'],
+    defaultOn: true,
+    cost: { seconds: [0.02, 0.1], perPage: true },
+    create: (context) => softwareModule({ dataDir: context.dataDir }),
   },
   {
     id: 'privacy',

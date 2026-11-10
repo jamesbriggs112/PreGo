@@ -452,6 +452,14 @@ function siteMap(plan: ExportPlan, entry: OutlineEntry): (Paragraph | Table)[] {
   ];
 }
 
+/** How current the vulnerability data was, for audits that checked software versions. Empty otherwise. */
+export function vulnDataNote(summary: Record<string, unknown>): string {
+  if (!('vulnDbDate' in summary)) return '';
+  const date = summary.vulnDbDate as string | null;
+  const when = date ? `as it was on ${new Date(date).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}` : 'in the copy that comes with Prego';
+  return `Software versions were checked against public vulnerability data (Retire.js, OSV.dev, the NIST National Vulnerability Database, CISA’s Known Exploited Vulnerabilities list and endoflife.date) ${when}. Vulnerabilities published since then aren’t included. Versions were read only from what a visitor’s browser receives, so software that doesn’t announce its version wasn’t checked, and a version shown may already be patched.`;
+}
+
 function limitations(plan: ExportPlan, entry: OutlineEntry): Paragraph[] {
   const method = plan.outline.find((o) => o.id === 'method')!.number;
   const notAudited = plan.locations.filter((l) => !l.audited && (l.statusCode ?? 0) < 400).length;
@@ -465,6 +473,7 @@ function limitations(plan: ExportPlan, entry: OutlineEntry): Paragraph[] {
       ? `${notAudited} ${plural(notAudited, 'page')} shared a template with pages already audited and were not checked individually. Content-specific problems on those pages may be missed.`
       : '',
     'Content drawn inside <canvas> or WebGL, video and audio content, PDFs and other documents were not checked.',
+    vulnDataNote(plan.run.summary),
   ].filter(Boolean);
   const manual = [
     'Keyboard only: tab through every page and interactive element. Check focus is always visible, nothing traps focus, and the order makes sense.',

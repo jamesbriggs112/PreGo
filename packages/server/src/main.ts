@@ -18,7 +18,7 @@ const db = new PregoDb(join(dataDir, 'prego.sqlite'));
 const interrupted = db.failInterruptedRuns('Prego stopped while this audit was running. Start a new audit to get results.');
 if (interrupted) console.log(`Marked ${interrupted} interrupted audit(s) as failed.`);
 const dummyData = loadDummyData(join(packageDir, '../../config/dummy-data.json'));
-const { app } = await buildApp({ db, dataDir, webDist: serveGui ? webDist : undefined, logger: process.env.PREGO_LOG === '1', dummyData });
+const { app } = await buildApp({ db, dataDir, webDist: serveGui ? webDist : undefined, logger: process.env.PREGO_LOG === '1', dummyData, vulnDbAutoUpdate: true });
 
 // Localhost only: Prego handles client data and must not be reachable from the network.
 await app.listen({ host: '127.0.0.1', port });

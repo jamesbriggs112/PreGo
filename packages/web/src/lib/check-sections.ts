@@ -7,7 +7,7 @@ export const CHECK_SECTIONS: { name: string; ids: string[] }[] = [
   { name: 'Search, sharing and future readiness', ids: ['sharing', 'future'] },
   { name: 'Design and browsers', ids: ['ui', 'browsers'] },
   { name: 'Performance', ids: ['lighthouse'] },
-  { name: 'Security and privacy', ids: ['security', 'libraries', 'privacy'] },
+  { name: 'Security and privacy', ids: ['security', 'libraries', 'software', 'privacy'] },
   { name: 'AI on this computer', ids: ['ai', 'tasks'] },
 ];
 

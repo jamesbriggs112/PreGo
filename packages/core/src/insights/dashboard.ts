@@ -253,19 +253,27 @@ export function legalSignals(input: DashboardInput): LegalSummary {
   }
 
   // Security of personal data in transit.
-  if (ran('security')) {
+  if (ran('security', 'libraries', 'software')) {
     const insecure = tickets.filter((t) => ['no-https', 'mixed-content', 'certificate-expired', 'old-tls'].includes(t.ruleId));
-    if (insecure.length) {
+    // Serious known vulnerabilities in what the site runs, and software with no more security fixes.
+    const vulnerable = tickets.filter((t) => ['vulnerable-library', 'vulnerable-software'].includes(t.ruleId) && (t.severity === 'Critical' || t.severity === 'High'));
+    const unsupported = tickets.filter((t) => t.ruleId === 'end-of-life-software');
+    if (insecure.length || vulnerable.length || unsupported.length) {
       signals.push({
         id: 'security',
         area: 'Keeping personal data secure',
         level: insecure.some((t) => t.ruleId === 'no-https' || t.ruleId === 'certificate-expired') ? 'risk' : 'check',
         laws: ['UK GDPR, article 32 (security of processing)'],
-        why: 'Organisations must protect personal data with appropriate security. Pages, forms or files sent without working encryption could expose what visitors send.',
-        evidence: insecure.map((t) => t.title),
+        why: 'Organisations must protect personal data with appropriate security, which includes encrypting what visitors send and keeping software patched. Known, unfixed weaknesses can count against that.',
+        evidence: [...insecure, ...vulnerable, ...unsupported].map((t) => t.title),
       });
-    } else clear.push('Security: the site uses HTTPS with a valid certificate and no insecure content was found.');
-  } else notChecked.push('Keeping personal data secure: the security check didn’t run.');
+    } else
+      clear.push(
+        ran('security')
+          ? 'Security: the site uses HTTPS with a valid certificate, no insecure content was found, and no serious known vulnerabilities were found in the software Prego could see.'
+          : 'Security: no serious known vulnerabilities were found in the software Prego could see.',
+      );
+  } else notChecked.push('Keeping personal data secure: no security check ran.');
 
   return { signals, clear, notChecked, publicSector };
 }

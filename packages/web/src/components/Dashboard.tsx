@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
 // The results page's summary tiles with a traffic light each, and the possible legal risks panel.
-// Colour is never the only signal: every light has a word next to it.
+// Colour is never the only signal: every light is a badge with a word in it.
 
 const LIGHTS: Record<Rating, { label: string; variant: 'success' | 'medium' | 'critical'; bar: string }> = {
   good: { label: 'Good', variant: 'success', bar: 'bg-[var(--badge-success-fg)]' },
@@ -16,8 +16,7 @@ const LIGHTS: Record<Rating, { label: string; variant: 'success' | 'medium' | 'c
 export function Tile({ tile }: { tile: DashboardTile }) {
   const light = tile.rating ? LIGHTS[tile.rating] : null;
   return (
-    <Card className="relative overflow-hidden">
-      {light && <span aria-hidden="true" className={cn('absolute inset-y-0 left-0 w-1', light.bar)} />}
+    <Card>
       <CardHeader>
         <div className="flex items-start justify-between gap-2">
           <CardDescription>{tile.label}</CardDescription>

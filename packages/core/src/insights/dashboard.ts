@@ -1,3 +1,4 @@
+import type { AccessibilityStatementInfo } from '../profile/profile.js';
 import type { AudienceProfile } from '../audience/types.js';
 import { CATEGORY_NAMES, type AnalyticsSummary, type Category, type Location, type Run, type Ticket } from '../types.js';
 import { assessReadiness } from '../export/readiness.js';
@@ -197,8 +198,20 @@ export function legalSignals(input: DashboardInput): LegalSummary {
     } else clear.push('Accessibility: no WCAG level A or AA issues were found by the automated checks, which catch only part of what WCAG asks.');
   } else notChecked.push('Accessibility: no accessibility check ran in this audit.');
 
-  // Accessibility statement.
-  if (crawl) {
+  // Accessibility statement: what the statement check read, else any page that looks like one.
+  const read = locations.map((l) => l.metrics.accessibilityStatement as AccessibilityStatementInfo | undefined).find((s) => s?.url);
+  const staleDays = read?.updated ? Math.floor((Date.now() - Date.parse(read.updated)) / 86_400_000) : null;
+  if (read && staleDays !== null && staleDays > 365) {
+    signals.push({
+      id: 'statement',
+      area: 'Accessibility statement',
+      level: publicSector ? 'risk' : 'check',
+      laws: publicSector ? ['Public Sector Bodies (Websites and Mobile Applications) Accessibility Regulations 2018'] : ['European Accessibility Act, if the site sells certain services to people in the EU'],
+      why: publicSector ? 'Public sector websites must review their accessibility statement regularly, at least once a year.' : 'An out-of-date statement may describe problems that are fixed, or miss new ones.',
+      evidence: [`The statement at ${new URL(read.url!).pathname} was last prepared, reviewed or updated on ${read.updated}.`],
+    });
+  } else if (read) clear.push(`Accessibility statement: found at ${new URL(read.url!).pathname}${read.updated ? `, last reviewed ${read.updated}` : ''}.`);
+  else if (crawl) {
     const statement = foundPage(locations, STATEMENT);
     if (statement) clear.push(`Accessibility statement: found at ${new URL(statement.url).pathname}.`);
     else if (publicSector) {

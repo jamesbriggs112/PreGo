@@ -23,6 +23,7 @@ import { aiModule, type AiSettings } from './ai/ai.js';
 import { structureModule } from './structure/structure.js';
 import { futureModule } from './future/future.js';
 import { sharingModule } from './sharing/sharing.js';
+import { statementModule } from './statement/statement.js';
 
 /** Everything a check factory may need from the audit. */
 export interface CheckFactoryContext {
@@ -155,6 +156,15 @@ const definitions: CheckDefinition[] = [
     defaultOn: true,
     cost: { seconds: [2, 5], perPage: true },
     create: (context) => privacyModule({ basicAuth: context.basicAuth, onRequest: context.onRequest }),
+  },
+  {
+    id: 'statement',
+    name: 'Accessibility statement',
+    description: 'Looks for a linked accessibility statement and reads when it was last reviewed, which WCAG version it uses and what it says about compliance. Only the page the site links to is read.',
+    categories: ['A11Y'],
+    defaultOn: true,
+    cost: { seconds: [0.1, 0.5] },
+    create: () => statementModule(),
   },
   {
     id: 'html',

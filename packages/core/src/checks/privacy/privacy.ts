@@ -4,6 +4,7 @@ import type { Severity } from '../../types.js';
 import type { CheckFinding, CheckModule, LocatedFinding } from '../types.js';
 import { guidanceFor } from '../guidance.js';
 import { trackerName } from '../../browser/trackers.js';
+import { sameSite } from '../../profile/site.js';
 
 export { trackerName };
 
@@ -92,11 +93,6 @@ export function privacyModule(options: { basicAuth?: BasicAuth; onRequest?: (url
       return [{ ...finding('third-party-services', `Before consent, pages contact ${hosts.length} other service${hosts.length === 1 ? '' : 's'}: ${hosts.join(', ')}.`, 'privacy:third-parties'), ...firstPage }];
     },
   };
-}
-
-function sameSite(host: string, siteHost: string): boolean {
-  const base = (h: string) => h.split('.').slice(-2).join('.');
-  return host === siteHost || base(host) === base(siteHost);
 }
 
 function finding(ruleId: string, failureSummary: string, component: string): CheckFinding {

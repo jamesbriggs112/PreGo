@@ -84,7 +84,7 @@ describe('report options', () => {
     expect(parseReportOptions({ clientFacing: true, include: { ia: true, bogus: true }, text: { summary: ' Hello ', keyFindings: '', other: 'x' } })).toEqual({
       clientFacing: true,
       reports: { overview: false, audience: false, future: false },
-      include: { analytics: false, content: false, ia: true, competitors: false },
+      include: { client: false, analytics: false, content: false, ia: true, profile: false, competitors: false },
       text: { summary: ' Hello ' },
     });
     expect(parseReportOptions({ reports: { overview: true, other: true } }).reports).toEqual({ overview: true, audience: false, future: false });

@@ -2,6 +2,11 @@
 
 import type { AudienceProfile } from './audience/types.js';
 export type { HeadIcon, HeadMetrics } from './capture/head.js';
+export type { ClientInfo } from './profile/client.js';
+export type { SiteProfile, SiteTech, SiteThirdParty, PageCarbon, PageProfile, AccessibilityStatementInfo, WeightGroup, ServerInfo, CertificateInfo } from './profile/profile.js';
+export type { CarbonRating, CarbonEstimate } from './profile/carbon.js';
+export type { TechCategory, DetectedTech } from './profile/technologies.js';
+export type { IpInfo } from './profile/ip-lookup.js';
 export type { VulnDbManifest, SourceStatus, UpdateProgress } from './vulndb/types.js';
 export type { Dashboard, DashboardTile, LegalLevel, LegalSignal, LegalSummary, Rating } from './insights/dashboard.js';
 export type { AudienceProfile, AudienceSuggestion, SuggestJob, PageSignals, Persona, PersonaDevice, Purpose, TaskSuccess, UserTask } from './audience/types.js';
@@ -50,6 +55,8 @@ export interface ProjectSettings {
    * else its logo, else its share image. Only files the site links to are fetched.
    */
   icon?: { file: string; from: string; kind: 'icon' | 'logo' | 'share-image'; savedAt: string };
+  /** What the team knows about the client, typed in by a person. */
+  client?: import('./profile/client.js').ClientInfo;
 }
 
 /** What Prego keeps from Google Analytics and Search Console CSV exports. Figures only; nothing about individual people. */

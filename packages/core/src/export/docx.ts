@@ -27,6 +27,7 @@ import { trafficText } from './csv.js';
 import { suggestReportText } from './suggest.js';
 import { assessReadiness } from './readiness.js';
 import { analyticsSection, competitorSection, contentSection, iaSection, type SectionContext } from './sections.js';
+import { clientSection, profileSection } from './profile-sections.js';
 
 export interface ReportBranding {
   /** Company shown on the cover and in the footer. */
@@ -94,6 +95,8 @@ export async function reportDocx(plan: ExportPlan, runDir: string, branding: Rep
     findings: (e) => findings(plan, runDir, e),
     content: (e) => contentSection(context, e),
     ia: (e) => iaSection(context, e),
+    client: (e) => clientSection(context, e),
+    profile: (e) => profileSection(context, e),
     map: (e) => (plan.run.mode === 'explore' ? stateMapSection(plan, extras.stateMap, e) : plan.run.mode === 'journey' ? journeySection(plan, e) : siteMap(plan, e)),
     competitors: (e) => competitorSection(context, e),
     conclusion: (e) => [heading(`${e.number}. ${e.title}`, HeadingLevel.HEADING_1), ...writtenText(plan.options.text.conclusion ?? '')],

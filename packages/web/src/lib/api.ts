@@ -1,5 +1,5 @@
 import type { Calibration, CheckCost, CheckGroup } from '@prego/core/estimate';
-import type { AnalyticsSummary, AudienceProfile, Dashboard, SuggestJob, UpdateProgress, VulnDbManifest, Category, Location, Priority, Project, Run, Severity, Ticket } from '@prego/core/types';
+import type { AnalyticsSummary, AudienceProfile, ClientInfo, SiteProfile, Dashboard, SuggestJob, UpdateProgress, VulnDbManifest, Category, Location, Priority, Project, Run, Severity, Ticket } from '@prego/core/types';
 import type { OptionalSection, ReportOptions } from '@prego/core/report-options';
 
 export type RunSummary = Pick<Run, 'id' | 'projectId' | 'mode' | 'target' | 'status' | 'startedAt' | 'finishedAt' | 'summary' | 'error'>;
@@ -22,6 +22,8 @@ export interface RunDetail extends RunSummary {
   scores: Scores | null;
   /** The figures with traffic lights, and signs of possible legal risks. Null until the audit finishes. */
   dashboard: Dashboard | null;
+  /** Weight and carbon, technologies, outside services, server, certificate and accessibility statement. */
+  profile: SiteProfile | null;
   /** Screenshots are deleted from Prego once the audit is exported; the report keeps them. */
   screenshotsDeleted: boolean;
 }
@@ -237,6 +239,8 @@ export const api = {
   saveReport: (runId: number, options: ReportOptions) => request<ReportState>(`/api/runs/${runId}/report`, { method: 'PUT', body: JSON.stringify(options) }),
   importAnalytics: (projectId: number, files: { name: string; text: string }[]) =>
     request<{ analytics: AnalyticsSummary }>(`/api/projects/${projectId}/analytics`, { method: 'PUT', body: JSON.stringify({ files }) }),
+  client: (projectId: number) => request<{ client: ClientInfo | null }>(`/api/projects/${projectId}/client`),
+  saveClient: (projectId: number, client: ClientInfo) => request<{ client: ClientInfo | null }>(`/api/projects/${projectId}/client`, { method: 'PUT', body: JSON.stringify(client) }),
   audience: (projectId: number) => request<{ profile: AudienceProfile | null; latestRunId: number | null; pages: string[] }>(`/api/projects/${projectId}/audience`),
   suggestAudience: (projectId: number) => post<SuggestJob>(`/api/projects/${projectId}/audience/suggest`),
   suggestJob: (projectId: number) => request<SuggestJob | null>(`/api/projects/${projectId}/audience/suggest`),

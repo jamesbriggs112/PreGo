@@ -14,6 +14,9 @@ import {
   TriageError,
   buildExportPlan,
   buildDashboard,
+  buildSiteProfile,
+  parseClientInfo,
+  type SiteProfile,
   readManifest,
   updateVulnDb,
   vulnDbAgeDays,
@@ -491,6 +494,7 @@ export async function buildApp(options: AppOptions): Promise<PregoApp> {
       locations: db.getLocations(run.id),
       scores: run.status === 'complete' ? scoresFor(db, run) : null,
       dashboard: run.status === 'complete' ? dashboardFor(db, run) : null,
+      profile: siteProfileFor(db, run),
       screenshotsDeleted: runImagesDeleted(db, run.id),
     };
   });
@@ -844,6 +848,21 @@ export async function buildApp(options: AppOptions): Promise<PregoApp> {
     return { stopping: job?.status === 'running' };
   });
 
+  // What the team knows about the client, typed in by a person.
+  app.get<{ Params: { id: string } }>('/api/projects/:id/client', async (request, reply) => {
+    const project = db.getProject(Number(request.params.id));
+    if (!project) return reply.code(404).send({ error: 'Project not found' });
+    return { client: project.settings.client ?? null };
+  });
+  app.put<{ Params: { id: string }; Body: unknown }>('/api/projects/:id/client', { schema: { body: { type: 'object' } }, bodyLimit: 256 * 1024 }, async (request, reply) => {
+    const project = db.getProject(Number(request.params.id));
+    if (!project) return reply.code(404).send({ error: 'Project not found' });
+    const parsed = parseClientInfo(request.body);
+    const client = Object.keys(parsed).length ? { ...parsed, updatedAt: new Date().toISOString() } : undefined;
+    db.saveProjectSettings(project.id, { client });
+    return { client: client ?? null };
+  });
+
   app.put<{ Params: { id: string }; Body: unknown }>('/api/projects/:id/audience', { schema: { body: { type: 'object' } }, bodyLimit: 512 * 1024 }, async (request, reply) => {
     const project = db.getProject(Number(request.params.id));
     if (!project) return reply.code(404).send({ error: 'Project not found' });
@@ -1133,6 +1152,12 @@ export function scoresFor(db: PregoDb, run: Run): Partial<Record<Category, numbe
 }
 
 /** The results page's figures with traffic lights, and signs of possible legal risks. */
+/** The site profile (weight and carbon, technologies, outside services, server, certificate, statement). */
+export function siteProfileFor(db: PregoDb, run: Run): SiteProfile | null {
+  const project = db.getProject(run.projectId);
+  return buildSiteProfile(db.getLocations(run.id), { greenHosting: project?.settings.client?.greenHosting === 'yes' });
+}
+
 export function dashboardFor(db: PregoDb, run: Run): Dashboard {
   const project = db.getProject(run.projectId)!;
   return buildDashboard({

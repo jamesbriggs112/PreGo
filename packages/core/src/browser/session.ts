@@ -4,6 +4,7 @@ import { dirname, join } from 'node:path';
 import { EVALUATE_SHIM } from './shim.js';
 import { PROFILES, viewportName, type Emulation, type ProfileName } from './profiles.js';
 import { blockTrackersFlag, reportUntracked } from './trackers.js';
+import { recordNetwork, type NetworkLog } from '../profile/network.js';
 
 export interface BasicAuth {
   username: string;
@@ -27,6 +28,8 @@ export interface OpenedPage {
   page: Page;
   /** e.g. `desktop` or `mobile+dark`. */
   viewport: string;
+  /** What the page has downloaded so far, for the site profile. */
+  network?: NetworkLog;
   close(): Promise<void>;
 }
 
@@ -76,7 +79,7 @@ export class BrowserSession {
     const { onRequest } = this.options;
     if (onRequest) context.on('request', reportUntracked(onRequest));
     const page = await context.newPage();
-    return { context, page, viewport: viewportName(profileName, emulation), close: () => context.close() };
+    return { context, page, viewport: viewportName(profileName, emulation), network: recordNetwork(context, page), close: () => context.close() };
   }
 
   /** Save cookies and local storage from a context (e.g. after logging in) for later audits. */

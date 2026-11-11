@@ -81,11 +81,18 @@ const WRITTEN: Record<ReportTextKey, { label: string; hint: string; suggest?: 'k
   content: { label: 'Your observations', hint: '', rows: 3 },
   ia: { label: 'Your observations', hint: '', rows: 3 },
   competitors: { label: 'Your observations', hint: '', rows: 3 },
+  client: { label: 'Your observations', hint: '', rows: 3 },
+  profile: { label: 'Your observations', hint: '', rows: 3 },
   audience: { label: 'Your observations', hint: 'Optional. Shown at the end of audience.docx.', rows: 4 },
   future: { label: 'Your observations', hint: 'Optional. Shown with the recommendations in future.docx.', rows: 4 },
 };
 
 const SECTIONS: { id: OptionalSection; label: string; hint: string }[] = [
+  {
+    id: 'client',
+    label: 'About the client',
+    hint: 'The background the team wrote on the project’s Client details page: the organisation, its goals, audiences and constraints. Contacts and internal notes are never included.',
+  },
   {
     id: 'analytics',
     label: 'Analytics',
@@ -93,6 +100,11 @@ const SECTIONS: { id: OptionalSection; label: string; hint: string }[] = [
   },
   { id: 'content', label: 'Content and tone', hint: 'Reading ease, sentence length and whether the copy talks to the reader.' },
   { id: 'ia', label: 'Information architecture', hint: 'How pages are organised: depth, top-level sections and the main navigation.' },
+  {
+    id: 'profile',
+    label: 'Site profile and sustainability',
+    hint: 'Page weight and estimated carbon, what the site is built with and hosted on, server country, certificate, accessibility statement and outside services.',
+  },
   { id: 'competitors', label: 'Competitor analysis', hint: 'Lighthouse scores and home page screenshots for this site and its competitors.' },
 ];
 
@@ -418,6 +430,16 @@ function ExtraSections({ options, state, include, setText, projectId }: Paramete
     ),
     content: 'Needs the “Content and structure (for reports)” check in the audit. Run the audit again with it ticked.',
     ia: 'Available for site crawls only.',
+    client: (
+      <>
+        Add the client’s background on the project’s{' '}
+        <Link to={`/projects/${projectId}/client`} className="text-primary underline">
+          Client details
+        </Link>{' '}
+        page to use this.
+      </>
+    ),
+    profile: 'Run the audit again to collect the site profile.',
     competitors: 'Add competitor sites in the Scope and login step of the New audit form, then run the audit again.',
   };
   return (

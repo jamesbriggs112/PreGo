@@ -1,6 +1,8 @@
 import type { PregoDb } from '../db/database.js';
 import { CATEGORIES, CATEGORY_NAMES, type Category, type Location, type Occurrence, type Project, type Run, type StateEdge, type Ticket } from '../types.js';
 import type { ImageState } from './state-map-image.js';
+import { buildSiteProfile } from '../profile/profile.js';
+import { hasClientBackground } from '../profile/client.js';
 import { DEFAULT_REPORT_OPTIONS, type OptionalSection, type ReportOptions } from './report-options.js';
 import { normalisePath, trafficByPath } from './analytics.js';
 import { impactText, ticketImpacts, type TicketImpact } from './cross.js';
@@ -91,6 +93,8 @@ export function stateMapStates(plan: ExportPlan): ImageState[] {
 /** Which optional sections have data for this audit. */
 export function availableSections(project: Project, run: Run, locations: Location[]): Record<OptionalSection, boolean> {
   return {
+    client: hasClientBackground(project.settings.client),
+    profile: !!buildSiteProfile(locations)?.pages,
     analytics: !!project.settings.analytics,
     content: locations.some((l) => l.metrics.content),
     ia: run.mode === 'crawl' && locations.length > 1,
@@ -103,11 +107,13 @@ export function reportOutline(run: Pick<Run, 'mode'>, options: ReportOptions, av
   const on = (id: OptionalSection) => options.include[id] && available[id];
   const ids: (ReportSectionId | false)[] = [
     'summary',
+    on('client') && 'client',
     'method',
     on('analytics') && 'analytics',
     'findings',
     on('content') && 'content',
     on('ia') && 'ia',
+    on('profile') && 'profile',
     'map',
     on('competitors') && 'competitors',
     options.clientFacing && !!options.text.conclusion && 'conclusion',
@@ -116,6 +122,8 @@ export function reportOutline(run: Pick<Run, 'mode'>, options: ReportOptions, av
   const titles: Record<ReportSectionId, string> = {
     summary: 'Executive summary',
     method: options.clientFacing ? 'Methodology' : 'Scope and method',
+    client: 'About the client',
+    profile: 'Site profile and sustainability',
     analytics: 'Analytics',
     findings: 'Findings by category',
     content: 'Content and tone',

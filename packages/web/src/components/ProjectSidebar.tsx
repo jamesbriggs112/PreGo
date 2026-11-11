@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ClipboardCopy, Download, FolderOpen, Info, ListOrdered, Pin, PinOff, Play, RotateCw, SquarePen, Trash2, Users, X } from 'lucide-react';
+import { ClipboardCopy, Download, FolderOpen, Info, ListOrdered, Pin, PinOff, Play, RotateCw, SquarePen, Trash2, Users, X, Building2 } from 'lucide-react';
 import { api, type ProjectListItem } from '@/lib/api';
 import { cn, formatDateTime } from '@/lib/utils';
 import { Logo } from '@/components/Logo';
@@ -74,6 +74,7 @@ export function ProjectSidebar({ onNavigate }: { onNavigate?: () => void }) {
       ...(waiting ? [{ kind: 'item' as const, label: 'Remove from the queue', icon: <X />, onSelect: () => unqueue.mutate(waiting.id) }] : []),
       { kind: 'item', label: 'New audit for this project', icon: <Play />, onSelect: () => go(`/audits/new?project=${encodeURIComponent(p.name)}`) },
       ...(complete ? [{ kind: 'item' as const, label: 'Export report and tickets', icon: <Download />, onSelect: () => go(`/runs/${last.id}/export`) }] : []),
+      { kind: 'item', label: 'Client details', icon: <Building2 />, onSelect: () => go(`/projects/${p.id}/client`) },
       { kind: 'item', label: 'Purposes and audience', icon: <Users />, onSelect: () => go(`/projects/${p.id}/audience`) },
       { kind: 'separator' },
       p.settings.pinned

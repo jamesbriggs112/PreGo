@@ -19,8 +19,9 @@ import { LegalPanel, Tile } from '@/components/Dashboard';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Previews } from '@/components/Previews';
 import { PagesTable } from '@/components/PagesTable';
+import { SiteProfilePanel } from '@/components/SiteProfile';
 
-const TABS = ['overview', 'tickets', 'previews', 'pages'] as const;
+const TABS = ['overview', 'tickets', 'profile', 'previews', 'pages'] as const;
 type Tab = (typeof TABS)[number];
 const SEVERITY_ORDER = Object.fromEntries(SEVERITIES.map((s, i) => [s, i])) as Record<string, number>;
 
@@ -108,6 +109,9 @@ export function RunResults({ run }: { run: RunDetail }) {
             </Button>
           )}
           <Button asChild variant="outline">
+            <Link to={`/projects/${run.projectId}/client`}>Client details</Link>
+          </Button>
+          <Button asChild variant="outline">
             <Link to={`/projects/${run.projectId}/audience`}>Purposes and audience</Link>
           </Button>
           <Button asChild>
@@ -122,6 +126,7 @@ export function RunResults({ run }: { run: RunDetail }) {
           <TabsTrigger value="tickets">
             Tickets <span className="rounded-full bg-muted px-1.5 text-xs text-muted-foreground">{all.filter((t) => t.status !== 'Dismissed').length}</span>
           </TabsTrigger>
+          <TabsTrigger value="profile">Site profile</TabsTrigger>
           <TabsTrigger value="previews">Previews</TabsTrigger>
           <TabsTrigger value="pages">{run.mode === 'crawl' ? 'Pages' : run.mode === 'journey' ? 'Steps' : 'Screens'}</TabsTrigger>
         </TabsList>
@@ -150,6 +155,10 @@ export function RunResults({ run }: { run: RunDetail }) {
           {run.dashboard && <LegalPanel legal={run.dashboard.legal} />}
 
           <MostSerious tickets={all} runId={run.id} onShowAll={() => setTab('tickets')} />
+        </TabsContent>
+
+        <TabsContent value="profile">
+          <SiteProfilePanel run={run} />
         </TabsContent>
 
         <TabsContent value="tickets">

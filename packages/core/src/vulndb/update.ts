@@ -1,5 +1,6 @@
 import type { Severity } from '../types.js';
 import { FILES, readJson, readManifest, writeJson } from './store.js';
+import { saveIpTable } from '../profile/ip-lookup.js';
 import { JS_EOL, SOFTWARE, npmName } from './software.js';
 import type { Advisory, EolCycle, SourceStatus, UpdateProgress, VersionRange, VulnDbManifest } from './types.js';
 
@@ -13,6 +14,7 @@ export const SOURCES = {
   nvd: { name: 'NIST National Vulnerability Database', url: 'https://services.nvd.nist.gov/rest/json/cves/2.0', licence: 'Public domain (US government)' },
   kev: { name: 'CISA Known Exploited Vulnerabilities', url: 'https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json', licence: 'CC0' },
   eol: { name: 'endoflife.date', url: 'https://endoflife.date/api', licence: 'MIT' },
+  ipasn: { name: 'IPtoASN (the country and network an address belongs to)', url: 'https://iptoasn.com/data/ip2asn-combined.tsv.gz', licence: 'PDDL 1.0 (public domain)' },
 } as const;
 type SourceId = keyof typeof SOURCES;
 
@@ -137,6 +139,13 @@ export async function updateVulnDb(dataDir: string, options: UpdateOptions = {})
     }
     writeJson(dataDir, FILES.eol, eol);
     return products.length;
+  });
+
+  // For the site profile's server location: looked up on this computer during audits, never online.
+  await run('ipasn', async () => {
+    progress('Downloading the address-to-country list');
+    const body = Buffer.from(await (await get(SOURCES.ipasn.url)).arrayBuffer());
+    return saveIpTable(dataDir, body);
   });
 
   const manifest: VulnDbManifest = {

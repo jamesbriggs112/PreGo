@@ -1,13 +1,13 @@
 // What goes into an export's reports: which reports are in the pack (the developer report, report.docx,
 // is always there; a client report with written sections can go alongside it), and optional sections
-// (analytics, content and tone, information architecture, competitors). Chosen on the Export page and
+// (about the client, analytics, content and tone, information architecture, site profile, competitors). Chosen on the Export page and
 // kept per audit.
 
 /** Written text the auditor can add. Empty means Prego's own wording (or the section is left out). */
-export const REPORT_TEXT_KEYS = ['summary', 'keyFindings', 'recommendations', 'methodology', 'conclusion', 'analytics', 'content', 'ia', 'competitors', 'whyItMatters', 'future', 'audience'] as const;
+export const REPORT_TEXT_KEYS = ['summary', 'keyFindings', 'recommendations', 'methodology', 'conclusion', 'analytics', 'content', 'ia', 'competitors', 'whyItMatters', 'future', 'audience', 'client', 'profile'] as const;
 export type ReportTextKey = (typeof REPORT_TEXT_KEYS)[number];
 
-export const OPTIONAL_SECTIONS = ['analytics', 'content', 'ia', 'competitors'] as const;
+export const OPTIONAL_SECTIONS = ['client', 'analytics', 'content', 'ia', 'profile', 'competitors'] as const;
 export type OptionalSection = (typeof OPTIONAL_SECTIONS)[number];
 
 /** Reports written alongside report.docx (the technical report, always written). */
@@ -36,7 +36,7 @@ export interface ReportOptions {
 export const DEFAULT_REPORT_OPTIONS: ReportOptions = {
   clientFacing: false,
   reports: { overview: false, audience: false, future: false },
-  include: { analytics: false, content: false, ia: false, competitors: false },
+  include: { client: false, analytics: false, content: false, ia: false, profile: false, competitors: false },
   text: {},
 };
 

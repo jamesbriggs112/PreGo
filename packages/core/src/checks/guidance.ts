@@ -656,6 +656,20 @@ const PREGO: Record<string, RuleGuidance> = {
     recommendation: 'Check each service is needed and covered by the privacy notice. Host fonts and scripts on the site’s own server where you can.',
     effort: 'Small',
   },
+  'no-accessibility-statement': {
+    title: 'No accessibility statement is linked',
+    description: 'None of the pages checked link to an accessibility statement.',
+    whyItMatters: 'An accessibility statement tells disabled visitors what works, what doesn’t and how to get help. UK public sector sites must publish one and review it every year; for others it shows the organisation takes accessibility seriously.',
+    recommendation: 'Publish an accessibility statement and link it from the footer of every page. GOV.UK has a model statement to start from.',
+    effort: 'Small',
+  },
+  'accessibility-statement-outdated': {
+    title: 'The accessibility statement is over a year old',
+    description: 'The accessibility statement says it was last prepared, reviewed or updated more than a year ago.',
+    whyItMatters: 'An out-of-date statement may describe problems that are fixed, or miss new ones. UK public sector sites must review theirs at least once a year.',
+    recommendation: 'Test the site again, update the statement with what you find, and change its “last reviewed” date.',
+    effort: 'Small',
+  },
   spelling: {
     title: 'Possible spelling mistake',
     description: 'A word isn’t in the British English dictionary. It may be a typo, an American spelling, or a name or term the dictionary doesn’t know.',

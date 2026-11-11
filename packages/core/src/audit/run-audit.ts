@@ -16,6 +16,8 @@ import { extractStructure, groupTemplates, samplePages } from '../crawl/template
 import { captureCrop, captureFullPage } from '../capture/capture.js';
 import { readHead, saveShareImage, saveSiteImage, siteImageCandidates, SITE_IMAGE_RANK, type SiteImageKind } from '../capture/head.js';
 import { describeComponent } from '../tickets/component.js';
+import { capturePageProfile } from '../profile/profile.js';
+import { createIpLookup, type IpInfo } from '../profile/ip-lookup.js';
 import { buildTickets } from '../tickets/build.js';
 import { serveFolder, type StaticServer } from '../serve/static-server.js';
 import { checkDefinitions, createChecks, defaultChecks, unknownChecks } from '../checks/registry.js';
@@ -226,7 +228,7 @@ export async function runAudit(db: PregoDb, options: AuditOptions): Promise<Audi
       ...(discovery.modules ?? []),
     ];
     const firstViewport = viewportName(viewports[0], options.emulation);
-    const head: HeadCapture = { shareImages: new Map(), siteImage: null, tried: new Set(), iconsDir: join(dataDir, 'icons') };
+    const head: HeadCapture = { shareImages: new Map(), siteImage: null, tried: new Set(), iconsDir: join(dataDir, 'icons'), lookup: createIpLookup(dataDir) };
     activeModules = modules;
     const timings: AuditTimings = { discoveryMs: Date.now() - discoveryStarted, pageViews: 0, openMs: 0, checks: {} };
 
@@ -370,6 +372,8 @@ interface HeadCapture {
   /** Picture addresses already tried, so each is fetched once. */
   tried: Set<string>;
   iconsDir: string;
+  /** Country and network of a server address, from the local IPtoASN copy. */
+  lookup: (ip: string) => IpInfo | null;
 }
 
 /**
@@ -430,6 +434,11 @@ async function auditLocation(
     timings.openMs += Date.now() - opening;
     timings.pageViews++;
     db.updateLocation(location.id, { screenshots: { ...(db.getLocation(location.id)?.screenshots ?? {}), [opened.viewport]: screenshot } });
+    // Before the checks, so only what the page itself loaded (and the scroll for the screenshot) counts.
+    if (opened.network && opened.viewport === firstViewport && (location.kind === 'page' || location.depth === 0)) {
+      const profile = await capturePageProfile(opened.page, opened.context, opened.network, head.lookup);
+      if (profile) db.updateLocation(location.id, { metrics: { ...db.getLocation(location.id)!.metrics, profile } });
+    }
 
     let count = 0;
     const touch = await opened.page.evaluate(() => navigator.maxTouchPoints > 0);

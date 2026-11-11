@@ -95,7 +95,7 @@ export function AboutPage() {
       </Card>
 
       <p className="text-sm text-muted-foreground">
-        Prego is built from free, open-source tools, including Playwright, axe-core, IBM Equal Access, Lighthouse and Retire.js. Set it up in{' '}
+        Prego is built from free, open-source tools, including Playwright, axe-core, IBM Equal Access, Lighthouse, Retire.js and the Green Web Foundation’s CO2.js, with public-domain address data from IPtoASN. Set it up in{' '}
         <Link to="/settings" className="text-primary underline">
           Settings
         </Link>

@@ -14,6 +14,13 @@ export { guidanceFor, guidanceWithFallback, type RuleGuidance, type Effort } fro
 export * from './audit/run-audit.js';
 export { captureCrop, captureFullPage, HIGHLIGHT_COLOUR, type CropOptions } from './capture/capture.js';
 export { bestIcon, type HeadIcon, type HeadMetrics } from './capture/head.js';
+export { buildSiteProfile, capturePageProfile, type SiteProfile, type PageProfile, type AccessibilityStatementInfo } from './profile/profile.js';
+export { parseClientInfo, hasClientBackground, CLIENT_REPORT_FIELDS, type ClientInfo } from './profile/client.js';
+export { carbonFor, CARBON_RATINGS, type CarbonRating } from './profile/carbon.js';
+export { detectTechnologies, TECH_RULES, type DetectedTech, type TechCategory } from './profile/technologies.js';
+export { createIpLookup, saveIpTable, type IpInfo } from './profile/ip-lookup.js';
+export { readStatement, datesIn } from './checks/statement/statement.js';
+export { siteBase, sameSite } from './profile/site.js';
 export { buildTickets, fingerprint, calculatePriority, type BuildTicketsOptions } from './tickets/build.js';
 export { describeComponent, componentLabel, type ComponentInfo } from './tickets/component.js';
 export * from './export/report-options.js';

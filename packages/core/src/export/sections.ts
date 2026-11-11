@@ -63,7 +63,7 @@ export interface CompetitorScores {
   seo: number | null;
 }
 
-const notes = (ctx: SectionContext, key: 'analytics' | 'content' | 'ia' | 'competitors'): Block[] => {
+export const notes = (ctx: SectionContext, key: 'analytics' | 'content' | 'ia' | 'competitors' | 'client' | 'profile'): Block[] => {
   const text = ctx.plan.options.text[key];
   return text ? [ctx.helpers.heading('Observations', HeadingLevel.HEADING_2), ...ctx.helpers.writtenText(text)] : [];
 };

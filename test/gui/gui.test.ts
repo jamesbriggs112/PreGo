@@ -227,6 +227,26 @@ describe('Results and ticket triage', () => {
     expect(new URL(page.url()).searchParams.get('page')).toBeTruthy();
   }, 60_000);
 
+  it('shows the site profile, and the client details the team writes', async () => {
+    const { page } = gui;
+    await page.goto(`${gui.url}runs/${runId}?tab=profile`);
+    await page.getByRole('heading', { name: 'Carbon and page weight' }).waitFor();
+    await page.getByRole('heading', { name: 'Hosting and housekeeping' }).waitFor();
+    await page.getByRole('heading', { name: 'Built with' }).waitFor();
+    expect(await axeViolations(page)).toEqual([]);
+
+    await page.getByRole('link', { name: 'Client details' }).first().click();
+    await page.getByRole('heading', { name: /^Client details/, level: 1 }).waitFor();
+    await page.getByLabel('About the organisation').fill('A housing charity in the north west.');
+    await page.getByLabel('Does the host run on renewable energy?').selectOption('yes');
+    await page.getByLabel('Contacts').fill('Sam, digital lead');
+    expect(await axeViolations(page)).toEqual([]);
+    await page.getByRole('button', { name: 'Save client details' }).click();
+    await page.getByRole('status').getByText('Saved.').waitFor();
+    const project = gui.db.getProject(gui.db.getRun(runId)!.projectId)!;
+    expect(project.settings.client).toMatchObject({ about: 'A housing charity in the north west.', greenHosting: 'yes', contacts: 'Sam, digital lead' });
+  }, 60_000);
+
   it('carries every change into the next export', async () => {
     const { keep, drop } = merged;
     const exported = await exportRun(gui.db, runId, { dataDir: gui.dataDir });

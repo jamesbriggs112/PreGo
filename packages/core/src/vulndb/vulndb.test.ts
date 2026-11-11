@@ -1,3 +1,4 @@
+import { gzipSync } from 'node:zlib';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -138,6 +139,7 @@ async function fakeUpdate(dataDir: string) {
   const fetchImpl = (async (input: string | URL) => {
     const url = String(input);
     requested.push(url);
+    if (url.includes('iptoasn.com')) return new Response(gzipSync(Array.from({ length: 1200 }, (_, i) => `1.0.${Math.floor(i / 256)}.${i % 256}\t1.0.${Math.floor(i / 256)}.${i % 256}\t1\tUS\tX`).join('\n')));
     const key = Object.keys(responses)
       .sort((a, b) => b.length - a.length)
       .find((k) => url.includes(k));
@@ -161,11 +163,12 @@ describe('updating and using the local data', () => {
       ['nvd', null],
       ['kev', null],
       ['eol', null],
+      ['ipasn', null],
     ]);
     expect(readManifest(dataDir)?.updatedAt).toEqual(expect.any(String));
     expect(vulnDbAgeDays(dataDir)).toBe(0);
     // Every request goes to a public database.
-    for (const url of requested) expect(new URL(url).host).toMatch(/^(raw\.githubusercontent\.com|api\.osv\.dev|services\.nvd\.nist\.gov|www\.cisa\.gov|endoflife\.date)$/);
+    for (const url of requested) expect(new URL(url).host).toMatch(/^(raw\.githubusercontent\.com|api\.osv\.dev|services\.nvd\.nist\.gov|www\.cisa\.gov|endoflife\.date|iptoasn\.com)$/);
   });
 
   it('keeps the previous copy of a source that fails, and says why', async () => {

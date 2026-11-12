@@ -5,6 +5,7 @@ import { Link } from 'react-router';
 import { Check, Eye, SlidersHorizontal, X } from 'lucide-react';
 import { api, type PreviewReport, type ReportState, type RunDetail } from '@/lib/api';
 import { CSV_PRESET_OPTIONS } from '@/lib/presets';
+import { canChooseFolder, chooseFolder, saveExportTo, type FolderHandle } from '@/lib/save-folder';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -152,9 +153,24 @@ export function ReportContents({ run }: { run: RunDetail }) {
     },
   });
   const create = useMutation({
-    mutationFn: () => api.createExport(run.id, chosenPreset),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['exports', run.id] }),
+    mutationFn: async (folder: FolderHandle | null) => {
+      const summary = await api.createExport(run.id, chosenPreset);
+      await queryClient.invalidateQueries({ queryKey: ['exports', run.id] });
+      return { summary, savedTo: folder ? await saveExportTo(folder, summary) : null };
+    },
   });
+  const [chooseError, setChooseError] = useState<string | null>(null);
+  // Ask where to save first, while the click still counts as the person's action, then export.
+  const startExport = async () => {
+    setChooseError(null);
+    if (!canChooseFolder()) return create.mutate(null);
+    try {
+      const folder = await chooseFolder();
+      if (folder) create.mutate(folder);
+    } catch (error) {
+      setChooseError(error instanceof Error ? error.message : String(error));
+    }
+  };
 
   // Text saves a moment after the last change, so typing doesn't send a request per key. Ticks save at once.
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -310,16 +326,21 @@ export function ReportContents({ run }: { run: RunDetail }) {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
-          <Button size="lg" onClick={() => create.mutate()} disabled={create.isPending || save.isPending || run.status !== 'complete'}>
+          <Button size="lg" onClick={() => void startExport()} disabled={create.isPending || save.isPending || run.status !== 'complete'}>
             {create.isPending ? 'Exporting…' : `Create export (${included.length} ${included.length === 1 ? 'report' : 'reports'})`}
           </Button>
-          {create.isError && (
+          {canChooseFolder() && <p className="text-sm text-muted-foreground">Prego asks where to save the reports, and keeps a copy here too.</p>}
+          {(create.isError || chooseError) && (
             <Alert variant="destructive" role="alert">
-              {create.error.message}
+              {create.error?.message ?? chooseError}
             </Alert>
           )}
           <p role="status" className="text-sm">
-            {create.isSuccess ? `Export ready: ${create.data.name}` : save.isPending ? 'Saving your choices…' : ''}
+            {create.isSuccess
+              ? create.data.savedTo
+                ? `Export ready: saved in ${create.data.savedTo}`
+                : `Export ready: ${create.data.summary.name}`
+              : save.isPending ? 'Saving your choices…' : ''}
           </p>
           {save.isError && (
             <Alert variant="destructive" role="alert">

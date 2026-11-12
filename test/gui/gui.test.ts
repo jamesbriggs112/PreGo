@@ -307,8 +307,43 @@ describe('Settings and Export screens', () => {
     await page.getByRole('button', { name: 'Customise Developer report and tickets' }).click();
     await expect(page.getByLabel('Jira').isChecked()).resolves.toBe(true);
     await page.getByLabel('Prego standard columns').check();
+    // Stand in for the folder picker: an in-memory folder called "Reports".
+    await page.evaluate(() => {
+      type Dir = { name: string; dirs: Map<string, Dir>; files: Map<string, number> };
+      const make = (name: string): Dir => ({ name, dirs: new Map(), files: new Map() });
+      const handle = (dir: Dir): unknown => ({
+        name: dir.name,
+        getDirectoryHandle: async (name: string, o?: { create?: boolean }) => {
+          if (!dir.dirs.has(name)) {
+            if (!o?.create) throw new DOMException('Not found', 'NotFoundError');
+            dir.dirs.set(name, make(name));
+          }
+          return handle(dir.dirs.get(name)!);
+        },
+        getFileHandle: async (name: string) => ({
+          createWritable: async () => ({ write: async (b: Blob) => void dir.files.set(name, b.size), close: async () => undefined }),
+        }),
+      });
+      const root = make('Reports');
+      const w = window as unknown as { __saved: Dir; __picks: number; showDirectoryPicker: () => Promise<unknown> };
+      w.__saved = root;
+      w.__picks = 0;
+      w.showDirectoryPicker = async () => {
+        w.__picks++;
+        return handle(root);
+      };
+    });
+    await page.getByText('Prego asks where to save the reports').waitFor();
     await page.getByRole('button', { name: 'Create export' }).click();
-    await page.getByRole('status').getByText(/Export ready/).waitFor({ timeout: 60_000 });
+    const status = await page.getByRole('status').getByText(/Export ready: saved in Reports\/acme-widgets-/).textContent({ timeout: 60_000 });
+    const saved = await page.evaluate(() => {
+      const w = window as unknown as { __saved: { dirs: Map<string, { files: Map<string, number> }> }; __picks: number };
+      return { picks: w.__picks, folders: [...w.__saved.dirs.entries()].map(([name, d]) => ({ name, files: Object.fromEntries(d.files) })) };
+    });
+    expect(saved.picks).toBe(1);
+    expect(saved.folders).toHaveLength(1);
+    expect(status).toContain(saved.folders[0].name);
+    for (const file of ['report.docx', 'tickets.csv', 'occurrences.csv', 'run.json']) expect(saved.folders[0].files[file]).toBeGreaterThan(0);
     expect(await axeViolations(page)).toEqual([]);
 
     const [report] = await Promise.all([page.waitForEvent('download'), page.getByRole('link', { name: 'Developer report (Word)' }).click()]);
@@ -398,6 +433,11 @@ describe('Settings and Export screens', () => {
 
   it('exports the client report as its own file, with no ticket IDs', async () => {
     const { page } = gui;
+    // Browsers that can't ask for a folder keep the export in Prego, ready to download.
+    await page.evaluate(() => {
+      const w = window as unknown as { showDirectoryPicker?: unknown };
+      w.showDirectoryPicker = undefined;
+    });
     await page.getByRole('button', { name: /^Create export/ }).click();
     await page.getByRole('status').getByText(/Export ready/).waitFor({ timeout: 60_000 });
     const [client] = await Promise.all([page.waitForEvent('download'), page.getByRole('link', { name: 'Client report (Word)' }).click()]);

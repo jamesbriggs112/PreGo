@@ -550,7 +550,26 @@ export function scopeSentence(plan: ExportPlan): string {
     return `Interactive exploration of ${productName(plan)}: ${screens} ${plural(screens, 'screen')} found and audited at ${viewports}`;
   }
   const found = plan.locations.filter((l) => l.statusCode !== null && l.statusCode < 400).length;
-  return `Site crawl of ${productName(plan)}: ${found} ${plural(found, 'page')} found, ${auditedCount(plan)} audited at ${((s.viewports as string[]) ?? []).join(', ')} ${plural(((s.viewports as string[]) ?? []).length, 'viewport')}`;
+  const audited = auditedCount(plan);
+  return `Site crawl of ${productName(plan)}: ${found} ${plural(found, 'page')} found, ${audited} audited at ${viewports}` + coverageNote(plan, found, audited);
+}
+
+/** Says when the crawl didn't reach every page, or only a sample was audited: the findings cover only those pages. */
+function coverageNote(plan: ExportPlan, found: number, audited: number): string {
+  const summary = plan.run.summary as Record<string, unknown>;
+  const settings = plan.run.settings as Record<string, unknown>;
+  const notes: string[] = [];
+  if (summary.stoppedEarly) {
+    const reason = typeof summary.stopReason === 'string' ? ` (${summary.stopReason === 'stopped' ? 'stopped by hand' : `${summary.stopReason} reached`})` : '';
+    notes.push(`The crawl stopped after ${found} ${plural(found, 'page')}${reason}, so some pages weren’t checked`);
+  }
+  if (audited < found && !settings.auditAll) {
+    const perTemplate = typeof settings.perTemplate === 'number' ? settings.perTemplate : 3;
+    notes.push(
+      `${audited} of ${found} pages were audited: up to ${perTemplate} of each page template. Pages built from the same template usually share the same issues, so the findings are likely to apply to the others too`,
+    );
+  }
+  return notes.map((n) => `. ${n}`).join('');
 }
 
 /** The audited URL, or for a local folder the folder itself (its temporary server address means nothing). */

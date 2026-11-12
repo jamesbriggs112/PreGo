@@ -67,4 +67,20 @@ describe('crawlSite', () => {
       await locked.close();
     }
   }, 60_000);
+
+  it('lists linked files as documents, skips feeds, and still reports a missing file as broken', async () => {
+    const files = await serveFolder('fixtures/download-cases');
+    try {
+      const result = await crawlSite({ startUrl: files.url, delayMs: 0, useSitemap: false });
+      expect(paths(result.pages.map((p) => p.url))).toEqual(['/', '/about.html']);
+      expect(result.documents.map((d) => [new URL(d.url).pathname, d.contentType, d.statusCode]).sort()).toEqual([
+        ['/brochure.pdf', 'application/pdf', 200],
+        ['/policy.docx', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 200],
+      ]);
+      expect(result.failed.map((f) => [new URL(f.url).pathname, f.statusCode])).toEqual([['/missing.pdf', 404]]);
+      expect(paths(result.skipped.filter((s) => s.reason === 'notAPage').map((s) => s.url))).toEqual(['/feed/', '/news.rss']);
+    } finally {
+      await files.close();
+    }
+  }, 60_000);
 });

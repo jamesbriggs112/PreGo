@@ -431,6 +431,13 @@ const PREGO: Record<string, RuleGuidance> = {
     recommendation: 'Update the link to the right address, or remove it. If the page moved, add a redirect from the old address.',
     effort: 'Small',
   },
+  'link-access-denied': {
+    title: 'Link refused access to Prego',
+    description: 'A link leads to a page that answered “access denied” (HTTP 401 or 403). Some servers turn away automated tools, so the page may work for visitors.',
+    whyItMatters: 'If visitors are refused too, the link is a dead end. If only automated tools are, search engines and AI assistants may be refused as well.',
+    recommendation: 'Open the link in a normal browser. If it’s refused there, fix or remove the link; if not, check the server’s rules for automated visitors.',
+    effort: 'Small',
+  },
   'no-https': {
     title: 'Site isn’t served over HTTPS',
     description: 'Pages are served over plain HTTP, so traffic between the visitor and the site isn’t encrypted.',

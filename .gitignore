@@ -28,3 +28,6 @@ test-results/
 .vscode/
 .idea/
 .eslintcache
+
+# Real client audits kept on this computer for accuracy checks. Never commit them.
+/fixtures/qa-*/

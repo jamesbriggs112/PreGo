@@ -90,7 +90,8 @@ export async function exportRun(db: PregoDb, runId: number, options: ExportOptio
         reports: ['report.docx', ...(files.client ? [CLIENT_FILE] : []), ...(['overview', 'audience', 'future'] as const).filter((r) => files[r]).map((r) => PACK_FILES[r])],
         reportLayout: 'technical',
         project: plan.project,
-        run: plan.run,
+        // The ticket count as exported: tickets dismissed or awaiting review since the audit are left out.
+        run: { ...plan.run, summary: { ...plan.run.summary, tickets: plan.tickets.length } },
         locations: plan.locations,
         tickets: developer.tickets.map(({ occurrenceList, screenshotFile: _file, ...ticket }) => ({
           ...ticket,

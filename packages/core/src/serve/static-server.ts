@@ -20,6 +20,12 @@ const MIME_TYPES: Record<string, string> = {
   '.ico': 'image/x-icon',
   '.woff2': 'font/woff2',
   '.mp4': 'video/mp4',
+  '.pdf': 'application/pdf',
+  '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  '.rss': 'application/rss+xml',
+  '.atom': 'application/atom+xml',
 };
 
 const TEXT_EXTENSIONS = new Set(['.html', '.css', '.js', '.mjs', '.json', '.xml', '.txt', '.svg']);

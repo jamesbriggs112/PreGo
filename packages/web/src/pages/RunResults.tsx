@@ -124,7 +124,7 @@ export function RunResults({ run }: { run: RunDetail }) {
         <TabsList aria-label="Audit results">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="tickets">
-            Tickets <span className="rounded-full bg-muted px-1.5 text-xs text-muted-foreground">{all.filter((t) => t.status !== 'Dismissed').length}</span>
+            Tickets <span className="rounded-full bg-muted px-1.5 text-xs text-muted-foreground">{all.filter((t) => t.status === 'Open').length}</span>
           </TabsTrigger>
           <TabsTrigger value="profile">Site profile</TabsTrigger>
           <TabsTrigger value="previews">Previews</TabsTrigger>

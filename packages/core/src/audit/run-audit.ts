@@ -12,6 +12,7 @@ import type { CheckFinding, LocatedFinding } from '../checks/types.js';
 import { identifyScreen } from '../explore/state.js';
 import { runStep, type Journey, type JourneyStep } from '../journeys/journey.js';
 import { crawlSite, type FailedPage } from '../crawl/crawler.js';
+import { isAccessDenied } from '../checks/links/links.js';
 import { extractStructure, groupTemplates, samplePages } from '../crawl/templates.js';
 import { captureCrop, captureFullPage } from '../capture/capture.js';
 import { readHead, saveShareImage, saveSiteImage, siteImageCandidates, SITE_IMAGE_RANK, type SiteImageKind } from '../capture/head.js';
@@ -330,7 +331,8 @@ export async function runAudit(db: PregoDb, options: AuditOptions): Promise<Audi
       // Which vulnerability data the security checks used, so the report can say how current it was.
       ...(modules.some((m) => m.id === 'libraries' || m.id === 'software') && { vulnDbDate: openVulnDb(dataDir).date }),
       findings: db.getRawFindings(run.id).length,
-      tickets: db.getTickets(run.id).length,
+      // Open tickets: the number the app, the scores and the exports all use.
+      tickets: db.getTickets(run.id).filter((t) => t.status === 'Open').length,
       timings: { ...timings, totalMs: Date.now() - new Date(run.startedAt).getTime(), locations: toAudit.length, viewports: viewports.length },
     });
     emit({ type: 'phase', phase: 'done', message: 'Audit complete' });
@@ -588,9 +590,14 @@ async function discoverByCrawling({ db, run, options, startUrl, storageStatePath
       pagesFound: crawl.pages.length,
       pagesAudited: toAudit.length,
       templates: groups.length,
-      brokenLinks: crawl.failed.length,
+      brokenLinks: crawl.failed.filter((f) => !isAccessDenied(f.statusCode)).length,
+      accessDenied: crawl.failed.filter((f) => isAccessDenied(f.statusCode)).length,
+      // Linked files (PDFs, Word documents): checked to be there, never audited as pages.
+      documents: crawl.documents.map(({ url, contentType, bytes, statusCode }) => ({ url, contentType, bytes, statusCode })),
       skipped: crawl.skipped.length,
+      notPages: crawl.skipped.filter((s) => s.reason === 'notAPage').length,
       stoppedEarly: crawl.stoppedEarly,
+      stopReason: crawl.stopReason,
     },
   };
 }

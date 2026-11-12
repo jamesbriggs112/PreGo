@@ -58,6 +58,10 @@ describe('custom accessibility checks: each fixture page triggers its check', ()
     expect(rules(page)).toContain(rule);
   });
 
+  it('lets Tab move through video players and frames: no trap, and no missing focus ring on them', () => {
+    expect(rules('media.html').filter((r) => /keyboard-trap|focus-not-visible/.test(r))).toEqual([]);
+  });
+
   it('checks touch target size only at touch viewports, and exempts inline links', () => {
     const targets = findings.filter((f) => f.ruleId === 'target-size-touch');
     expect(new Set(targets.map((f) => f.viewport))).toEqual(new Set(['mobile']));

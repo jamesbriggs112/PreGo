@@ -13,6 +13,8 @@ interface IbmResult {
   message: string;
   criteria: string[];
   level: string | null;
+  /** Found inside an embedded frame from this site; the selector is the frame. */
+  inFrame: boolean;
 }
 
 /**
@@ -54,18 +56,53 @@ export function ibmModule(): CheckModule {
           }
           return parts.join(' > ');
         };
+        // IBM gives an XPath like /html[1]/body[1]/div[2]/svg[1]. Walk it by local name, so SVG elements
+        // resolve too, and stop at a frame: anything past it is inside the embedded page.
+        const resolvePath = (path: string): { el: Element | null; frame: Element | null } => {
+          let node: Element = document.documentElement;
+          const steps = path.split('/').filter(Boolean);
+          for (let i = 0; i < steps.length; i++) {
+            const [, name, nth] = /^([^[]+)(?:\[(\d+)\])?$/.exec(steps[i]) ?? [];
+            if (!name) return { el: null, frame: null };
+            if (i === 0) {
+              if (name.toLowerCase() !== 'html') return { el: null, frame: null };
+              continue;
+            }
+            const matches = [...node.children].filter((c) => c.localName.toLowerCase() === name.toLowerCase());
+            const next = matches[Number(nth ?? 1) - 1];
+            if (!next) return { el: null, frame: null };
+            node = next;
+            if (['iframe', 'frame', 'object', 'embed'].includes(node.localName) && i < steps.length - 1) return { el: node, frame: node };
+          }
+          return { el: node, frame: null };
+        };
+        const sameOrigin = (frame: Element) => {
+          const src = frame.getAttribute('src') ?? frame.getAttribute('data') ?? '';
+          if (!src || frame.hasAttribute('srcdoc') || src.startsWith('about:')) return true;
+          try {
+            return new URL(src, location.href).origin === location.origin;
+          } catch {
+            return false;
+          }
+        };
         return report.results
           .filter((r) => r.value[0] === 'VIOLATION' && r.value[1] === 'FAIL')
-          .map((r) => {
-            const el = document.evaluate(r.path.dom, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue as Element | null;
+          .flatMap((r) => {
+            const { el, frame } = resolvePath(r.path.dom);
+            // Problems inside another company's embed (a video player, a booking or contact form) can't
+            // be fixed on this site, and the embed's own page is a different document: leave them out.
+            if (frame && !sameOrigin(frame)) return [];
+            // Without the element, the finding can't be placed on the page.
+            if (!el) return [];
             const c = criteria.get(r.ruleId);
             return {
               ruleId: r.ruleId,
-              selector: el ? cssPath(el) : 'html',
-              html: r.snippet.slice(0, 300),
+              selector: cssPath(el),
+              html: frame ? frame.outerHTML.slice(0, 300) : r.snippet.slice(0, 300),
               message: r.message,
               criteria: [...new Set(c?.nums ?? [])],
               level: c?.levels.includes('A') ? 'A' : (c?.levels[0] ?? null),
+              inFrame: !!frame,
             };
           });
       });
@@ -83,7 +120,7 @@ export function ibmModule(): CheckModule {
           wcagLevel: r.level,
           selector: r.selector,
           html: r.html,
-          failureSummary: r.message,
+          failureSummary: r.inFrame ? `Inside the embedded frame: ${r.message}` : r.message,
         }),
       );
     },

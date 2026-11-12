@@ -72,7 +72,8 @@ export async function overviewDocx(plan: ExportPlan, whyItMatters: string, brand
             ['Area', 'Score', 'Rating', 'What it covers'],
             [
               ...scores.map((c) => [c.name, `${c.score} / 100`, scoreRating(c.score!), COVERS[c.category]]),
-              ...(readiness
+              // Future readiness is already in the scores when its checks ran.
+              ...(readiness && !scores.some((c) => c.category === 'FUT')
                 ? [['Future readiness', `${readiness.score} / 100`, scoreRating(readiness.score), 'How the site appears in search and when shared, and how ready it is for AI assistants and voice search']]
                 : []),
             ],

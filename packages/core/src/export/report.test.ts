@@ -12,7 +12,7 @@ import { exportRun } from './bundle.js';
 import { parseAnalyticsCsv, mergeAnalytics, normalisePath, trafficByPath, AnalyticsImportError } from './analytics.js';
 import { busiestPages } from './sections.js';
 import { ticketsCsv } from './csv.js';
-import { reportDocx } from './docx.js';
+import { reportDocx, scopeSentence } from './docx.js';
 import { DEFAULT_REPORT_OPTIONS, listItems, parseReportOptions, type ReportOptions } from './report-options.js';
 import { measureCopy } from './sections.js';
 import { overviewDocx, scoreRating } from './overview.js';
@@ -347,6 +347,23 @@ describe('the Overview report', () => {
     expect(text).toContain('Regular checks like this one catch problems while they’re small.');
     expect(text).not.toMatch(/\b(complies with|is compliant|are compliant|legally compliant)\b/i);
   });
+
+  it('lists Future readiness once, and says when the crawl stopped early or only a sample was audited', async () => {
+    const { run } = await runAudit(db, { project: 'Future', target: 'fixtures/future-site', checks: ['future', 'axe'], delayMs: 0, dataDir });
+    const plan = buildExportPlan(db, run.id);
+    const text = await textOf(await overviewDocx(plan, DEFAULT_WHY_IT_MATTERS));
+    expect(text.match(/^Future readiness$/gm)).toHaveLength(1);
+    expect(text).not.toMatch(/stopped|were audited: up to/);
+
+    const found = plan.locations.filter((l) => l.statusCode !== null && l.statusCode < 400).length;
+    const partial = {
+      ...plan,
+      run: { ...plan.run, summary: { ...plan.run.summary, stoppedEarly: true, stopReason: 'time limit' }, settings: { ...plan.run.settings, auditAll: false, perTemplate: 3 } },
+      locations: plan.locations.map((l, i) => (i === 0 ? l : { ...l, audited: false })),
+    };
+    expect(scopeSentence(partial)).toContain(`. The crawl stopped after ${found} ${found === 1 ? 'page' : 'pages'} (time limit reached), so some pages weren’t checked`);
+    expect(scopeSentence(partial)).toContain(`. 1 of ${found} pages were audited: up to 3 of each page template.`);
+  }, 120_000);
 
   it('uses the audit’s own wording when it has some', async () => {
     db.saveReportOptions(runId, { ...DEFAULT_REPORT_OPTIONS, reports: { overview: true, audience: false, future: false }, text: { whyItMatters: 'Acme’s site is how members renew.', keyFindings: '- Forms lack labels' } });

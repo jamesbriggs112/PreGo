@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Media and frames</title>
+  <style>body { font-family: Arial, sans-serif; margin: 0; } main { padding: 16px; } .skip { position: absolute; left: -999px; } .skip:focus { left: 8px; top: 8px; } iframe { border: 1px solid #555; }</style>
+
+</head>
+<body>
+  <a class="skip" href="#main">Skip to main content</a>
+  <main id="main"><h1>Media and frames</h1>
+  <!-- NOT A DEFECT: Tab moves through the player's own controls and the frame's links, then on. -->
+  <video controls width="320" height="180" aria-label="Product film"></video>
+  <iframe title="Contact form" width="320" height="160" srcdoc="<!DOCTYPE html><html lang='en'><body><a href='#a'>First</a> <a href='#b'>Second</a> <a href='#c'>Third</a></body></html>"></iframe>
+  <audio controls aria-label="Podcast"></audio>
+  <p><a href="index.html">Back to cases</a></p></main>
+</body>
+</html>

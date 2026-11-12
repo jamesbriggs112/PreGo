@@ -31,4 +31,13 @@ describe('spelling', () => {
     const clean = await runAudit(db, { project: 'Acme', target: 'fixtures/bad-site', checks: ['spelling'], delayMs: 0, dataDir });
     expect(db.getTickets(clean.run.id).map((t) => t.title)).toEqual([]);
   }, 60_000);
+
+  it('reads the page as laid out, and leaves out code, cookie names and Welsh, but still finds real typos', async () => {
+    const { run } = await runAudit(db, { project: 'Spelling', target: 'fixtures/spelling-cases', checks: ['spelling'], delayMs: 0, dataDir });
+    const words = db
+      .getTickets(run.id)
+      .map((t) => /“(.+)”/.exec(t.title)![1])
+      .sort();
+    expect(words).toEqual(['accessbility', 'accomodate', 'devcies', 'techinique']);
+  }, 60_000);
 });

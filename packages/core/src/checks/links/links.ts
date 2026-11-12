@@ -36,14 +36,17 @@ export function brokenLinksModule(failedPages: FailedPage[]): CheckModule {
           }
           return { selector: path.join(' > '), html: link.outerHTML.slice(0, 200), text: (link.textContent ?? '').trim() };
         }, failed.url);
-        const guidance = guidanceFor('prego', 'broken-link')!;
+        // 401 and 403 often mean the server turns away automated tools, not that the page is gone.
+        const denied = isAccessDenied(failed.statusCode);
+        const ruleId = denied ? 'link-access-denied' : 'broken-link';
+        const guidance = guidanceFor('prego', ruleId)!;
         const status = failed.statusCode ? `HTTP ${failed.statusCode}` : failed.error;
         out.push({
           module: 'links',
           engine: 'prego',
-          ruleId: 'broken-link',
+          ruleId,
           category: 'UX',
-          severity: failed.statusCode && failed.statusCode >= 500 ? 'High' : 'Medium',
+          severity: denied ? 'Low' : failed.statusCode && failed.statusCode >= 500 ? 'High' : 'Medium',
           title: guidance.title,
           description: guidance.description,
           helpUrl: null,
@@ -61,6 +64,8 @@ export function brokenLinksModule(failedPages: FailedPage[]): CheckModule {
     },
   };
 }
+
+export const isAccessDenied = (statusCode: number | null) => statusCode === 401 || statusCode === 403;
 
 function sameSite(a: string, b: string): boolean {
   return new URL(a).origin === new URL(b).origin;

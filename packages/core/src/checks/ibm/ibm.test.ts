@@ -44,4 +44,15 @@ describe('IBM Equal Access as a second engine', () => {
     for (const f of ibm) expect(f.wcagCriteria.some((c) => axeKeys.has(`${f.locationId}|${f.component}|${c}`))).toBe(false);
     expect(tickets.filter((t) => t.engine === 'axe-core').length).toBeGreaterThan(5);
   });
+
+  it('places findings on the element, or on the frame they were found in, never on a page that has a language', async () => {
+    const db = new PregoDb(':memory:');
+    const { run } = await runAudit(db, { project: 'Frames', target: 'fixtures/frame-cases', checks: ['ibm'], delayMs: 0, dataDir });
+    const found = db.getRawFindings(run.id);
+    db.close();
+    expect(found.filter((f) => f.selector === 'html')).toEqual([]);
+    const lang = found.filter((f) => f.ruleId === 'html_lang_exists');
+    for (const f of lang) expect(f).toMatchObject({ selector: expect.stringMatching(/iframe/), failureSummary: expect.stringMatching(/^Inside the embedded frame/) });
+    for (const f of found.filter((f) => f.ruleId === 'svg_graphics_labelled')) expect(f.selector).toMatch(/svg|#icon/);
+  }, 120_000);
 });

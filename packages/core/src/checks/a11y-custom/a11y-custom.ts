@@ -179,11 +179,28 @@ async function keyboard(page: Page, maxTabs: number): Promise<CheckFinding[]> {
         (el as HTMLElement).blur();
         const unfocused = read();
         (el as HTMLElement).focus({ preventScroll: true });
-        return { selector: w.__pregoPath(el), html: w.__pregoSnippet(el), visibleFocus: hasOutline || focused !== unfocused };
+        // Frames, media players and components with their own inner controls keep the focus on the
+        // outer element while Tab moves through what's inside, and draw their focus ring inside too.
+        const container = ['IFRAME', 'FRAME', 'VIDEO', 'AUDIO', 'OBJECT', 'EMBED'].includes(el.tagName) || !!el.shadowRoot;
+        return { selector: w.__pregoPath(el), html: w.__pregoSnippet(el), visibleFocus: hasOutline || focused !== unfocused, container };
       });
       if (!state) continue;
       if (visited.at(-1) === state.selector) {
         stuck++;
+        if (state.container) {
+          // Tab on through its inner controls; it's only a trap if neither Tab nor Shift+Tab gets out.
+          const escaped = await leaves(page, state.selector, 'Tab');
+          if (escaped) {
+            stuck = 0;
+            visited.push(state.selector);
+            continue;
+          }
+          if (!(await leaves(page, state.selector, 'Shift+Tab'))) {
+            out.push(finding('keyboard-trap', state.selector, state.html, `Neither Tab nor Shift+Tab, pressed ${CONTAINER_TABS} times each, moved focus out of this element: keyboard users can’t get past it.`));
+          }
+          // Either way the walk can't go on from here reliably.
+          break;
+        }
         if (stuck >= 2 && new Set(visited).size < total) {
           out.push(finding('keyboard-trap', state.selector, state.html, 'Pressing Tab three times left focus on this element: keyboard users can’t move past it.'));
           break;
@@ -192,7 +209,7 @@ async function keyboard(page: Page, maxTabs: number): Promise<CheckFinding[]> {
         stuck = 0;
       }
       visited.push(state.selector);
-      if (!state.visibleFocus && !reported.has(state.selector)) {
+      if (!state.visibleFocus && !state.container && !reported.has(state.selector)) {
         reported.add(state.selector);
         out.push(finding('focus-not-visible', state.selector, state.html, 'Nothing about this element’s appearance changes when it has keyboard focus.'));
       }
@@ -201,6 +218,22 @@ async function keyboard(page: Page, maxTabs: number): Promise<CheckFinding[]> {
     await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur()).catch(() => undefined);
   }
   return out;
+}
+
+/** Presses allowed to move through a frame's or player's own controls. */
+const CONTAINER_TABS = 40;
+
+/** Whether pressing `key` up to CONTAINER_TABS times moves focus off the element at `selector`. */
+async function leaves(page: Page, selector: string, key: 'Tab' | 'Shift+Tab'): Promise<boolean> {
+  for (let i = 0; i < CONTAINER_TABS; i++) {
+    await page.keyboard.press(key);
+    const now = await page.evaluate(() => {
+      const el = document.activeElement;
+      return el && el !== document.body ? (window as unknown as { __pregoPath: (el: Element) => string }).__pregoPath(el) : null;
+    });
+    if (now !== selector) return true;
+  }
+  return false;
 }
 
 /** Elements whose text is cut off, as selector → snippet. */

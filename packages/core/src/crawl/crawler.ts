@@ -61,14 +61,29 @@ export interface FailedPage {
   referrer?: string;
 }
 
+/** A linked file rather than a web page: a PDF, a Word document, a spreadsheet. */
+export interface DocumentLink {
+  url: string;
+  /** The media type the server gave, e.g. `application/pdf`, or null. */
+  contentType: string | null;
+  /** From Content-Length, when the server says. */
+  bytes: number | null;
+  statusCode: number | null;
+  referrer?: string;
+}
+
 export interface CrawlResult {
   pages: CrawledPage[];
+  /** Linked files that open or download fine. Never broken links or pages. */
+  documents: DocumentLink[];
   /** Pages that returned an HTTP error or failed to load: broken links. */
   failed: FailedPage[];
   /** URLs found but not crawled, and why (robots.txt, filters, limits). */
   skipped: { url: string; reason: string }[];
   sitemapUrls: string[];
   stoppedEarly: boolean;
+  /** Why the crawl stopped before reaching every page it found. */
+  stopReason: 'time limit' | 'page limit' | 'stopped' | null;
 }
 
 export async function crawlSite(options: CrawlOptions): Promise<CrawlResult> {
@@ -80,6 +95,7 @@ export async function crawlSite(options: CrawlOptions): Promise<CrawlResult> {
 
   const pages: CrawledPage[] = [];
   const failed: FailedPage[] = [];
+  const documents: DocumentLink[] = [];
   const skipped: CrawlResult['skipped'] = [];
   const pageByContentHash = new Map<string, CrawledPage>();
 
@@ -106,6 +122,7 @@ export async function crawlSite(options: CrawlOptions): Promise<CrawlResult> {
   };
 
   let stoppedEarly = false;
+  let stopReason: CrawlResult['stopReason'] = null;
   const crawler = new PlaywrightCrawler(
     {
       launchContext: { launcher: chromium, launchOptions: { headless: true, args: [blockTrackersFlag()] }, useIncognitoPages: true },
@@ -141,6 +158,13 @@ export async function crawlSite(options: CrawlOptions): Promise<CrawlResult> {
           failed.push({ url: request.url, statusCode, error: `HTTP ${statusCode}`, referrer });
           return;
         }
+        // Only web pages are audited. Feeds and data are skipped; linked files are listed as documents.
+        const contentType = (await response?.headerValue('content-type').catch(() => null)) ?? null;
+        if (contentType && !isHtml(contentType)) {
+          if (isFeedOrData(contentType)) skipped.push({ url: request.url, reason: 'notAPage' });
+          else documents.push({ url: request.url, contentType: mediaType(contentType), bytes: numberOrNull(await response?.headerValue('content-length')), statusCode, referrer });
+          return;
+        }
         await page.waitForLoadState('load');
         const html = await page.content();
         const hash = createHash('sha1').update(html).digest('hex');
@@ -168,13 +192,28 @@ export async function crawlSite(options: CrawlOptions): Promise<CrawlResult> {
           exclude,
           transformRequestFunction: (req) => {
             if (!isAllowed(req.url)) return false;
+            if (looksLikeFeed(req.url)) {
+              if (!skipped.some((s) => s.url === req.url)) skipped.push({ url: req.url, reason: 'notAPage' });
+              return false;
+            }
             req.userData = { ...req.userData, referrer: request.url };
             return req;
           },
         });
       },
+      // A link that starts a download is a file, not a broken page: don't try it twice.
+      errorHandler({ request }, error) {
+        if (isDownload(error)) request.noRetry = true;
+      },
       async failedRequestHandler({ request }, error) {
-        failed.push({ url: request.url, statusCode: null, error: error.message, referrer: request.userData.referrer as string });
+        const referrer = request.userData.referrer as string | undefined;
+        if (isDownload(error)) {
+          const checked = await checkDocument(request.url, options.basicAuth);
+          if (checked.statusCode !== null && checked.statusCode < 400) documents.push({ ...checked, url: request.url, referrer });
+          else failed.push({ url: request.url, statusCode: checked.statusCode, error: checked.statusCode ? `HTTP ${checked.statusCode}` : error.message, referrer });
+          return;
+        }
+        failed.push({ url: request.url, statusCode: null, error: error.message, referrer });
       },
     },
     config,
@@ -183,11 +222,13 @@ export async function crawlSite(options: CrawlOptions): Promise<CrawlResult> {
   const timer = options.timeBudgetMs
     ? setTimeout(() => {
         stoppedEarly = true;
+        stopReason ??= 'time limit';
         crawler.stop('Time budget reached');
       }, options.timeBudgetMs)
     : undefined;
   const onAbort = () => {
     stoppedEarly = true;
+    stopReason ??= 'stopped';
     crawler.stop('Stopped');
   };
   options.signal?.addEventListener('abort', onAbort, { once: true });
@@ -198,7 +239,10 @@ export async function crawlSite(options: CrawlOptions): Promise<CrawlResult> {
     options.signal?.removeEventListener('abort', onAbort);
   }
 
-  if (skipped.some((s) => s.reason === 'limit')) stoppedEarly = true;
+  if (skipped.some((s) => s.reason === 'limit')) {
+    stoppedEarly = true;
+    stopReason ??= 'page limit';
+  }
   // Which alias was fetched first depends on timing; pick the shortest URL so runs agree.
   for (const page of pages) {
     const [canonical, ...aliases] = [page.url, ...page.aliases].sort((a, b) => a.length - b.length || (a < b ? -1 : 1));
@@ -206,7 +250,46 @@ export async function crawlSite(options: CrawlOptions): Promise<CrawlResult> {
     page.aliases = aliases;
   }
   pages.sort((a, b) => a.depth - b.depth || a.url.localeCompare(b.url));
-  return { pages, failed, skipped, sitemapUrls, stoppedEarly };
+  return { pages, documents, failed, skipped, sitemapUrls, stoppedEarly, stopReason };
+}
+
+const mediaType = (contentType: string) => contentType.split(';')[0].trim().toLowerCase();
+const isHtml = (contentType: string) => /^(text\/html|application\/xhtml\+xml)$/.test(mediaType(contentType));
+/** Feeds and data, which aren't pages and aren't documents people download. */
+const isFeedOrData = (contentType: string) => /(rss|atom|xml|json|javascript)/.test(mediaType(contentType)) && !/officedocument|opendocument/.test(contentType);
+/** RSS and Atom feeds and WordPress's data API, known by their addresses, so they aren't even requested. */
+export const looksLikeFeed = (url: string) => /\/(feed|rss|atom)(\.xml)?\/?$|\.(rss|atom)$|\/wp-json(\/|$)|[?&]feed=/i.test(new URL(url).pathname + new URL(url).search);
+const isDownload = (error: Error) => /download is starting/i.test(error.message);
+const numberOrNull = (value: string | null | undefined) => (value && /^\d+$/.test(value) ? Number(value) : null);
+
+/**
+ * Whether a linked file is there: a HEAD request, or the first byte when the server won't answer HEAD.
+ * The file is never downloaded in full.
+ */
+export async function checkDocument(url: string, auth?: BasicAuth): Promise<Omit<DocumentLink, 'url' | 'referrer'>> {
+  const headers: Record<string, string> = {};
+  if (auth) headers.Authorization = `Basic ${Buffer.from(`${auth.username}:${auth.password}`).toString('base64')}`;
+  const attempt = async (method: 'HEAD' | 'GET') => {
+    const response = await fetch(url, { method, headers: method === 'GET' ? { ...headers, Range: 'bytes=0-0' } : headers, redirect: 'follow', signal: AbortSignal.timeout(15_000) });
+    await response.body?.cancel().catch(() => undefined);
+    const range = response.headers.get('content-range')?.match(/\/(\d+)$/);
+    return {
+      statusCode: response.status,
+      contentType: response.headers.get('content-type') ? mediaType(response.headers.get('content-type')!) : null,
+      bytes: range ? Number(range[1]) : numberOrNull(response.headers.get('content-length')),
+    };
+  };
+  try {
+    const head = await attempt('HEAD');
+    // Some servers refuse HEAD (405, 501) or answer it wrongly; ask for one byte instead.
+    return head.statusCode < 400 ? head : await attempt('GET');
+  } catch {
+    try {
+      return await attempt('GET');
+    } catch {
+      return { statusCode: null, contentType: null, bytes: null };
+    }
+  }
 }
 
 async function fetchText(url: string, auth?: BasicAuth): Promise<string | undefined> {

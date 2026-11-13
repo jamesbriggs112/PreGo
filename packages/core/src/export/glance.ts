@@ -5,6 +5,8 @@ import { actionPlan, PLAN_GROUPS, type PlanGroup, type PlanRow } from './action-
 import { EFFORT_TEXT, type Area } from './fix-meta.js';
 import { strengths, type Strength } from './strengths.js';
 import { connections, hasCrossData } from './focus.js';
+import { buildSiteProfile } from '../profile/profile.js';
+import type { CarbonRating } from '../profile/carbon.js';
 
 // The pages a reader sees first: "At a glance" (a verdict, a status per area and the three things to
 // fix first), the action plan, and what's working well. Shared by the client report and the overview.
@@ -37,12 +39,29 @@ const lowerFirst = (text: string) => text.charAt(0).toLowerCase() + text.slice(1
 const upperFirst = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
 const joinAnd = (items: string[]) => (items.length <= 1 ? items.join('') : `${items.slice(0, -1).join(', ')} and ${items.at(-1)}`);
 
+/** A rating from A+ to F as a status: the Sustainable Web Design model's A+ to B is good. */
+export function carbonStatus(rating: CarbonRating): 'Good' | 'Needs attention' | 'Needs significant work' {
+  return ['A+', 'A', 'B'].includes(rating) ? 'Good' : ['C', 'D'].includes(rating) ? 'Needs attention' : 'Needs significant work';
+}
+
+/** The carbon row for the scores table: a rating per page view rather than a score out of 100. */
+function carbonRow(plan: ExportPlan): string[] | null {
+  const carbon = buildSiteProfile(plan.locations, { greenHosting: plan.project.settings.client?.greenHosting === 'yes' })?.carbon;
+  if (!carbon) return null;
+  return [
+    'Carbon per page view',
+    carbonStatus(carbon.rating),
+    `Rating ${carbon.rating}`,
+    `${carbon.averageGrams.toFixed(2)} g CO₂e on average, ${(carbon.averageBytes / 1_000_000).toFixed(1)} MB per page${carbon.greenHosting ? ', green hosting' : ''}`,
+  ];
+}
+
 /** One sentence on the site as a whole, from what's good and where the serious problems are. */
 export function verdict(rows: PlanRow[], good: Strength[]): string {
   const serious = rows.filter((r) => r.impact === 'High' && !r.advisory);
   const goods = good.slice(0, 2).map((s) => lowerFirst(s.text));
-  const opening = goods.length ? `${upperFirst(joinAnd(goods))}, but ` : '';
-  if (!serious.length) return `${opening || ''}${opening ? 'no' : 'No'} serious problems were found: the plan lists smaller improvements.`;
+  const opening = goods.length ? `${upperFirst(joinAnd(goods))}. ` : '';
+  if (!serious.length) return `${opening}No serious problems were found: the plan lists smaller improvements.`;
   const byArea = new Map<Area, number>();
   // Weighed by how much each problem matters, not how many there are.
   for (const r of serious) byArea.set(r.area, (byArea.get(r.area) ?? 0) + r.score);
@@ -51,7 +70,8 @@ export function verdict(rows: PlanRow[], good: Strength[]): string {
     .slice(0, 2)
     .map(([a]) => AREA_PHRASE[a]);
   const reasons = [...new Set(serious.flatMap((r) => (r.affects.length ? r.affects : [r.reason])))].slice(0, 2).map(lowerFirst);
-  return `${opening}${serious.length} ${plural(serious.length, 'issue')} need${serious.length === 1 ? 's' : ''} fixing first, mostly in ${joinAnd(areas)}${reasons.length ? `, affecting ${joinAnd(reasons)}` : ''}.`;
+  const first = `${goods.length ? 'But ' : ''}${serious.length} ${plural(serious.length, 'issue')} need${serious.length === 1 ? 's' : ''} fixing first, mostly in ${joinAnd(areas)}.`;
+  return `${opening}${first}${reasons.length ? ` They affect ${joinAnd(reasons)} most.` : ''}`;
 }
 
 /** The first things to fix: quick wins first, then the next most important. */
@@ -79,13 +99,12 @@ export function glanceSection(plan: ExportPlan, data: GlanceData, title: Paragra
   const first = firstFixes(data.rows);
   const out: (Paragraph | Table)[] = [title, new Paragraph({ spacing: { after: 160 }, children: [new TextRun({ text: verdict(data.rows, data.good), bold: true, size: 26 })] })];
   if (plan.options.text.summary) out.push(...writtenText(plan.options.text.summary));
-  if (scores.length) {
+  const carbon = carbonRow(plan);
+  if (scores.length || carbon) {
     out.push(
-      table(
-        ['Area', 'Status', 'Score', 'Issues'],
-        scores.map((c) => [c.name, areaStatus(c.score!), `${c.score} / 100`, issuesText(c)]),
-        { boldFirstColumn: true },
-      ),
+      table(['Area', 'Status', 'Score', 'Issues'], [...scores.map((c) => [c.name, areaStatus(c.score!), `${c.score} / 100`, issuesText(c)]), ...(carbon ? [carbon] : [])], {
+        boldFirstColumn: true,
+      }),
       para('Scores count each distinct problem once, weighted by severity and how much of the site it affects. They show where to focus, not compliance.'),
     );
   }

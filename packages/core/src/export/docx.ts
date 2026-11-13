@@ -26,8 +26,12 @@ import { averagePerformance, type LighthouseScores } from '../checks/lighthouse/
 import { stateMapStates, type ExportPlan, type OutlineEntry, type PlannedTicket, type ReportSectionId, type ReportSectionPlan } from './plan.js';
 import { listItems } from './report-options.js';
 import { trafficText } from './csv.js';
-import { suggestReportText } from './suggest.js';
+import { screenSizes, suggestReportText } from './suggest.js';
 import { assessReadiness } from './readiness.js';
+import { fixCardsSection } from './fix-cards.js';
+import { contentEditorsSection } from './content-fixes.js';
+import { progressSection } from './progress.js';
+import { glossaryParagraphs } from './glossary.js';
 import { actionPlanSection, glanceData, glanceSection, strengthsSection, type GlanceData } from './glance.js';
 import { guidanceWithFallback } from '../checks/guidance.js';
 import { analyticsSection, competitorSection, contentSection, iaSection, type SectionContext } from './sections.js';
@@ -139,9 +143,12 @@ export async function reportDocx(plan: ExportPlan, runDir: string, branding: Rep
     glance: (e) => [...glanceSection(plan, glance(), sectionHeading(e)), ...glanceWords(plan), pageBreak()],
     plan: (e) => [...actionPlanSection(glance(), sectionHeading(e)), pageBreak()],
     strengths: (e) => strengthsSection(glance(), sectionHeading(e)),
+    editors: (e) => [...contentEditorsSection(plan, sectionHeading(e)), pageBreak()],
+    progress: (e) => progressSection(plan, sectionHeading(e)),
+    glossary: (e) => [sectionHeading(e), ...glossaryParagraphs()],
     method: (e) => scopeAndMethod(plan, e),
     analytics: (e) => analyticsSection(context, e),
-    findings: (e) => findings(plan, runDir, e),
+    findings: (e) => (plan.options.clientFacing ? [...fixCardsSection(plan, glance(), runDir, sectionHeading(e)), pageBreak()] : findings(plan, runDir, e)),
     content: (e) => contentSection(context, e),
     ia: (e) => iaSection(context, e),
     client: (e) => clientSection(context, e),
@@ -608,7 +615,7 @@ export function auditedCount(plan: ExportPlan): number {
 
 export function scopeSentence(plan: ExportPlan): string {
   const s = plan.run.settings as Record<string, unknown>;
-  const viewports = `${((s.viewports as string[]) ?? []).join(', ')} ${plural(((s.viewports as string[]) ?? []).length, 'viewport')}`;
+  const viewports = `${screenSizes(s.viewports as string[] | undefined)} screen sizes`;
   if (plan.run.mode === 'journey') {
     const summary = plan.run.summary as Record<string, unknown>;
     return `Scripted journey “${summary.journey}” on ${productName(plan)}: ${summary.stepsReplayed} of ${summary.stepsRecorded} steps replayed and audited at ${viewports}`;

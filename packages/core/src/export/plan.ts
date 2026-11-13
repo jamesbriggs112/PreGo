@@ -34,6 +34,16 @@ export interface PlannedTicket extends Ticket {
   impact: TicketImpact;
   /** The purposes and personas it affects, by name: "Help people get in touch; On their phone (barrier)". */
   affects: string;
+  /** Compared with the project's previous audit: new, or still open. Null when there's no previous audit. */
+  sinceLast: 'New' | 'Still open' | null;
+}
+
+/** The project's previous finished audit, for progress since then. */
+export interface PreviousAudit {
+  run: Run;
+  /** Its tickets that were open (not dismissed or awaiting review). */
+  tickets: Ticket[];
+  locations: Location[];
 }
 
 export interface ReportSectionPlan {
@@ -49,7 +59,7 @@ export interface ReportSectionPlan {
  * their cross-references always agree.
  */
 /** A numbered top-level section of report.docx. */
-export type ReportSectionId = 'summary' | 'glance' | 'plan' | 'strengths' | 'method' | OptionalSection | 'findings' | 'map' | 'conclusion' | 'limitations';
+export type ReportSectionId = 'summary' | 'glance' | 'plan' | 'strengths' | 'editors' | 'progress' | 'glossary' | 'method' | OptionalSection | 'findings' | 'map' | 'conclusion' | 'limitations';
 export interface OutlineEntry {
   id: ReportSectionId;
   number: number;
@@ -70,6 +80,7 @@ export interface ExportPlan {
   sections: ReportSectionPlan[];
   /** Exported tickets, in report order. */
   tickets: PlannedTicket[];
+  previous: PreviousAudit | null;
 }
 
 /** The explored screens, with their exported issues, for drawing the state map. */
@@ -103,7 +114,7 @@ export function availableSections(project: Project, run: Run, locations: Locatio
 }
 
 /** The report's sections, numbered in order. Findings come after the scene-setting sections. */
-export function reportOutline(run: Pick<Run, 'mode'>, options: ReportOptions, available: Record<OptionalSection, boolean>): OutlineEntry[] {
+export function reportOutline(run: Pick<Run, 'mode'>, options: ReportOptions, available: Record<OptionalSection, boolean>, hasPrevious = false): OutlineEntry[] {
   const on = (id: OptionalSection) => options.include[id] && available[id];
   // The client report leads with the verdict and the plan; how it was checked goes at the back.
   const ids: (ReportSectionId | false)[] = options.clientFacing
@@ -114,6 +125,8 @@ export function reportOutline(run: Pick<Run, 'mode'>, options: ReportOptions, av
         on('client') && 'client',
         on('analytics') && 'analytics',
         'findings',
+        'editors',
+        hasPrevious && 'progress',
         on('content') && 'content',
         on('ia') && 'ia',
         on('profile') && 'profile',
@@ -122,6 +135,7 @@ export function reportOutline(run: Pick<Run, 'mode'>, options: ReportOptions, av
         !!options.text.conclusion && 'conclusion',
         'method',
         'limitations',
+        'glossary',
       ]
     : [
         'summary',
@@ -141,11 +155,14 @@ export function reportOutline(run: Pick<Run, 'mode'>, options: ReportOptions, av
     glance: 'At a glance',
     plan: 'What to fix first: the action plan',
     strengths: 'What’s working well',
+    editors: 'For content editors',
+    progress: 'Progress since the last audit',
+    glossary: 'Glossary',
     method: options.clientFacing ? 'Methodology' : 'Scope and method',
     client: 'About the client',
     profile: 'Site profile and sustainability',
     analytics: 'Analytics',
-    findings: 'Findings by category',
+    findings: options.clientFacing ? 'What to change, by part of the site' : 'Findings by category',
     content: 'Content and tone',
     ia: 'Information architecture',
     map: run.mode === 'explore' ? 'State map summary' : run.mode === 'journey' ? 'Journey steps' : 'Site map summary',
@@ -165,7 +182,9 @@ export function buildExportPlan(db: PregoDb, runId: number, options: ReportOptio
   const project = db.getProject(run.projectId)!;
   const locations = db.getLocations(runId);
   const available = availableSections(project, run, locations);
-  const outline = reportOutline(run, options, available);
+  const previous = previousAudit(db, run);
+  const outline = reportOutline(run, options, available, !!previous);
+  const before = new Set(previous?.tickets.map((t) => t.ticketId) ?? []);
   const findingsNumber = outline.find((o) => o.id === 'findings')!.number;
   const locationById = new Map(locations.map((l) => [l.id, l]));
   const traffic = trafficByPath(project.settings.analytics);
@@ -201,6 +220,7 @@ export function buildExportPlan(db: PregoDb, runId: number, options: ReportOptio
         priorityRaised: raise,
         impact: { purposeIds: [], personaIds: [], taskIds: [], barrierFor: [], blocksTaskIds: [], score: 0 },
         affects: '',
+        sinceLast: previous ? (before.has(ticket.ticketId) ? 'Still open' : 'New') : null,
       };
     });
     sections.push({ number, category, title: CATEGORY_NAMES[category], tickets: planned });
@@ -223,5 +243,16 @@ export function buildExportPlan(db: PregoDb, runId: number, options: ReportOptio
     edges: db.getEdges(runId),
     sections,
     tickets,
+    previous,
   };
+}
+
+/** The project's last finished audit before this one, of the same kind. */
+export function previousAudit(db: PregoDb, run: Run): PreviousAudit | null {
+  const earlier = db
+    .listRuns(run.projectId)
+    .filter((r) => r.id < run.id && r.status === 'complete' && r.mode === run.mode)
+    .at(-1);
+  if (!earlier) return null;
+  return { run: earlier, tickets: db.getTickets(earlier.id).filter((t) => !NOT_EXPORTED.has(t.status)), locations: db.getLocations(earlier.id) };
 }

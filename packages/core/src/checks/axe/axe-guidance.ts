@@ -1,0 +1,82 @@
+import type { RuleGuidance } from '../guidance.js';
+import { whyForCriteria } from '../ibm/ibm-guidance.js';
+
+// Plain-English titles for the axe rules without fuller wording in guidance.ts, so every axe finding
+// reads plainly in client reports. Why it matters comes from the WCAG criterion.
+
+export const AXE_TITLES: Record<string, string> = {
+  accesskeys: 'Keyboard shortcuts clash with each other',
+  'area-alt': 'Image map areas have no text alternative',
+  'aria-allowed-attr': 'ARIA attributes are used where they aren’t allowed',
+  'aria-allowed-role': 'Elements have a role they don’t allow',
+  'aria-braille-equivalent': 'Braille labels have no spoken equivalent',
+  'aria-command-name': 'Buttons and menu items have no name',
+  'aria-conditional-attr': 'ARIA attributes are used in the wrong situation',
+  'aria-deprecated-role': 'Elements use a role that’s being withdrawn',
+  'aria-dialog-name': 'Dialogs have no name',
+  'aria-hidden-body': 'The whole page is hidden from screen readers',
+  'aria-input-field-name': 'Interactive fields have no label',
+  'aria-meter-name': 'Meters have no name',
+  'aria-progressbar-name': 'Progress bars have no name',
+  'aria-prohibited-attr': 'ARIA attributes are used where they’re not allowed',
+  'aria-required-attr': 'Elements are missing ARIA attributes their role needs',
+  'aria-required-children': 'Parts of a widget are missing',
+  'aria-required-parent': 'Parts of a widget are outside their container',
+  'aria-roles': 'Elements have roles that don’t exist',
+  'aria-tab-name': 'Tabs have no name',
+  'aria-text': 'Text containers hide their contents from keyboard users',
+  'aria-toggle-field-name': 'Switches and checkboxes have no name',
+  'aria-tooltip-name': 'Tooltips have no text',
+  'aria-treeitem-name': 'Tree items have no name',
+  'aria-valid-attr-value': 'ARIA attributes have invalid values',
+  'aria-valid-attr': 'ARIA attributes are misspelt or don’t exist',
+  'avoid-inline-spacing': 'Text spacing is fixed and can’t be adjusted',
+  blink: 'Text blinks',
+  'definition-list': 'Definition lists are built wrongly',
+  dlitem: 'Definition terms are outside a definition list',
+  'empty-table-header': 'Table header cells are empty',
+  'form-field-multiple-labels': 'Form fields have more than one label',
+  'frame-focusable-content': 'Embedded frames with controls can’t be reached with the keyboard',
+  'frame-tested': 'Embedded frames couldn’t be checked',
+  'frame-title-unique': 'Several embedded frames have the same title',
+  'html-xml-lang-mismatch': 'The page sets two different languages',
+  'identical-links-same-purpose': 'Links with the same text go to different places',
+  'image-redundant-alt': 'Image text alternatives repeat the text next to them',
+  'label-content-name-mismatch': 'A control’s spoken name doesn’t match its visible text',
+  'label-title-only': 'Form fields are labelled only by a tooltip',
+  'landmark-banner-is-top-level': 'The page header is inside another region',
+  'landmark-contentinfo-is-top-level': 'The page footer is inside another region',
+  'landmark-main-is-top-level': 'The main content is inside another region',
+  'landmark-no-duplicate-banner': 'More than one page header',
+  'landmark-no-duplicate-contentinfo': 'More than one page footer',
+  'landmark-no-duplicate-main': 'More than one main content area',
+  'landmark-unique': 'Several page regions have the same label',
+  marquee: 'Text scrolls and can’t be paused',
+  'meta-refresh-no-exceptions': 'Pages refresh or redirect on a timer',
+  'meta-refresh': 'Pages refresh or redirect on a timer',
+  'meta-viewport-large': 'Pages limit how far people can zoom in',
+  'no-autoplay-audio': 'Audio plays automatically',
+  'object-alt': 'Embedded objects have no text alternative',
+  'presentation-role-conflict': 'Decorative elements can still be reached or have a name',
+  'scope-attr-valid': 'Table headers have an invalid scope',
+  'server-side-image-map': 'Server-side image maps can’t be used with a keyboard',
+  'skip-link': 'The “skip to content” link goes nowhere',
+  'summary-name': 'Expandable sections have no name',
+  tabindex: 'The Tab order is forced out of reading order',
+  'table-duplicate-name': 'Table captions repeat their summary',
+  'td-headers-attr': 'Table cells point to headers outside the table',
+  'th-has-data-cells': 'Table headers have no cells under them',
+  'valid-lang': 'Text is marked with an invalid language',
+};
+
+export function axeFallbackGuidance(ruleId: string, criteria: string[] = []): RuleGuidance | undefined {
+  const title = AXE_TITLES[ruleId];
+  if (!title) return undefined;
+  return {
+    title,
+    description: `${title}.`,
+    whyItMatters: whyForCriteria(criteria) ?? 'It makes the page harder or impossible to use for some disabled people.',
+    recommendation: `See Deque’s explanation of the “${ruleId}” rule (linked from the ticket) for how to fix it.`,
+    effort: 'Small',
+  };
+}

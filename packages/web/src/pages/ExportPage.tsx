@@ -19,6 +19,7 @@ const FILE_LABELS: Record<string, string> = {
   'tickets.csv': 'Tickets (CSV)',
   'occurrences.csv': 'Occurrences (CSV)',
   'qa-checklist.csv': 'Spot-check sheet (CSV)',
+  'content-fixes.csv': 'Content editors’ checklist (CSV)',
   'run.json': 'Raw data (JSON)',
   'state-map.png': 'State map (PNG)',
 };

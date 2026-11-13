@@ -24,6 +24,10 @@ interface RuleMeta {
   reason?: string;
   /** A check the client can do themselves once it's fixed. */
   check?: string;
+  /** How to fix it, when the rule's own recommendation is a link rather than words. */
+  how?: string;
+  /** What's wrong in plain words, when the rule's own description is technical. */
+  what?: string;
 }
 
 const RULES: Record<string, RuleMeta> = {
@@ -123,7 +127,14 @@ const RULES: Record<string, RuleMeta> = {
   'missing-nosniff': { action: 'Add the X-Content-Type-Options header', owner: 'Hosting or IT', effort: 'Quick', reason: 'Security' },
   'missing-referrer-policy': { action: 'Add a referrer policy', owner: 'Hosting or IT', effort: 'Quick', reason: 'Privacy' },
   'missing-permissions-policy': { action: 'Add a permissions policy', owner: 'Hosting or IT', effort: 'Quick', reason: 'Security' },
-  'vulnerable-software': { action: 'Confirm the server software is up to date', owner: 'Hosting or IT', effort: 'Medium', reason: 'Security' },
+  'vulnerable-software': {
+    action: 'Confirm the server software is up to date',
+    owner: 'Hosting or IT',
+    effort: 'Medium',
+    reason: 'Security',
+    how: 'Ask your host to confirm the software is on its latest patched release, and to upgrade it if not.',
+    check: 'Ask the host for the version installed and when it was last updated.',
+  },
   'end-of-life-software': { action: 'Upgrade software that no longer gets security fixes', owner: 'Hosting or IT', effort: 'Large', reason: 'Security' },
   'vulnerable-library': { action: 'Update the out-of-date script library', effort: 'Small', reason: 'Security' },
   'mixed-content': { action: 'Load every file over HTTPS', effort: 'Quick', reason: 'Security' },
@@ -156,46 +167,136 @@ const RULES: Record<string, RuleMeta> = {
   'no-sitemap': { action: 'Publish a sitemap', effort: 'Quick', reason: 'Search' },
   'staging-links': { action: 'Point links at the live site, not staging', owner: 'Content editor', effort: 'Quick', reason: 'Trust' },
   // Lighthouse.
-  'bootup-time': { action: 'Cut the JavaScript that runs as pages load', effort: 'Small', reason: 'Speed' },
-  'mainthread-work-breakdown': { action: 'Cut the work the browser does as pages load', effort: 'Small', reason: 'Speed' },
-  'cache-insight': { action: 'Let browsers keep files for longer', effort: 'Small', reason: 'Speed' },
-  'uses-long-cache-ttl': { action: 'Let browsers keep files for longer', effort: 'Small', reason: 'Speed' },
-  'font-display-insight': { action: 'Show text while web fonts load', effort: 'Small', reason: 'Speed' },
-  'font-display': { action: 'Show text while web fonts load', effort: 'Small', reason: 'Speed' },
-  'image-delivery-insight': { action: 'Resize and compress images', effort: 'Small', reason: 'Speed' },
-  'uses-optimized-images': { action: 'Resize and compress images', effort: 'Small', reason: 'Speed' },
-  'modern-image-formats': { action: 'Serve images in modern formats', effort: 'Small', reason: 'Speed' },
-  'uses-responsive-images': { action: 'Resize and compress images', effort: 'Small', reason: 'Speed' },
-  interactive: { action: 'Make pages respond to taps and clicks sooner', effort: 'Small', reason: 'Speed' },
-  'max-potential-fid': { action: 'Make pages respond to taps and clicks sooner', effort: 'Small', reason: 'Speed' },
-  'total-blocking-time': { action: 'Make pages respond to taps and clicks sooner', effort: 'Small', reason: 'Speed' },
-  'largest-contentful-paint': { action: 'Show the main image or heading sooner', effort: 'Small', reason: 'Speed' },
-  'lcp-discovery-insight': { action: 'Show the main image or heading sooner', effort: 'Small', reason: 'Speed' },
-  'first-contentful-paint': { action: 'Show something on screen sooner', effort: 'Small', reason: 'Speed' },
-  'speed-index': { action: 'Show something on screen sooner', effort: 'Small', reason: 'Speed' },
-  'network-dependency-tree-insight': { action: 'Load fewer files one after another', effort: 'Small', reason: 'Speed' },
-  'render-blocking-insight': { action: 'Stop scripts and styles blocking the page', effort: 'Small', reason: 'Speed' },
-  'render-blocking-resources': { action: 'Stop scripts and styles blocking the page', effort: 'Small', reason: 'Speed' },
-  'unminified-javascript': { action: 'Minify JavaScript', effort: 'Small', reason: 'Speed' },
-  'unminified-css': { action: 'Minify CSS', effort: 'Small', reason: 'Speed' },
-  'unused-css-rules': { action: 'Remove unused CSS', effort: 'Small', reason: 'Speed' },
-  'unused-javascript': { action: 'Remove unused JavaScript', effort: 'Small', reason: 'Speed' },
-  'legacy-javascript-insight': { action: 'Stop sending old-browser JavaScript to modern browsers', effort: 'Small', reason: 'Speed' },
-  'unsized-images': { action: 'Give images a width and height', effort: 'Small', reason: 'Speed' },
-  'bf-cache': { action: 'Let the back button reload pages instantly', effort: 'Small', reason: 'Speed' },
-  'total-byte-weight': { action: 'Make pages lighter to download', effort: 'Small', reason: 'Speed' },
-  redirects: { action: 'Remove extra redirects', effort: 'Small', reason: 'Speed' },
-  'layout-shifts': { action: 'Stop the page jumping as it loads', effort: 'Small', reason: 'Speed' },
-  'cls-culprits-insight': { action: 'Stop the page jumping as it loads', effort: 'Small', reason: 'Speed' },
-  'cumulative-layout-shift': { action: 'Stop the page jumping as it loads', effort: 'Small', reason: 'Speed' },
-  'server-response-time': { action: 'Make the server respond faster', effort: 'Small', reason: 'Speed' },
-  'uses-text-compression': { action: 'Compress text files', effort: 'Small', reason: 'Speed' },
-  'dom-size': { action: 'Simplify very large pages', effort: 'Small', reason: 'Speed' },
-  'third-party-summary': { action: 'Cut slow outside scripts', effort: 'Small', reason: 'Speed' },
+  'bootup-time': {
+    action: 'Cut the JavaScript that runs as pages load',
+    effort: 'Small',
+    reason: 'Speed',
+    what: 'Scripts take a long time to run as each page loads, so it stays slow to respond.',
+  },
+  'mainthread-work-breakdown': {
+    action: 'Cut the work the browser does as pages load',
+    effort: 'Small',
+    reason: 'Speed',
+    what: 'The browser has a lot of work to do as each page loads, so it responds slowly.',
+  },
+  'cache-insight': {
+    action: 'Let browsers keep files for longer',
+    effort: 'Small',
+    reason: 'Speed',
+    what: 'Browsers are told to fetch files again on every visit instead of keeping them.',
+  },
+  'uses-long-cache-ttl': {
+    action: 'Let browsers keep files for longer',
+    effort: 'Small',
+    reason: 'Speed',
+    what: 'Browsers are told to fetch files again on every visit instead of keeping them.',
+  },
+  'font-display-insight': { action: 'Show text while web fonts load', effort: 'Small', reason: 'Speed', what: 'Text stays invisible until the web fonts have downloaded.' },
+  'font-display': { action: 'Show text while web fonts load', effort: 'Small', reason: 'Speed', what: 'Text stays invisible until the web fonts have downloaded.' },
+  'image-delivery-insight': {
+    action: 'Resize and compress images',
+    effort: 'Small',
+    reason: 'Speed',
+    what: 'Images are larger or heavier than they need to be for the space they fill.',
+  },
+  'uses-optimized-images': {
+    action: 'Resize and compress images',
+    effort: 'Small',
+    reason: 'Speed',
+    what: 'Images are larger or heavier than they need to be for the space they fill.',
+  },
+  'modern-image-formats': { action: 'Serve images in modern formats', effort: 'Small', reason: 'Speed', what: 'Images use older formats that are heavier than modern ones.' },
+  'uses-responsive-images': { action: 'Resize and compress images', effort: 'Small', reason: 'Speed', what: 'Images are larger than the space they fill on the screen.' },
+  interactive: { action: 'Make pages respond to taps and clicks sooner', effort: 'Small', reason: 'Speed', what: 'Pages take a long time before they respond to taps and clicks.' },
+  'max-potential-fid': {
+    action: 'Make pages respond to taps and clicks sooner',
+    effort: 'Small',
+    reason: 'Speed',
+    what: 'Pages can be slow to respond to the first tap or click.',
+  },
+  'total-blocking-time': {
+    action: 'Make pages respond to taps and clicks sooner',
+    effort: 'Small',
+    reason: 'Speed',
+    what: 'Pages are busy as they load and slow to respond to taps and clicks.',
+  },
+  'largest-contentful-paint': { action: 'Show the main image or heading sooner', effort: 'Small', reason: 'Speed', what: 'The main image or heading takes a long time to appear.' },
+  'lcp-discovery-insight': {
+    action: 'Show the main image or heading sooner',
+    effort: 'Small',
+    reason: 'Speed',
+    what: 'The browser finds the main image late, so it appears late.',
+  },
+  'first-contentful-paint': { action: 'Show something on screen sooner', effort: 'Small', reason: 'Speed', what: 'It takes a long time for anything to appear on screen.' },
+  'speed-index': { action: 'Show something on screen sooner', effort: 'Small', reason: 'Speed', what: 'The page fills in slowly.' },
+  'network-dependency-tree-insight': {
+    action: 'Load fewer files one after another',
+    effort: 'Small',
+    reason: 'Speed',
+    what: 'Files are loaded one after another instead of together, which adds delay.',
+  },
+  'render-blocking-insight': {
+    action: 'Stop scripts and styles blocking the page',
+    effort: 'Small',
+    reason: 'Speed',
+    what: 'Scripts and styles stop the page appearing until they’ve loaded.',
+  },
+  'render-blocking-resources': {
+    action: 'Stop scripts and styles blocking the page',
+    effort: 'Small',
+    reason: 'Speed',
+    what: 'Scripts and styles stop the page appearing until they’ve loaded.',
+  },
+  'unminified-javascript': { action: 'Minify JavaScript', effort: 'Small', reason: 'Speed', what: 'Scripts are sent with spaces and comments that make them bigger than needed.' },
+  'unminified-css': { action: 'Minify CSS', effort: 'Small', reason: 'Speed', what: 'Style sheets are sent with spaces and comments that make them bigger than needed.' },
+  'unused-css-rules': { action: 'Remove unused CSS', effort: 'Small', reason: 'Speed', what: 'Pages download styles they never use.' },
+  'unused-javascript': { action: 'Remove unused JavaScript', effort: 'Small', reason: 'Speed', what: 'Pages download scripts they never use.' },
+  'legacy-javascript-insight': {
+    action: 'Stop sending old-browser JavaScript to modern browsers',
+    effort: 'Small',
+    reason: 'Speed',
+    what: 'Modern browsers are sent extra code meant for old browsers.',
+  },
+  'unsized-images': { action: 'Give images a width and height', effort: 'Small', reason: 'Speed', what: 'Images have no set width and height, so the page jumps as they load.' },
+  'bf-cache': {
+    action: 'Let the back button reload pages instantly',
+    effort: 'Small',
+    reason: 'Speed',
+    what: 'Going back to a page reloads it from scratch instead of showing it instantly.',
+  },
+  'total-byte-weight': {
+    action: 'Make pages lighter to download',
+    effort: 'Small',
+    reason: 'Speed',
+    what: 'Pages are heavy to download, which is slow on phones and uses more energy.',
+  },
+  redirects: { action: 'Remove extra redirects', effort: 'Small', reason: 'Speed', what: 'Pages pass through extra redirects before they load.' },
+  'layout-shifts': {
+    action: 'Stop the page jumping as it loads',
+    effort: 'Small',
+    reason: 'Speed',
+    what: 'Parts of the page move as it loads, so people tap or read the wrong thing.',
+  },
+  'cls-culprits-insight': {
+    action: 'Stop the page jumping as it loads',
+    effort: 'Small',
+    reason: 'Speed',
+    what: 'Parts of the page move as it loads, so people tap or read the wrong thing.',
+  },
+  'cumulative-layout-shift': {
+    action: 'Stop the page jumping as it loads',
+    effort: 'Small',
+    reason: 'Speed',
+    what: 'Parts of the page move as it loads, so people tap or read the wrong thing.',
+  },
+  'server-response-time': { action: 'Make the server respond faster', effort: 'Small', reason: 'Speed', what: 'The server is slow to send the page.' },
+  'uses-text-compression': { action: 'Compress text files', effort: 'Small', reason: 'Speed', what: 'Text files are sent without compression, so they take longer to download.' },
+  'dom-size': { action: 'Simplify very large pages', effort: 'Small', reason: 'Speed', what: 'Pages are very large and complex, which slows the browser down.' },
+  'third-party-summary': { action: 'Cut slow outside scripts', effort: 'Small', reason: 'Speed', what: 'Scripts from other companies slow the pages down.' },
   // IBM rules with no axe equivalent.
   aria_navigation_label_unique: { action: 'Give each menu a different label', effort: 'Quick', reason: 'Screen reader users' },
   aria_form_label_unique: { action: 'Give each form a different label', effort: 'Quick', reason: 'Screen reader users' },
-  aria_role_valid: { action: 'Remove invalid ARIA roles', effort: 'Quick', reason: 'Screen reader users' },
+  aria_role_valid: { action: 'Remove roles that confuse screen readers', effort: 'Quick', reason: 'Screen reader users' },
   skip_main_exists: { action: 'Mark the main content and add a skip link', effort: 'Quick', reason: 'Keyboard users' },
   input_checkboxes_grouped: { action: 'Group related checkboxes under a question', effort: 'Quick', reason: 'Screen reader users' },
   label_ref_valid: { action: 'Point labels at the right form fields', effort: 'Quick', reason: 'Screen reader users' },
@@ -241,6 +342,10 @@ export interface FixMeta {
   /** Who it affects, for accessibility problems. */
   affects: string[];
   check: string | null;
+  /** How to fix it, when the rule has its own wording for the action plan. */
+  how: string | null;
+  /** What's wrong, when the rule has plain wording of its own. */
+  what: string | null;
   advisory: boolean;
   /** Higher comes first: severity × reach × confidence ÷ effort. */
   score: number;
@@ -295,6 +400,8 @@ export function fixMetaFor(t: MetaTicket, audited: number): FixMeta {
     area: areaOf(t),
     affects,
     check: rule?.check ?? null,
+    how: rule?.how ?? null,
+    what: rule?.what ?? null,
     advisory,
     score: advisory ? 0 : (SEVERITY_WEIGHT[t.severity] * reach * confidence) / EFFORT_WEIGHT[effort],
   };

@@ -1,3 +1,4 @@
+import { contentFixesCsv } from './content-fixes.js';
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import type { PregoDb } from '../db/database.js';
@@ -28,7 +29,7 @@ export interface ExportResult {
   /** The export's ID in the exports log. */
   id: number;
   dir: string;
-  files: { report: string; tickets: string; occurrences: string; checklist: string; runJson: string; client?: string; overview?: string; audience?: string; future?: string };
+  files: { report: string; tickets: string; occurrences: string; checklist: string; contentFixes: string; runJson: string; client?: string; overview?: string; audience?: string; future?: string };
   plan: ExportPlan;
 }
 
@@ -51,12 +52,14 @@ export async function exportRun(db: PregoDb, runId: number, options: ExportOptio
     tickets: join(dir, 'tickets.csv'),
     occurrences: join(dir, 'occurrences.csv'),
     checklist: join(dir, 'qa-checklist.csv'),
+    contentFixes: join(dir, 'content-fixes.csv'),
     runJson: join(dir, 'run.json'),
   };
   mkdirSync(dir, { recursive: true });
 
   const preset = options.preset ?? getSettings(db).defaults.csvPreset;
   writeCsvFiles(developer, files, preset);
+  writeFileSync(files.contentFixes, contentFixesCsv(developer));
   // Interactive audits get a state map diagram, in the report and as its own file.
   let stateMap: Buffer | undefined;
   if (plan.run.mode === 'explore') {

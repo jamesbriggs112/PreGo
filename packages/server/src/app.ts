@@ -1069,6 +1069,7 @@ const EXPORT_FILES: Record<string, string> = {
   'tickets.csv': 'text/csv; charset=utf-8',
   'occurrences.csv': 'text/csv; charset=utf-8',
   'qa-checklist.csv': 'text/csv; charset=utf-8',
+  'content-fixes.csv': 'text/csv; charset=utf-8',
   'run.json': 'application/json',
   'state-map.png': 'image/png',
 };

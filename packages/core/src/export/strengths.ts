@@ -24,7 +24,7 @@ export function strengths(plan: Pick<ExportPlan, 'tickets' | 'locations' | 'run'
   const pages = plan.locations.filter((l) => l.kind === 'page' && l.audited);
 
   const performance = averagePerformance(plan.locations);
-  if (performance !== null && performance >= 85) out.push({ text: 'Pages load quickly', evidence: `An average Lighthouse performance score of ${performance} out of 100.` });
+  if (performance !== null && performance >= 85) out.push({ text: 'Pages load quickly', evidence: `An average speed score of ${performance} out of 100.` });
 
   const start = String(plan.run.settings.startUrl ?? plan.run.target);
   if (checked.has('SEC') && /^https:/i.test(start) && !has('no-https', 'mixed-content', 'certificate-expired')) {

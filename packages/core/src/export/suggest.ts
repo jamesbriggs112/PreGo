@@ -1,4 +1,5 @@
-import { CATEGORIES, CATEGORY_NAMES, SEVERITIES } from '../types.js';
+import { CATEGORIES, CATEGORY_NAMES, SEVERITIES, type Category } from '../types.js';
+import { checkedCategories } from '../checks/categories.js';
 import { averagePerformance } from '../checks/lighthouse/lighthouse.js';
 import type { ExportPlan, PlannedTicket } from './plan.js';
 import { isAdvisory } from '../tickets/advisory.js';
@@ -41,10 +42,28 @@ function recommendations(tickets: PlannedTicket[]): string {
     .join('\n');
 }
 
+/** What the checks in each area look at, in plain words, for the client methodology. */
+const CHECKED: Partial<Record<Category, string>> = {
+  A11Y: 'Accessibility: two automated checkers, plus our own keyboard, zoom and text-spacing tests.',
+  UX: 'Usability: broken links, page structure and whether pages work in other browsers.',
+  UI: 'Visual consistency: the colours, text sizes and spacing used across pages.',
+  CONT: 'Content and search: page titles, descriptions, link previews, spelling and readability.',
+  PERF: 'Speed: how quickly each page loads and responds, measured on the pages checked.',
+  SEC: 'Security and privacy: HTTPS, security settings, out-of-date software, and trackers that load before visitors agree.',
+  TECH: 'Technical health: valid HTML and other code quality checks.',
+  FUT: 'Future readiness: how well search engines and AI assistants can read and describe the site.',
+};
+
+/** Screen sizes in words: "phone and desktop". */
+export function screenSizes(viewports: string[] | undefined): string {
+  const names = (viewports?.length ? viewports : ['desktop']).map((v) => (v === 'mobile' ? 'phone' : v));
+  return names.length <= 1 ? names.join('') : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`;
+}
+
 function methodology({ run, locations }: Pick<ExportPlan, 'run' | 'locations'>): string {
-  const s = run.settings as { viewports?: string[]; modules?: { name: string }[] };
-  const viewports = s.viewports?.join(', ') ?? 'desktop';
-  const checks = s.modules?.map((m) => m.name) ?? [];
+  const s = run.settings as { viewports?: string[] };
+  const viewports = screenSizes(s.viewports);
+  const ran = checkedCategories(run.settings);
   const audited = locations.filter((l) => l.audited).length;
   const how =
     run.mode === 'explore'
@@ -53,8 +72,11 @@ function methodology({ run, locations }: Pick<ExportPlan, 'run' | 'locations'>):
         ? `We recorded a journey through the site and replayed it, checking the page after each of its ${audited} steps`
         : `We crawled the site through its links and sitemap, and checked ${audited} pages, a sample of each page template`;
   return [
-    `${how}, at ${viewports} screen sizes.`,
-    `Automated checks covered: ${checks.join('; ') || 'the default checks'}. Similar problems were grouped into tickets, each with a severity and priority, so they can be planned and tracked.`,
+    `${how}, at ${viewports} screen sizes. We looked at:`,
+    CATEGORIES.filter((c) => ran.has(c) && CHECKED[c])
+      .map((c) => `- ${CHECKED[c]}`)
+      .join('\n'),
+    'The same problem found in several places counts as one issue. Each has a severity, a priority and an owner, so it can be planned and tracked.',
     'Automated checks find only some problems, so this report should be read alongside manual testing (see Limitations and manual testing).',
   ].join('\n\n');
 }

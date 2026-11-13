@@ -29,6 +29,7 @@ export async function overviewDocx(plan: ExportPlan, whyItMatters: string, brand
     ['report.docx', 'Every issue found, with ticket IDs, examples, why each matters and what to do', 'Project and development teams'],
     ['tickets.csv', 'One row per issue, ready to import into a ticketing tool. Ticket IDs match report.docx', 'Development team'],
     ['occurrences.csv', 'Every place each issue was found', 'Development team'],
+    ['content-fixes.csv', 'Everything content editors can fix in the CMS, page by page, with a column to tick off', 'Content editors'],
     ['qa-checklist.csv', 'The ten most serious issues, to check by hand before the report goes out', 'Whoever reviews the audit'],
   ];
   if (plan.options.reports.audience && plan.project.settings.audience?.personas.length) {

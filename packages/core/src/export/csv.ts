@@ -13,7 +13,7 @@ export const TICKET_COLUMNS = [
   'Ticket ID', 'Title', 'Category', 'Severity', 'Priority', 'WCAG criterion', 'WCAG level', 'Rule ID',
   'Engine', 'Occurrences', 'Locations affected', 'Example location', 'Example selector', 'Description',
   'Why it matters', 'Steps to reproduce', 'Expected', 'Actual', 'Recommendation', 'Effort', 'Report section',
-  'Auditor notes', 'Labels', 'Traffic share', 'Affects',
+  'Auditor notes', 'Labels', 'Traffic share', 'Affects', 'Since last audit',
 ] as const;
 export type TicketColumn = (typeof TICKET_COLUMNS)[number];
 
@@ -136,6 +136,7 @@ function ticketRow(t: PlannedTicket): Row {
     Labels: t.labels.join(' '),
     'Traffic share': trafficText(t),
     Affects: t.affects,
+    'Since last audit': t.sinceLast ?? '',
   };
 }
 

@@ -184,7 +184,7 @@ const WHY_BY_CRITERION: Record<string, string> = {
 /** Fuller wording for the IBM rules seen most often on real sites. */
 const IBM_DETAIL: Record<string, Pick<RuleGuidance, 'description' | 'recommendation' | 'effort'>> = {
   aria_navigation_label_unique: {
-    description: 'The page has more than one menu (navigation landmark), and they don’t have different labels, so screen reader users can’t tell them apart.',
+    description: 'The page has more than one menu, and they don’t have different labels, so screen reader users can’t tell them apart.',
     recommendation: 'Give each <nav> a distinct aria-label, for example “Main”, “Footer” and “Breadcrumb”.',
     effort: 'Small',
   },
@@ -199,7 +199,7 @@ const IBM_DETAIL: Record<string, Pick<RuleGuidance, 'description' | 'recommendat
     effort: 'Small',
   },
   aria_role_valid: {
-    description: 'An element has an ARIA role that isn’t valid for it, so browsers may ignore the role and assistive technology may describe it wrongly.',
+    description: 'An element is given a role that doesn’t suit it, so browsers may ignore it and screen readers may describe it wrongly.',
     recommendation: 'Remove the role, or use an element that supports it. For example, don’t put role="presentation" on list items inside a list that still has its role.',
     effort: 'Small',
   },
@@ -229,6 +229,11 @@ const IBM_DETAIL: Record<string, Pick<RuleGuidance, 'description' | 'recommendat
     effort: 'Small',
   },
 };
+
+/** Why a problem matters, from the first of its WCAG criteria that has wording. */
+export function whyForCriteria(criteria: string[]): string | undefined {
+  return criteria.map((c) => WHY_BY_CRITERION[c]).find(Boolean);
+}
 
 /** IBM wording for a rule: its title, fuller wording where there is some, and why it matters by WCAG criterion. */
 export function ibmGuidance(ruleId: string, criteria: string[] = []): RuleGuidance | undefined {

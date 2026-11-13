@@ -3,6 +3,7 @@
 // Rules without an entry fall back to the engine's own text.
 
 import { AXE_EQUIVALENT, ibmGuidance } from './ibm/ibm-guidance.js';
+import { axeFallbackGuidance } from './axe/axe-guidance.js';
 
 export type Effort = 'Small' | 'Medium' | 'Large';
 
@@ -806,7 +807,7 @@ const GENERIC_WHY =
   'This makes the interface harder or impossible to use for some people, including those using screen readers, keyboards or magnification.';
 
 export function guidanceFor(engine: string, ruleId: string, criteria: string[] = []): RuleGuidance | undefined {
-  if (engine === 'axe-core') return AXE[ruleId];
+  if (engine === 'axe-core') return AXE[ruleId] ?? axeFallbackGuidance(ruleId, criteria);
   if (engine === 'prego') return PREGO[ruleId];
   if (engine === 'retire.js') return PREGO[ruleId];
   if (engine === 'ibm') return AXE[AXE_EQUIVALENT[ruleId] ?? ''] ?? ibmGuidance(ruleId, criteria);

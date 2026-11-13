@@ -102,7 +102,8 @@ describe('report options', () => {
       'What to fix first: the action plan',
       'What’s working well',
       'Analytics',
-      'Findings by category',
+      'What to change, by part of the site',
+      'For content editors',
       'Content and tone',
       'Information architecture',
       'Site map summary',
@@ -110,6 +111,7 @@ describe('report options', () => {
       'Conclusion',
       'Methodology',
       'Limitations and manual testing',
+      'Glossary',
     ]);
     // A section that's switched on but has nothing to show is left out.
     expect(reportOutline({ mode: 'crawl' }, client, { ...all, analytics: false }).map((o) => o.id)).not.toContain('analytics');
@@ -243,7 +245,7 @@ describe('Google Analytics import', () => {
     // Built directly rather than exported: exporting deletes the screenshots later tests use.
     const [header, ...rows] = parse(ticketsCsv(plan).replace(/^\uFEFF/, '')) as string[][];
     const traffic = header.indexOf('Traffic share');
-    expect(header.slice(-2)).toEqual(['Traffic share', 'Affects']);
+    expect(header.slice(-3)).toEqual(['Traffic share', 'Affects', 'Since last audit']);
     expect(rows.some((r) => /^\d+% of visits \(priority raised\)$/.test(r[traffic]))).toBe(true);
     const zip = await JSZip.loadAsync(await reportDocx(plan, join(dataDir, 'runs', String(runId))));
     const text = (await zip.file('word/document.xml')!.async('string')).replace(/<\/w:p>/g, '\n').replace(/<[^>]+>/g, '');
@@ -277,14 +279,16 @@ describe('the client report', () => {
       '2. What to fix first: the action plan',
       '3. What’s working well',
       '4. Analytics',
-      '5. Findings by category',
-      '6. Content and tone',
-      '7. Information architecture',
-      '8. Site map summary',
-      '9. Competitor analysis',
-      '10. Conclusion',
-      '11. Methodology',
-      '12. Limitations and manual testing',
+      '5. What to change, by part of the site',
+      '6. For content editors',
+      '7. Content and tone',
+      '8. Information architecture',
+      '9. Site map summary',
+      '10. Competitor analysis',
+      '11. Conclusion',
+      '12. Methodology',
+      '13. Limitations and manual testing',
+      '14. Glossary',
     ];
     // Listed once on the contents page, then as the section headings.
     expect(headings).toEqual([...expected, ...expected]);
@@ -312,7 +316,10 @@ describe('the client report', () => {
     // A client-facing report persuades; ticket IDs are for the team, in tickets.csv only.
     expect(text).not.toMatch(/PRG-[A-Z0-9]+-\d{3}/);
     expect(text).not.toContain('Ticket index');
-    expect(text).toMatch(/Where: .+\. (Critical|High|Medium|Low) severity at worst\./);
+    // Fix cards: what's wrong, where, how to fix and how to check, for each serious issue.
+    expect(text).toMatch(/What’s wrong: .+\nWho it affects: .+\nWhere: .+\n/);
+    expect(text).toMatch(/How to check it’s fixed: .+\nWhy it matters: .+/);
+    expect(text).toContain('Glossary');
     expect(await verifyExport(exported.dir)).toMatchObject({ ok: true, problems: [] });
 
     // report.docx is still the developer report, with ticket IDs, and tickets.csv points to its sections.
@@ -348,6 +355,8 @@ describe('the Overview report', () => {
     expect(text).toContain('Website health overview');
     expect(text).toMatch(/Accessibility\n(Good|Needs attention|Needs significant work)\n\d+ \/ 100\n\d+ issues?/);
     expect(text).toMatch(/Fix these (three )?first\n/);
+    // Carbon sits with the scores, as a rating per page view.
+    expect(text).toMatch(/Carbon per page view\n(Good|Needs attention|Needs significant work)\nRating (A\+|[A-F])\n\d+\.\d{2} g CO₂e on average/);
     expect(text).toContain('Regular checks like this one catch problems while they’re small.');
     expect(text).not.toMatch(/\b(complies with|is compliant|are compliant|legally compliant)\b/i);
   });

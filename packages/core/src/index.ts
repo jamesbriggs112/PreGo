@@ -73,3 +73,4 @@ export { ibmModule, dropDuplicates } from './checks/ibm/ibm.js';
 export * from './checks/estimate.js';
 export { parseAudienceProfile } from './audience/profile.js';
 export { siteFacts, suggestAudience, suggestAudienceFor, askOllamaForAudience, progressOf, type SiteFacts, type SuggestProgress, type AskOptions } from './audience/suggest.js';
+export { asFreshAudit, reExport, restoreRun, savedReportOptions, savedSettings, type ExportedRunJson, type ReExportOptions, type RunJson } from './export/restore.js';

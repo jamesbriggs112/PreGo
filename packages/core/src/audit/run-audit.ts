@@ -14,6 +14,7 @@ import { runStep, type Journey, type JourneyStep } from '../journeys/journey.js'
 import { crawlSite, type FailedPage } from '../crawl/crawler.js';
 import { isAccessDenied } from '../checks/links/links.js';
 import { extractStructure, groupTemplates, samplePages } from '../crawl/templates.js';
+import { duplicatePages, pageType } from '../crawl/pages.js';
 import { captureCrop, captureFullPage } from '../capture/capture.js';
 import { readHead, saveShareImage, saveSiteImage, siteImageCandidates, SITE_IMAGE_RANK, type SiteImageKind } from '../capture/head.js';
 import { describeComponent } from '../tickets/component.js';
@@ -531,14 +532,27 @@ async function discoverByCrawling({ db, run, options, startUrl, storageStatePath
     storageStatePath,
     signal: options.signal,
     onRequest: options.onRequest,
-    inspectPage: async ({ page }) => ({ structure: await extractStructure(page) }),
+    inspectPage: async ({ page }) => ({
+      structure: await extractStructure(page),
+      canonical: await page
+        .$eval('link[rel="canonical"]', (link) => (link as HTMLLinkElement).href)
+        .catch(() => null),
+    }),
     onPage: (page) => emit({ type: 'page-found', url: page.url, count: ++pagesFound }),
   });
   throwIfAborted(options.signal);
 
+  // The same page at several addresses (http and https, ?page=0, /node/123 and its alias) is one page.
+  const duplicates = duplicatePages(crawl.pages.map((p) => ({ url: p.url, canonical: p.data.canonical as string | null })));
+  for (const [copy, kept] of duplicates) crawl.pages[kept].aliases.push(crawl.pages[copy].url, ...crawl.pages[copy].aliases);
+  crawl.pages = crawl.pages.filter((_, i) => !duplicates.has(i));
+
   emit({ type: 'phase', phase: 'group', message: `Grouping ${crawl.pages.length} pages into templates` });
   const groups = groupTemplates(crawl.pages.map((p) => ({ ...p, structure: p.data.structure as string[] })));
-  const sampled = samplePages(groups, { perTemplate: options.perTemplate, auditAll: options.auditAll });
+  // Later pages of a list repeat the first page's layout: their links are checked, but they aren't audited.
+  const sampled = samplePages(groups, { perTemplate: options.perTemplate, auditAll: options.auditAll }).map((s) =>
+    s.audit && pageType(s.page.url) === 'pagination' ? { ...s, audit: false, reason: 'A later page of a list: its links were checked, but it wasn’t audited' } : s,
+  );
   const toAudit: Location[] = [];
   db.transaction(() => {
     for (const s of sampled) {

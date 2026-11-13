@@ -2,7 +2,8 @@
 import { Command, InvalidArgumentError, Option } from 'commander';
 import { spawn } from 'node:child_process';
 import { createRequire } from 'node:module';
-import { appendFileSync } from 'node:fs';
+import { appendFileSync, readFileSync, statSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { loadScheduleConfig, type ScheduleConfig } from './config.js';
 import {
@@ -18,6 +19,10 @@ import {
   VERSION,
   defaultDataDir,
   exportRun,
+  reExport,
+  savedSettings,
+  savedReportOptions,
+  type ExportedRunJson,
   ensureJourneysDir,
   isProfileName,
   journeyFile,
@@ -324,6 +329,25 @@ program
       console.log(`Export: ${exported.dir}`);
     } finally {
       db.close();
+    }
+  });
+
+program
+  .command('re-export')
+  .description('rebuild exported runs (their run.json) with the current rules, without crawling again')
+  .argument('<runJson...>', 'run.json files, or export folders containing one')
+  .requiredOption('--out <dir>', 'folder to write into: one subfolder per run')
+  .option('--as-saved', 'keep everything the saved run found, instead of what a fresh audit would find')
+  .option('--settings-from <dataDir>', 'read branding (read-only) from this Prego data folder', join(homedir(), 'Library', 'Application Support', 'Prego', 'data'))
+  .action(async (inputs: string[], opts) => {
+    const saved = savedSettings(resolve(opts.settingsFrom));
+    for (const input of inputs) {
+      const file = statSync(input).isDirectory() ? join(input, 'run.json') : input;
+      const json = JSON.parse(readFileSync(file, 'utf8')) as ExportedRunJson;
+      const name = basename(statSync(input).isDirectory() ? input : dirname(input));
+      const reportOptions = savedReportOptions(resolve(opts.settingsFrom), json);
+      const exported = await reExport(json, join(resolve(opts.out), name), { fresh: !opts.asSaved, settings: saved?.settings, logo: saved?.logo, reportOptions });
+      console.log(`${name}: ${exported.dir}`);
     }
   });
 

@@ -1,10 +1,10 @@
-import { HeadingLevel, Paragraph, Table, TextRun } from 'docx';
+import { HeadingLevel, Paragraph, ShadingType, Table, TextRun } from 'docx';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { CATEGORY_NAMES } from '../types.js';
 import { guidanceWithFallback } from '../checks/guidance.js';
 import type { ExportPlan, PlannedTicket } from './plan.js';
-import { heading, para, pngImage, table } from './docx.js';
+import { CHIP_COLOURS, heading, para, pngImage, table } from './docx.js';
 import { AREAS, EFFORT_TEXT, type Area } from './fix-meta.js';
 import type { PlanRow } from './action-plan.js';
 import type { GlanceData } from './glance.js';
@@ -15,6 +15,10 @@ import type { GlanceData } from './glance.js';
 
 const MAX_IMAGE_WIDTH = 560;
 const MAX_IMAGE_HEIGHT = 360;
+/** How many issues get a full card, and how many a compact one; the rest are table rows. */
+const MAX_FULL_CARDS = 8;
+const MAX_COMPACT_CARDS = 10;
+const MAX_TABLE_ROWS = 8;
 const PUBLIC_SECTOR = /public|council|government|police|nhs|health service|university|school|charity regulator|local authority/i;
 
 const firstSentences = (text: string, n: number) =>
@@ -87,10 +91,12 @@ function crop(row: PlanRow, runDir: string): Paragraph[] {
 
 function header(row: PlanRow): Paragraph {
   const category = CATEGORY_NAMES[row.tickets[0].category];
+  const chip = CHIP_COLOURS[row.severity];
   return new Paragraph({
     spacing: { after: 80 },
     children: [
-      new TextRun({ text: `${row.severity}`, bold: true, size: 18 }),
+      // The severity as a chip: its word on a coloured background, never colour alone.
+      new TextRun({ text: ` ${row.severity} `, bold: true, size: 18, color: chip.text, shading: { type: ShadingType.CLEAR, color: 'auto', fill: chip.fill } }),
       new TextRun({
         text: `  ·  ${category}  ·  Effort: ${lowerFirst(EFFORT_TEXT[row.effort])}  ·  Who: ${row.who}  ·  Ref ${row.refs.slice(0, 3).join(', ')}${row.refs.length > 3 ? ` +${row.refs.length - 3}` : ''}`,
         size: 18,
@@ -141,29 +147,42 @@ export function fixCardsSection(plan: ExportPlan, data: GlanceData, runDir: stri
   const out: (Paragraph | Table)[] = [title];
   if (!data.rows.length) return [...out, para('Automated checks raised no issues in the areas checked.')];
   out.push(
-    para('One card per issue, grouped by the part of the site where the fix happens. Serious issues have a full card; smaller ones and advice are listed at the end of each part.'),
+    para(
+      'Grouped by the part of the site where the fix happens. The most serious issues have a full card, others a short one, and smaller issues and advice are listed at the end of each part.',
+    ),
   );
   const sector = plan.project.settings.client?.sector ?? '';
   if (PUBLIC_SECTOR.test(sector) && data.rows.some((r) => r.tickets[0].category === 'A11Y')) {
     out.push(para('As a public sector body, the site must also meet the Public Sector Bodies Accessibility Regulations 2018, which use WCAG 2.2 level AA.'));
   }
+  // The most important issues get full cards, the next ones compact cards, and the rest a table row,
+  // ranked across the whole site so the report stays short.
+  const ranked = data.rows.filter((r) => !r.advisory && r.severity !== 'Low').sort((a, b) => b.score - a.score);
+  const full = new Set(ranked.filter((r) => r.severity === 'Critical' || r.severity === 'High').slice(0, MAX_FULL_CARDS));
+  const compact = new Set(ranked.filter((r) => !full.has(r)).slice(0, MAX_COMPACT_CARDS));
   for (const area of AREAS as Area[]) {
     const rows = data.rows.filter((r) => r.area === area);
     if (!rows.length) continue;
     out.push(heading(`${area} (${rows.length})`, HeadingLevel.HEADING_2));
-    const serious = rows.filter((r) => !r.advisory && (r.severity === 'Critical' || r.severity === 'High')).sort((a, b) => b.score - a.score);
-    const medium = rows.filter((r) => !r.advisory && r.severity === 'Medium').sort((a, b) => b.score - a.score);
-    const rest = rows.filter((r) => r.advisory || r.severity === 'Low');
-    for (const r of serious) out.push(...fullCard(r, runDir));
-    for (const r of medium) out.push(...compactCard(r));
+    for (const r of rows.filter((r) => full.has(r)).sort((a, b) => b.score - a.score)) out.push(...fullCard(r, runDir));
+    for (const r of rows.filter((r) => compact.has(r)).sort((a, b) => b.score - a.score)) out.push(...compactCard(r));
+    const rest = rows.filter((r) => !full.has(r) && !compact.has(r));
     if (rest.length) {
+      const shown = rest.slice(0, MAX_TABLE_ROWS);
       out.push(
         heading('Smaller issues and advice', HeadingLevel.HEADING_3),
         table(
           ['Fix', 'Where', 'Who', 'Effort', 'Ref'],
-          rest.map((r) => [r.fix + (r.advisory ? ' (advice)' : ''), r.where, r.who, r.effort, r.refs.slice(0, 2).join(', ') + (r.refs.length > 2 ? ` +${r.refs.length - 2}` : '')]),
+          shown.map((r) => [
+            r.fix + (r.advisory ? ' (advice)' : ''),
+            r.where.length > 70 ? `${r.where.slice(0, 69)}…` : r.where,
+            r.who,
+            r.effort,
+            r.refs.slice(0, 2).join(', ') + (r.refs.length > 2 ? ` +${r.refs.length - 2}` : ''),
+          ]),
           { fontSize: 17 },
         ),
+        ...(rest.length > shown.length ? [para(`And ${rest.length - shown.length} more in the developer report.`)] : []),
       );
     }
   }

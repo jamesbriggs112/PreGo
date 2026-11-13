@@ -1,3 +1,4 @@
+import { estimatePageNumbersWith, layoutDocument } from 'docx/layout';
 import {
   AlignmentType,
   BorderStyle,
@@ -11,6 +12,7 @@ import {
   Paragraph,
   ShadingType,
   Table,
+  TableOfContents,
   TableCell,
   TableRow,
   TextRun,
@@ -34,6 +36,7 @@ import { progressSection } from './progress.js';
 import { glossaryParagraphs } from './glossary.js';
 import { actionPlanSection, glanceData, glanceSection, strengthsSection, type GlanceData } from './glance.js';
 import { guidanceWithFallback } from '../checks/guidance.js';
+import { templateName } from '../tickets/component.js';
 import { analyticsSection, competitorSection, contentSection, iaSection, type SectionContext } from './sections.js';
 import { clientSection, profileSection } from './profile-sections.js';
 
@@ -134,38 +137,51 @@ export interface ReportExtras {
 }
 
 export async function reportDocx(plan: ExportPlan, runDir: string, branding: ReportBranding = {}, extras: ReportExtras = {}): Promise<Buffer> {
+  return Packer.toBuffer(reportDocument(plan, runDir, branding, extras));
+}
+
+/** The report as a document, before it's written out: for measuring how many pages it has. */
+export function reportDocument(plan: ExportPlan, runDir: string, branding: ReportBranding = {}, extras: ReportExtras = {}): Document {
   const brand = resolveBranding(branding);
   const context: SectionContext = { plan, runDir, charts: extras.charts ?? {}, helpers: { heading, para, table, pngImage, writtenText, plural } };
   let data: GlanceData | undefined;
   const glance = () => (data ??= glanceData(plan));
   const builders: Record<ReportSectionId, (entry: OutlineEntry) => (Paragraph | Table)[]> = {
     summary: (e) => executiveSummary(plan, e),
-    glance: (e) => [...glanceSection(plan, glance(), sectionHeading(e)), ...glanceWords(plan), pageBreak()],
-    plan: (e) => [...actionPlanSection(glance(), sectionHeading(e)), pageBreak()],
+    glance: (e) => [...glanceSection(plan, glance(), sectionHeading(e)), ...glanceWords(plan)],
+    plan: (e) => actionPlanSection(glance(), sectionHeading(e)),
     strengths: (e) => strengthsSection(glance(), sectionHeading(e)),
-    editors: (e) => [...contentEditorsSection(plan, sectionHeading(e)), pageBreak()],
+    editors: (e) => contentEditorsSection(plan, sectionHeading(e)),
     progress: (e) => progressSection(plan, sectionHeading(e)),
     glossary: (e) => [sectionHeading(e), ...glossaryParagraphs()],
     method: (e) => scopeAndMethod(plan, e),
     analytics: (e) => analyticsSection(context, e),
-    findings: (e) => (plan.options.clientFacing ? [...fixCardsSection(plan, glance(), runDir, sectionHeading(e)), pageBreak()] : findings(plan, runDir, e)),
+    findings: (e) => (plan.options.clientFacing ? fixCardsSection(plan, glance(), runDir, sectionHeading(e)) : findings(plan, runDir, e)),
     content: (e) => contentSection(context, e),
     ia: (e) => iaSection(context, e),
     client: (e) => clientSection(context, e),
     profile: (e) => profileSection(context, e),
-    map: (e) => (plan.run.mode === 'explore' ? stateMapSection(plan, extras.stateMap, e) : plan.run.mode === 'journey' ? journeySection(plan, e) : siteMap(plan, e)),
+    map: (e) =>
+      plan.run.mode === 'explore'
+        ? stateMapSection(plan, extras.stateMap, e)
+        : plan.run.mode === 'journey'
+          ? journeySection(plan, e)
+          : plan.options.clientFacing
+            ? coverage(plan, e)
+            : siteMap(plan, e),
     competitors: (e) => competitorSection(context, e),
     conclusion: (e) => [heading(`${e.number}. ${e.title}`, HeadingLevel.HEADING_1), ...writtenText(plan.options.text.conclusion ?? '')],
     limitations: (e) => limitations(plan, e),
   };
   const children = [
     ...cover(plan, brand, reportTitle(plan)),
-    ...(plan.options.clientFacing ? contents(plan) : []),
-    ...plan.outline.flatMap((entry) => builders[entry.id](entry)),
+    ...(plan.options.clientFacing ? contents() : []),
+    // Every section of the client report starts on a new page.
+    ...plan.outline.flatMap((entry, i) => [...(plan.options.clientFacing && i > 0 ? [pageBreak()] : []), ...builders[entry.id](entry)]),
     // Ticket IDs are for the team fixing things; a client-facing report persuades, so it has none.
     ...(plan.options.clientFacing ? [] : appendix(plan)),
   ];
-  return Packer.toBuffer(brandedDocument(brand, `${plan.project.name}: ${reportTitle(plan)}`, `${plan.project.name} audit`, children));
+  return brandedDocument(brand, `${plan.project.name}: ${reportTitle(plan)}`, `${plan.project.name} audit`, children);
 }
 
 const sectionHeading = (e: OutlineEntry) => heading(`${e.number}. ${e.title}`, HeadingLevel.HEADING_1);
@@ -181,13 +197,15 @@ export function glanceWords(plan: ExportPlan): Paragraph[] {
 }
 
 /** A Word document in the report style: Arial, headings in the accent colour, and a footer with page numbers. */
-export function brandedDocument(brand: Brand, title: string, footerLabel: string, children: (Paragraph | Table)[]): Document {
+export function brandedDocument(brand: Brand, title: string, footerLabel: string, children: (Paragraph | Table | TableOfContents)[]): Document {
   return new Document({
     creator: brand.companyName,
     title,
     description: 'Automated audit report produced by Prego',
+    // Lay the pages out as Word does, so the contents page has its page numbers without Word asking to update it.
+    pageNumbers: estimatePageNumbersWith({ guess: true }),
     styles: {
-      default: { document: { run: { font: 'Arial', size: 22 } } },
+      default: { document: { run: { font: 'Arial', size: 22, language: { value: 'en-GB' } } } },
       paragraphStyles: [
         { id: 'Heading1', name: 'Heading 1', basedOn: 'Normal', next: 'Normal', run: { size: 36, bold: true, color: brand.accentColour }, paragraph: { spacing: { before: 360, after: 160 } } },
         { id: 'Heading2', name: 'Heading 2', basedOn: 'Normal', next: 'Normal', run: { size: 28, bold: true, color: brand.accentColour }, paragraph: { spacing: { before: 280, after: 120 } } },
@@ -219,15 +237,23 @@ export async function writeReportDocx(plan: ExportPlan, runDir: string, path: st
 
 // Sections
 
-export function cover(plan: ExportPlan, brand: Brand, title: string): Paragraph[] {
+export function cover(plan: ExportPlan, brand: Brand, title: string, options: { compact?: boolean } = {}): Paragraph[] {
   const out: Paragraph[] = [];
+  // A compact cover is a title block at the top of the first page, for short documents.
+  const compact = options.compact ?? false;
   if (brand.logoPath && existsSync(brand.logoPath)) {
-    const image = pngImage(readFileSync(brand.logoPath), 200, 80, `${brand.companyName} logo`);
-    if (image) out.push(new Paragraph({ children: [image], spacing: { after: 600 } }));
+    const image = pngImage(readFileSync(brand.logoPath), compact ? 120 : 200, compact ? 48 : 80, `${brand.companyName} logo`);
+    if (image) out.push(new Paragraph({ children: [image], spacing: { after: compact ? 200 : 600 } }));
   }
   out.push(
-    new Paragraph({ spacing: { before: 1600, after: 200 }, children: [new TextRun({ text: plan.project.name, size: 56, bold: true, color: brand.accentColour })] }),
-    new Paragraph({ spacing: { after: 600 }, children: [new TextRun({ text: title, size: 36 })] }),
+    new Paragraph({ spacing: { before: compact ? 0 : 1600, after: compact ? 80 : 200 }, children: [new TextRun({ text: plan.project.name, size: compact ? 40 : 56, bold: true, color: brand.accentColour })] }),
+    new Paragraph({ spacing: { after: compact ? 120 : 600 }, children: [new TextRun({ text: title, size: compact ? 28 : 36 })] }),
+  );
+  if (compact) {
+    out.push(new Paragraph({ spacing: { after: 240 }, children: [new TextRun({ text: `${productName(plan)} · ${formatDate(plan.run.startedAt)} · Prepared by ${brand.companyName}`, size: 18 })] }));
+    return out;
+  }
+  out.push(
     labelled('Product', productName(plan)),
     labelled('Date', formatDate(plan.run.startedAt)),
     labelled('Audit scope', scopeSentence(plan)),
@@ -242,12 +268,18 @@ function reportTitle(plan: ExportPlan): string {
 }
 
 /** A contents list of the numbered sections. Plain text, so it needs no updating when the report opens. */
-function contents(plan: ExportPlan): Paragraph[] {
+function contents(): (Paragraph | TableOfContents)[] {
+  // Not a heading itself, so the contents doesn't list itself.
   return [
-    heading('Contents', HeadingLevel.HEADING_1),
-    ...plan.outline.map((e) => new Paragraph({ spacing: { after: 100 }, children: [new TextRun({ text: `${e.number}.`, bold: true }), new TextRun(` ${e.title}`)] })),
+    new Paragraph({ spacing: { after: 160 }, children: [new TextRun({ text: 'Contents', bold: true, size: 36 })] }),
+    new TableOfContents('Contents', { hyperlink: true, headingStyleRange: '1-1' }),
     new Paragraph({ children: [new PageBreak()] }),
   ];
+}
+
+/** How many pages a document has, laid out as Word does. */
+export function pageCount(document: Document): number {
+  return layoutDocument(document, { guess: true }).pages.length;
 }
 
 function executiveSummary(plan: ExportPlan, entry: OutlineEntry): (Paragraph | Table)[] {
@@ -279,6 +311,7 @@ function executiveSummary(plan: ExportPlan, entry: OutlineEntry): (Paragraph | T
           ? [c.name, 'Not checked', '–', '–', '–', '–', '–', '–']
           : [c.name, String(c.score), String(c.issues), ...SEVERITIES.map((s) => String(c.bySeverity[s])), String(c.advice)],
       ),
+      { hideEmptyColumns: true },
     ),
   );
   const limits = plan.outline.find((o) => o.id === 'limitations')!.number;
@@ -329,6 +362,8 @@ function scopeAndMethod(plan: ExportPlan, entry: OutlineEntry): (Paragraph | Tab
   const [title, ...rest] = scopeAndMethodTable(plan, entry);
   // Client-facing reports open the section with the methodology in words, then the detail.
   const words = plan.options.clientFacing ? writtenText(plan.options.text.methodology ?? suggestReportText(plan).methodology) : [];
+  // The client version leaves out the list of check modules and the speed of every page: they're in report.docx.
+  if (plan.options.clientFacing) return [title, ...words, ...rest.map((block) => (block instanceof Table ? withoutChecksRow(plan) : block))];
   return [title, ...words, ...rest, ...lighthouseTable(plan)];
 }
 
@@ -516,6 +551,54 @@ function journeySection(plan: ExportPlan, entry: OutlineEntry): (Paragraph | Tab
   ];
 }
 
+/** The scope table without the list of check modules, for the client report. */
+function withoutChecksRow(plan: ExportPlan): Table {
+  const s = plan.run.settings as Record<string, unknown>;
+  const pages = plan.locations.filter((l) => l.statusCode !== null && l.statusCode < 400);
+  return table(
+    ['', ''],
+    [
+      ['Start address', productName(plan)],
+      ['Screen sizes', screenSizes(s.viewports as string[] | undefined)],
+      ['Pages found', String(pages.length)],
+      ['Pages checked', `${auditedCount(plan)}${s.auditAll ? ' (every page)' : ` (up to ${s.perTemplate ?? 3} of each kind of page)`}`],
+      ['robots.txt', s.respectRobots === false ? 'Ignored (staging mode)' : 'Respected'],
+      ['Tools', 'Open-source tools run on our own computer: nothing about the site was sent anywhere else.'],
+    ],
+    { headerRow: false },
+  );
+}
+
+/** Which kinds of page were checked, for the client report: one row per page template, not per page. */
+function coverage(plan: ExportPlan, entry: OutlineEntry): (Paragraph | Table)[] {
+  const pages = plan.locations.filter((l) => l.kind === 'page' && l.statusCode !== null && l.statusCode < 400);
+  const byTemplate = new Map<string, { found: number; audited: number; example: string }>();
+  for (const l of pages) {
+    const key = l.templateKey ?? l.url;
+    const e = byTemplate.get(key) ?? { found: 0, audited: 0, example: new URL(l.url).pathname };
+    e.found++;
+    if (l.audited) e.audited++;
+    byTemplate.set(key, e);
+  }
+  const rows = [...byTemplate.entries()].sort((a, b) => b[1].found - a[1].found);
+  const shown = rows.slice(0, MAX_COVERAGE_ROWS);
+  const broken = plan.locations.filter((l) => (l.statusCode ?? 0) >= 400).length;
+  return [
+    heading(`${entry.number}. ${entry.title}`, HeadingLevel.HEADING_1),
+    para(`Pages that share a layout were grouped, and up to ${(plan.run.settings as Record<string, unknown>).perTemplate ?? 3} of each kind checked. Every page is listed in report.docx.`),
+    table(
+      ['Kind of page', 'Example', 'Found', 'Checked'],
+      shown.map(([key, e]) => [key.startsWith('http') ? 'Single page' : upperFirstWord(templateName(key)), e.example, String(e.found), String(e.audited)]),
+      { fontSize: 17 },
+    ),
+    ...(rows.length > shown.length ? [para(`And ${rows.length - shown.length} more kinds of page, with ${rows.slice(MAX_COVERAGE_ROWS).reduce((n, [, e]) => n + e.found, 0)} pages between them.`)] : []),
+    ...(broken ? [para(`${broken} ${plural(broken, 'link')} led to a page that didn’t load; these are in the action plan.`)] : []),
+  ];
+}
+
+const MAX_COVERAGE_ROWS = 15;
+const upperFirstWord = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
+
 function siteMap(plan: ExportPlan, entry: OutlineEntry): (Paragraph | Table)[] {
   const rows = plan.locations.map((l) => [
     l.url,
@@ -678,19 +761,56 @@ export function labelled(label: string, value: string) {
   return new Paragraph({ spacing: { after: 80 }, children: [new TextRun({ text: `${label}: `, bold: true }), new TextRun(value)] });
 }
 
-export function table(header: string[], rows: string[][], options: { headerRow?: boolean; boldFirstColumn?: boolean; fontSize?: number } = {}) {
+/** Background and text colours for status, severity and impact chips. Each passes WCAG AA contrast, and always carries its word. */
+export const CHIP_COLOURS: Record<string, { fill: string; text: string }> = {
+  Good: { fill: 'E3F2E6', text: '1E5631' },
+  'Needs attention': { fill: 'FFF1C2', text: '5C4500' },
+  'Needs significant work': { fill: 'FBE3E4', text: '8A1C22' },
+  Critical: { fill: 'FBE3E4', text: '8A1C22' },
+  High: { fill: 'FDE9D9', text: '7A3300' },
+  Medium: { fill: 'FFF1C2', text: '5C4500' },
+  Low: { fill: 'EEEEEE', text: '3D3D3D' },
+};
+
+/** The chip for a cell's text, when it starts with a status, severity or impact word. */
+function chipFor(text: string): { fill: string; text: string } | undefined {
+  const word = Object.keys(CHIP_COLOURS).find((k) => text === k || text.startsWith(`${k}:`));
+  return word ? CHIP_COLOURS[word] : undefined;
+}
+
+export function table(
+  header: string[],
+  rows: string[][],
+  options: { headerRow?: boolean; boldFirstColumn?: boolean; fontSize?: number; chips?: number[]; hideEmptyColumns?: boolean } = {},
+) {
   const size = options.fontSize ?? 20;
   const border = { style: BorderStyle.SINGLE, size: 4, color: 'BFBFBF' };
-  const cell = (text: string, bold = false, shaded = false) =>
+  // Columns with nothing in them, such as a severity no issue has, are left out when asked.
+  const empty = (i: number) => rows.length > 0 && rows.every((r) => ['', '0', '–'].includes(r[i] ?? ''));
+  const keep = header.map((_, i) => !(options.hideEmptyColumns && i > 0 && empty(i)));
+  const cell = (text: string, bold: boolean, fill: string | undefined, colour?: string) =>
     new TableCell({
       borders: { top: border, bottom: border, left: border, right: border },
-      shading: shaded ? { type: ShadingType.CLEAR, color: 'auto', fill: 'E8EDF3' } : undefined,
+      shading: fill ? { type: ShadingType.CLEAR, color: 'auto', fill } : undefined,
       margins: { top: 60, bottom: 60, left: 100, right: 100 },
-      children: [new Paragraph({ children: [new TextRun({ text, bold, size })] })],
+      children: [new Paragraph({ children: [new TextRun({ text, bold, size, color: colour })] })],
     });
   const tableRows = [
-    ...(options.headerRow === false ? [] : [new TableRow({ tableHeader: true, children: header.map((h) => cell(h, true, true)) })]),
-    ...rows.map((row) => new TableRow({ children: row.map((text, i) => cell(text, (options.boldFirstColumn || options.headerRow === false) && i === 0)) })),
+    ...(options.headerRow === false ? [] : [new TableRow({ tableHeader: true, children: header.filter((_, i) => keep[i]).map((h) => cell(h, true, 'E8EDF3')) })]),
+    ...rows.map(
+      (row, r) =>
+        new TableRow({
+          cantSplit: true,
+          children: row
+            .map((text, i) => {
+              // Status and severity columns are chips: colour and word together. Other rows are striped.
+              const chip = options.chips?.includes(i) ? chipFor(text) : undefined;
+              const zebra = rows.length > 3 && r % 2 === 1 ? 'F6F8FA' : undefined;
+              return keep[i] ? cell(text, !!chip || ((options.boldFirstColumn || options.headerRow === false) && i === 0), chip?.fill ?? zebra, chip?.text) : null;
+            })
+            .filter((c): c is TableCell => c !== null),
+        }),
+    ),
   ];
   return new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: tableRows });
 }

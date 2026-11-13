@@ -8,7 +8,9 @@ import { runAudit } from '../audit/run-audit.js';
 import { asFreshAudit, restoreRun, type RunJson } from './restore.js';
 import { buildTickets } from '../tickets/build.js';
 import { buildExportPlan } from './plan.js';
-import { reportDocx } from './docx.js';
+import { pageCount, reportDocument, reportDocx } from './docx.js';
+import { overviewDocument } from './overview.js';
+import { DEFAULT_WHY_IT_MATTERS } from '../settings.js';
 import { DEFAULT_REPORT_OPTIONS } from './report-options.js';
 
 // The client report is read by people who don't build websites: short sentences, and no technical
@@ -68,10 +70,15 @@ describe('the client report reads plainly', () => {
       const runId = restoreRun(db, asFreshAudit(JSON.parse(readFileSync(join(DIR, file), 'utf8')) as RunJson));
       buildTickets(db, runId);
       const result = measure(await prose(db, runId));
+      // Short enough to read: the client report under 25 pages, the overview two at most.
+      const plan = buildExportPlan(db, runId);
+      const pages = { client: pageCount(reportDocument(plan, dataDir)), overview: pageCount(overviewDocument(plan, DEFAULT_WHY_IT_MATTERS)) };
       db.close();
       expect(result.jargon).toEqual([]);
       expect(result.average).toBeLessThan(20);
       expect(result.longest).toBeLessThanOrEqual(40);
+      expect(pages.client).toBeLessThan(25);
+      expect(pages.overview).toBeLessThanOrEqual(2);
     },
     120_000,
   );

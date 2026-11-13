@@ -33,7 +33,12 @@ const GROUP_INTRO: Record<PlanGroup, string> = {
 };
 
 /** Most rows shown in "When you can"; the rest are in report.docx and tickets.csv. */
-const MAX_LATER_ROWS = 12;
+const MAX_LATER_ROWS = 8;
+/** Most rows shown in "Plan next"; every issue still has a fix card or a row in the developer report. */
+const MAX_NEXT_ROWS = 15;
+/** "Where" text in the plan table is cut at this length; the fix cards have it in full. */
+const MAX_WHERE = 48;
+const short = (text: string) => (text.length > MAX_WHERE ? `${text.slice(0, MAX_WHERE - 1).trimEnd()}…` : text);
 
 const lowerFirst = (text: string) => text.charAt(0).toLowerCase() + text.slice(1);
 const upperFirst = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
@@ -104,6 +109,7 @@ export function glanceSection(plan: ExportPlan, data: GlanceData, title: Paragra
     out.push(
       table(['Area', 'Status', 'Score', 'Issues'], [...scores.map((c) => [c.name, areaStatus(c.score!), `${c.score} / 100`, issuesText(c)]), ...(carbon ? [carbon] : [])], {
         boldFirstColumn: true,
+        chips: [1],
       }),
       para('Scores count each distinct problem once, weighted by severity and how much of the site it affects. They show where to focus, not compliance.'),
     );
@@ -132,7 +138,7 @@ export function glanceSection(plan: ExportPlan, data: GlanceData, title: Paragra
 }
 
 /** The action plan: every distinct issue, in order, with who fixes it and how big a job it is. */
-export function actionPlanSection(data: GlanceData, title: Paragraph, options: { groups?: PlanGroup[]; maxRows?: number } = {}): (Paragraph | Table)[] {
+export function actionPlanSection(data: GlanceData, title: Paragraph, options: { groups?: PlanGroup[]; maxRows?: number; skip?: PlanRow[] } = {}): (Paragraph | Table)[] {
   const out: (Paragraph | Table)[] = [title];
   if (!data.rows.length) return [...out, para('Automated checks raised no issues in the areas checked.')];
   out.push(
@@ -142,29 +148,28 @@ export function actionPlanSection(data: GlanceData, title: Paragraph, options: {
   );
   let n = 0;
   for (const group of options.groups ?? PLAN_GROUPS) {
-    const rows = data.rows.filter((r) => r.group === group);
+    const rows = data.rows.filter((r) => r.group === group && !options.skip?.includes(r));
     if (!rows.length) continue;
-    const limit = options.maxRows ?? (group === 'When you can' ? MAX_LATER_ROWS : rows.length);
+    const limit = options.maxRows ?? (group === 'When you can' ? MAX_LATER_ROWS : group === 'Plan next' ? MAX_NEXT_ROWS : rows.length);
     const shown = rows.slice(0, limit);
     out.push(
       heading(`${group} (${rows.length})`, HeadingLevel.HEADING_2),
       para(GROUP_INTRO[group]),
       table(
-        ['#', 'Fix', 'Where', 'Who', 'Effort', 'Impact', 'Ref'],
+        ['#', 'Fix', 'Where', 'Who and effort', 'Impact', 'Ref'],
         shown.map((r) => [
           String(++n),
           r.fix,
-          r.where,
-          r.who,
-          r.effort,
+          short(r.where),
+          `${r.who}, ${lowerFirst(r.effort)}`,
           `${r.impact}: ${lowerFirst(r.reason)}`,
           r.refs.slice(0, 2).join(', ') + (r.refs.length > 2 ? ` +${r.refs.length - 2}` : ''),
         ]),
-        { fontSize: 17 },
+        { fontSize: 17, chips: [4] },
       ),
     );
     n += rows.length - shown.length;
-    if (rows.length > shown.length) out.push(para(`And ${rows.length - shown.length} more, listed in the developer report and tickets.csv.`));
+    if (rows.length > shown.length) out.push(para(`And ${rows.length - shown.length} more, in the fix cards, the developer report and tickets.csv.`));
   }
   return out;
 }

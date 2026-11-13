@@ -17,7 +17,7 @@ export interface ContentFix {
 }
 
 /** Most rows in the report; the CSV has them all. */
-const MAX_REPORT_ROWS = 40;
+const MAX_REPORT_ROWS = 20;
 const TITLE_LIMIT = 60;
 
 function current(t: PlannedTicket, o: PlannedOccurrence): string {

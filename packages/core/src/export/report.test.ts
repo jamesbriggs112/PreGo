@@ -106,10 +106,10 @@ describe('report options', () => {
       'For content editors',
       'Content and tone',
       'Information architecture',
-      'Site map summary',
       'Competitor analysis',
       'Conclusion',
       'Methodology',
+      'Pages checked',
       'Limitations and manual testing',
       'Glossary',
     ]);
@@ -273,7 +273,7 @@ describe('the client report', () => {
     });
     const exported = await exportRun(db, runId, { dataDir, outDir: join(dataDir, 'client') });
     const { zip, text } = await reportText(exported.dir, 'client-report.docx');
-    const headings = [...text.matchAll(/^(\d+)\. (.+)$/gm)].map((m) => `${m[1]}. ${m[2]}`);
+    const headings = [...text.matchAll(/^(\d+)\. (.+)$/gm)].filter((m) => !m[2].includes('PAGEREF')).map((m) => `${m[1]}. ${m[2]}`);
     const expected = [
       '1. At a glance',
       '2. What to fix first: the action plan',
@@ -283,15 +283,18 @@ describe('the client report', () => {
       '6. For content editors',
       '7. Content and tone',
       '8. Information architecture',
-      '9. Site map summary',
-      '10. Competitor analysis',
-      '11. Conclusion',
-      '12. Methodology',
+      '9. Competitor analysis',
+      '10. Conclusion',
+      '11. Methodology',
+      '12. Pages checked',
       '13. Limitations and manual testing',
       '14. Glossary',
     ];
-    // Listed once on the contents page, then as the section headings.
-    expect(headings).toEqual([...expected, ...expected]);
+    // Listed on the contents page with their page numbers, then as the section headings.
+    expect(headings).toEqual(expected);
+    const contents = [...text.matchAll(/(\d+\. [^\n]+?)\s*PAGEREF _Toc\d+ \\h(\d+)/g)];
+    expect(contents.map((m) => m[1])).toEqual(expected);
+    expect(contents.every((m) => Number(m[2]) > 1)).toBe(true);
     expect(text).toContain('Website UX audit');
     expect(text).toMatch(/Acme makes widgets\.\nThis audit looks at the new site before launch\./);
     expect(text).toMatch(/Key findings\nImages are missing alt text\nSome text is hard to read/);
@@ -299,7 +302,7 @@ describe('the client report', () => {
     expect(text).toMatch(/Area\nStatus\nScore\nIssues\n/);
     expect(text).toMatch(/Fix these (three )?first\n1\.\t.+\. Where: .+\. (High|Medium|Low) impact, for .+\. Who: .+\. Effort: .+\./);
     expect(text).toMatch(/Quick wins \(\d+\)|Plan next \(\d+\)/);
-    expect(text).toMatch(/#\nFix\nWhere\nWho\nEffort\nImpact\nRef\n/);
+    expect(text).toMatch(/#\nFix\nWhere\nWho and effort\nImpact\nRef\n/);
     expect(text).toContain('We crawled the site through its links and sitemap');
     expect(text).toContain('How people find the site');
     expect(text).toContain('Average reading ease');

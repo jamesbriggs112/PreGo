@@ -1,7 +1,7 @@
-import { HeadingLevel, Packer, Paragraph, Table, TextRun } from 'docx';
+import { Document, HeadingLevel, Packer, Paragraph, Table, TextRun } from 'docx';
 import { writeFileSync } from 'node:fs';
 import { brandedDocument, cover, glanceWords, heading, para, resolveBranding, table, writtenText, type ReportBranding } from './docx.js';
-import { actionPlanSection, glanceData, glanceSection } from './glance.js';
+import { actionPlanSection, firstFixes, glanceData, glanceSection } from './glance.js';
 import type { ExportPlan } from './plan.js';
 import { assessReadiness } from './readiness.js';
 import { taskResults } from './audience-report.js';
@@ -20,6 +20,11 @@ export function scoreRating(score: number): string {
  * wording from Settings); and a guide to the rest of the pack.
  */
 export async function overviewDocx(plan: ExportPlan, whyItMatters: string, branding: ReportBranding = {}): Promise<Buffer> {
+  return Packer.toBuffer(overviewDocument(plan, whyItMatters, branding));
+}
+
+/** The overview as a document, before it's written out: for measuring how many pages it has. */
+export function overviewDocument(plan: ExportPlan, whyItMatters: string, branding: ReportBranding = {}): Document {
   const brand = resolveBranding(branding);
   const { text } = plan.options;
   const readiness = assessReadiness(plan.locations);
@@ -42,19 +47,23 @@ export async function overviewDocx(plan: ExportPlan, whyItMatters: string, brand
   const data = glanceData(plan);
   let n = 0;
   const section = (title: string) => heading(`${++n}. ${title}`, HeadingLevel.HEADING_1);
+  const first = firstFixes(data.rows);
+  const more = data.rows.some((r) => r.group === 'Quick wins' && !first.includes(r));
   const children: (Paragraph | Table)[] = [
-    ...cover(plan, brand, 'Website health overview'),
+    ...cover(plan, brand, 'Website health overview', { compact: true }),
     ...glanceSection(plan, data, section('At a glance')),
     ...glanceWords(plan),
-    ...(data.rows.some((r) => r.group === 'Quick wins') ? actionPlanSection(data, section('Quick wins'), { groups: ['Quick wins'], maxRows: 8 }) : []),
+    // The quick wins after the three on the glance page.
+    ...(more ? actionPlanSection(data, section('Quick wins'), { groups: ['Quick wins'], maxRows: 3, skip: first }) : []),
     // Why it matters: the audit's own wording, or the standard wording from Settings.
     section('Why a healthy website matters'),
     ...writtenText(text.whyItMatters ?? whyItMatters),
     section('What’s in this pack'),
-    table(['File', 'What it is', 'For'], pack, { boldFirstColumn: true, fontSize: 18 }),
+    ...pack.map(([file, what, who]) => new Paragraph({ spacing: { after: 60 }, children: [new TextRun({ text: `${file}: `, bold: true }), new TextRun(`${what}. For ${lowerFirst(who)}.`)] })),
     para('Automated checks find only some problems, so read these results alongside manual testing. They report what the checks found, not whether the site meets a standard such as WCAG.'),
   ];
-  return Packer.toBuffer(brandedDocument(brand, `${plan.project.name}: Website health overview`, `${plan.project.name} overview`, children));
+
+  return brandedDocument(brand, `${plan.project.name}: Website health overview`, `${plan.project.name} overview`, children);
 }
 
 /** What the site is for and who it serves, when the project has purposes. Gaps are what the client wants but the site doesn't do yet. */

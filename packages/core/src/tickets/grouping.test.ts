@@ -3,6 +3,7 @@ import { PregoDb } from '../db/database.js';
 import { restoreRun, type RunJson } from '../export/restore.js';
 import { buildTickets, fingerprint, normaliseComponent } from './build.js';
 import { isAdvisory } from './advisory.js';
+import { templateName } from './component.js';
 import type { Location, RawFinding } from '../types.js';
 
 // One problem, one ticket: the same component failing the same check on every page template is one
@@ -111,5 +112,12 @@ describe('one problem, one ticket', () => {
     expect(isAdvisory({ category: 'CONT', ruleId: 'spelling', wcagCriterion: null, wcagLevel: null })).toBe(true);
     expect(isAdvisory({ category: 'A11Y', ruleId: 'target-size', wcagCriterion: '2.5.8', wcagLevel: 'AA' })).toBe(false);
     expect(isAdvisory({ category: 'SEC', ruleId: 'missing-csp', wcagCriterion: null, wcagLevel: null })).toBe(false);
+  });
+
+  it('describes page templates in words', () => {
+    expect(templateName('/')).toBe('home page');
+    expect(templateName('/news/*/*')).toBe('pages under /news/');
+    expect(templateName('/about.html')).toBe('/about.html');
+    expect(templateName('/*')).toBe('pages like /*');
   });
 });

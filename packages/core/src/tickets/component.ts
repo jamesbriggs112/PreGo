@@ -53,6 +53,18 @@ export async function describeComponent(page: Page, selector: string): Promise<C
   return info ?? { path: `unresolved:${selector}`, shared: false };
 }
 
+/**
+ * A page template in words: `/` is the home page, a template under /news/ (any address there) is
+ * "pages under /news/", and a single page is its own address.
+ */
+export function templateName(templateKey: string): string {
+  if (templateKey === '/') return 'home page';
+  const star = templateKey.indexOf('*');
+  if (star < 0) return templateKey;
+  const prefix = templateKey.slice(0, star).replace(/[^/]*$/, '');
+  return prefix === '/' || !prefix ? 'pages like ' + templateKey : `pages under ${prefix}`;
+}
+
 /** Human description of where a component is, for ticket titles. */
 export function componentLabel(path: string, shared: boolean, templateKey: string | null): string {
   // Problems that belong to the whole site (a missing security header, colour drift).
@@ -63,7 +75,7 @@ export function componentLabel(path: string, shared: boolean, templateKey: strin
     if (/(^|>)nav/.test(path)) return 'site navigation, every page';
     return 'shared component, every page';
   }
-  const where = templateKey ? `${templateKey}` : 'page';
+  const where = templateKey ? templateName(templateKey) : 'page';
   const last = path.split('>').pop()?.split('.')[0];
   if (last === 'form') return `form on ${where}`;
   return where;

@@ -25,7 +25,9 @@ export function markupModule(): CheckModule {
         html = await page.content();
       }
       const report = await validator.validateString(html, location.url);
-      const messages = report.results[0]?.messages ?? [];
+      // The HTML standard doesn't require a title on <iframe>: that's an accessibility matter, which axe
+      // checks on frames people can see (not ones inside <noscript>, such as Google Tag Manager's).
+      const messages = (report.results[0]?.messages ?? []).filter((m) => !(m.ruleId === 'element-required-attributes' && /<iframe> is missing required "title"/.test(m.message)));
       return messages.slice(0, MAX_PER_PAGE).map(
         (m): CheckFinding => ({
           module: 'html',

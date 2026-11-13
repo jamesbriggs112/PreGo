@@ -5,6 +5,10 @@ import { join } from 'node:path';
 import { PregoDb } from '../../db/database.js';
 import { runAudit } from '../../audit/run-audit.js';
 import type { RawFinding, Ticket } from '../../types.js';
+import { chromium } from 'playwright';
+import { createRequire } from 'node:module';
+import { dirname } from 'node:path';
+import { guidanceFor } from '../guidance.js';
 
 const dataDir = mkdtempSync(join(tmpdir(), 'prego-ibm-'));
 let alone: RawFinding[];
@@ -55,4 +59,26 @@ describe('IBM Equal Access as a second engine', () => {
     for (const f of lang) expect(f).toMatchObject({ selector: expect.stringMatching(/iframe/), failureSummary: expect.stringMatching(/^Inside the embedded frame/) });
     for (const f of found.filter((f) => f.ruleId === 'svg_graphics_labelled')) expect(f.selector).toMatch(/svg|#icon/);
   }, 120_000);
+
+  it('has plain-English wording for every rule IBM can raise', async () => {
+    const browser = await chromium.launch();
+    try {
+      const page = await browser.newPage();
+      await page.setContent('<p>x</p>');
+      await page.addScriptTag({ path: join(dirname(createRequire(import.meta.url).resolve('accessibility-checker-engine/package.json')), 'ace.js') });
+      const rules = await page.evaluate(() => {
+        type Checker = { getGuidelines(): { id: string; checkpoints: { rules?: { id: string; level: string }[] }[] }[] };
+        const checker = new (window as unknown as { ace: { Checker: new () => Checker } }).ace.Checker();
+        const wcag = checker.getGuidelines().find((g) => g.id === 'WCAG_2_2')!;
+        return [...new Set(wcag.checkpoints.flatMap((cp) => (cp.rules ?? []).filter((r) => r.level === 'VIOLATION').map((r) => r.id)))];
+      });
+      expect(rules.length).toBeGreaterThan(100);
+      expect(rules.filter((id) => !guidanceFor('ibm', id))).toEqual([]);
+      expect(guidanceFor('ibm', 'aria_navigation_label_unique', ['1.3.1'])).toMatchObject({ title: 'Several menus have the same label', recommendation: expect.stringContaining('aria-label') });
+      // Rules axe also has read the same as axe's.
+      expect(guidanceFor('ibm', 'html_lang_exists')?.title).toBe(guidanceFor('axe-core', 'html-has-lang')?.title);
+    } finally {
+      await browser.close();
+    }
+  }, 60_000);
 });

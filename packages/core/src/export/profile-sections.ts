@@ -119,13 +119,16 @@ export function profileSection(ctx: SectionContext, entry: OutlineEntry): Block[
     out.push(
       heading('Outside services', HeadingLevel.HEADING_2),
       para(
-        `Pages load files from or send data to ${profile.thirdParties.length} other ${plural(profile.thirdParties.length, 'address')}. Each one learns the visitor’s IP address and which page they’re on, so each should be needed and covered by the privacy notice.`,
+        `Pages load files from or send data to ${profile.thirdParties.length} other ${plural(profile.thirdParties.length, 'address')}. Each one learns the visitor’s IP address and which page they’re on, so each should be needed and covered by the privacy notice.` +
+          (profile.thirdParties.some((t) => t.blocked)
+            ? ' Prego blocks known trackers while it audits, so their data isn’t measured here; they still load for real visitors, and the privacy findings say which load before visitors agree.'
+            : ''),
       ),
       table(
         ['Service', 'Type', 'Pages', 'Data'],
         profile.thirdParties
           .slice(0, 25)
-          .map((t) => [t.service ? `${t.service} (${t.host})` : t.host, t.category ?? '–', String(t.pages), t.blocked ? 'Blocked by Prego' : kb(t.bytes)]),
+          .map((t) => [t.service ? `${t.service} (${t.host})` : t.host, t.category ?? '–', String(t.pages), t.blocked ? 'Tracker: blocked in audit' : kb(t.bytes)]),
         { fontSize: 18 },
       ),
     );

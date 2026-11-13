@@ -352,7 +352,7 @@ function ThirdPartiesCard({ profile }: { profile: SiteProfile }) {
         <CardTitle>Outside services</CardTitle>
         <CardDescription>
           Other organisations’ servers the pages load files from or send data to. Each learns the visitor’s IP address and which page they’re on, so each should be needed and named
-          in the privacy notice. Known trackers are blocked by Prego, so the audit sends them nothing.
+          in the privacy notice. Prego blocks known trackers while it audits, so it sends them nothing; they still load for real visitors, and the privacy check shows which load before visitors agree.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -384,7 +384,7 @@ function ThirdPartiesCard({ profile }: { profile: SiteProfile }) {
                   </TableCell>
                   <TableCell className={cn('text-sm', !t.category && 'text-muted-foreground')}>{t.category ?? 'Unknown'}</TableCell>
                   <TableCell className="text-right tabular-nums">{t.pages}</TableCell>
-                  <TableCell className="text-right text-sm whitespace-nowrap tabular-nums">{t.blocked ? <Badge variant="medium">Tracker, blocked</Badge> : kb(t.bytes)}</TableCell>
+                  <TableCell className="text-right text-sm whitespace-nowrap tabular-nums">{t.blocked ? <Badge variant="medium">Tracker, blocked in audit</Badge> : kb(t.bytes)}</TableCell>
                 </TableRow>
               ))}
             </TableBody>

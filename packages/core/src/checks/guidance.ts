@@ -2,6 +2,8 @@
 // project managers, so this avoids jargon; selectors and rule IDs go in the CSV instead.
 // Rules without an entry fall back to the engine's own text.
 
+import { AXE_EQUIVALENT, ibmGuidance } from './ibm/ibm-guidance.js';
+
 export type Effort = 'Small' | 'Medium' | 'Large';
 
 export interface RuleGuidance {
@@ -803,10 +805,11 @@ const PREGO: Record<string, RuleGuidance> = {
 const GENERIC_WHY =
   'This makes the interface harder or impossible to use for some people, including those using screen readers, keyboards or magnification.';
 
-export function guidanceFor(engine: string, ruleId: string): RuleGuidance | undefined {
+export function guidanceFor(engine: string, ruleId: string, criteria: string[] = []): RuleGuidance | undefined {
   if (engine === 'axe-core') return AXE[ruleId];
   if (engine === 'prego') return PREGO[ruleId];
   if (engine === 'retire.js') return PREGO[ruleId];
+  if (engine === 'ibm') return AXE[AXE_EQUIVALENT[ruleId] ?? ''] ?? ibmGuidance(ruleId, criteria);
   return undefined;
 }
 
@@ -820,9 +823,9 @@ const GENERIC_WHY_BY_ENGINE: Record<string, string> = {
 export function guidanceWithFallback(
   engine: string,
   ruleId: string,
-  fallback: { title: string; description: string; helpUrl: string | null },
+  fallback: { title: string; description: string; helpUrl: string | null; wcagCriteria?: string[] },
 ): RuleGuidance {
-  const guidance = guidanceFor(engine, ruleId);
+  const guidance = guidanceFor(engine, ruleId, fallback.wcagCriteria);
   // Each outdated library, misspelt word and browser gets its own ticket, so the title names it.
   if (guidance && (engine === 'retire.js' || ruleId === 'spelling' || ruleId.startsWith('browser-'))) return { ...guidance, title: fallback.title };
   if (engine === 'ollama') {

@@ -1,8 +1,11 @@
 import { createHash } from 'node:crypto';
 import type { PregoDb, TicketOverride } from '../db/database.js';
 import { guidanceWithFallback } from '../checks/guidance.js';
-import { componentLabel } from './component.js';
+import { componentLabel, templateName } from './component.js';
 import { isAdvisory } from './advisory.js';
+import { AXE_EQUIVALENT } from '../checks/ibm/ibm-guidance.js';
+
+export { AXE_EQUIVALENT };
 import { AI_ENGINE } from '../checks/ai/ai.js';
 import { CATEGORY_NAMES, SEVERITIES, type Location, type Priority, type RawFinding, type Severity, type Ticket } from '../types.js';
 
@@ -31,18 +34,6 @@ export function problemFingerprint(finding: Pick<RawFinding, 'engine' | 'ruleId'
   return createHash('sha1').update(['v2', engine, ruleId, scope, component].join('\n')).digest('hex').slice(0, 16);
 }
 
-/** IBM Equal Access rules that test the same thing as an axe rule. */
-export const AXE_EQUIVALENT: Record<string, string> = {
-  html_lang_exists: 'html-has-lang',
-  text_contrast_sufficient: 'color-contrast',
-  a_text_purpose: 'link-name',
-  frame_title_exists: 'frame-title',
-  img_alt_valid: 'image-alt',
-  input_label_exists: 'label',
-  aria_widget_labelled: 'aria-input-field-name',
-  svg_graphics_labelled: 'svg-img-alt',
-  page_title_exists: 'document-title',
-};
 
 /**
  * A component's path without the classes on <body>, which many sites set per page type or address
@@ -228,7 +219,7 @@ function pagesLabel(first: RawFinding, templates: string[], templateCount: numbe
   if (component.startsWith('site:') || first.componentShared || templates.length <= 1) return componentLabel(component, first.componentShared, templates[0] ?? null);
   const form = component.split('>').pop()?.split('.')[0] === 'form' ? 'form on ' : '';
   if (templates.length / templateCount >= 0.5) return `${form}most pages`;
-  const shown = templates.slice(0, 3).join(', ');
+  const shown = templates.slice(0, 3).map(templateName).join(', ');
   return `${form}${shown}${templates.length > 3 ? ` and ${templates.length - 3} more` : ''}`;
 }
 

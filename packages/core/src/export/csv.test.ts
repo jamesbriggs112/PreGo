@@ -3,7 +3,7 @@ import { parse } from 'csv-parse/sync';
 import { PregoDb } from '../db/database.js';
 import type { Ticket } from '../types.js';
 import { buildExportPlan, type ExportPlan } from './plan.js';
-import { occurrencesCsv, ticketsCsv, TICKET_COLUMNS } from './csv.js';
+import { checklistCsv, occurrencesCsv, ticketsCsv, TICKET_COLUMNS } from './csv.js';
 
 // Built from stored records rather than a browser run, so the edge cases are exact.
 let plan: ExportPlan;
@@ -112,3 +112,15 @@ describe('occurrences.csv', () => {
     expect(plan.tickets[0].occurrenceList.map((o) => o.screenshotFile)).toEqual(['PRG-A11Y-001_01.png', 'PRG-A11Y-001_02.png']);
   });
 });
+
+describe('qa-checklist.csv', () => {
+  it('lists the most serious exported tickets, with a page, element and screenshot to check, and empty columns to record the check', () => {
+    const rows = read(checklistCsv(plan));
+    expect(rows[0]).toEqual(['Ticket ID', 'Severity', 'Issue', 'Page to check', 'Element', 'Screenshot', 'Pages affected', 'Confirmed? (Yes / No / Partly)', 'Notes']);
+    // The dismissed ticket isn't there; the critical comes before the lower-priority one.
+    expect(rows.slice(1).map((r) => r[0])).toEqual(['PRG-A11Y-001', 'PRG-SEC-001']);
+    expect(rows[1]).toEqual(['PRG-A11Y-001', 'Critical', 'Images have no text alternative (/)', 'https://example.org/', 'img[src$="hero.svg"]', expect.stringMatching(/^report\.docx, section /), '1', '', '']);
+    expect(rows[2][5]).toBe('');
+  });
+});
+

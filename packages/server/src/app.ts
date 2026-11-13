@@ -1068,6 +1068,7 @@ const EXPORT_FILES: Record<string, string> = {
   'report.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   'tickets.csv': 'text/csv; charset=utf-8',
   'occurrences.csv': 'text/csv; charset=utf-8',
+  'qa-checklist.csv': 'text/csv; charset=utf-8',
   'run.json': 'application/json',
   'state-map.png': 'image/png',
 };

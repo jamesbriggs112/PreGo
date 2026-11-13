@@ -18,6 +18,7 @@ const FILE_LABELS: Record<string, string> = {
   'future.docx': 'Search and future readiness (Word)',
   'tickets.csv': 'Tickets (CSV)',
   'occurrences.csv': 'Occurrences (CSV)',
+  'qa-checklist.csv': 'Spot-check sheet (CSV)',
   'run.json': 'Raw data (JSON)',
   'state-map.png': 'State map (PNG)',
 };

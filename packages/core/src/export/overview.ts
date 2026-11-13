@@ -49,6 +49,7 @@ export async function overviewDocx(plan: ExportPlan, whyItMatters: string, brand
     ['report.docx', 'Every issue found, with ticket IDs, examples, why each matters and what to do', 'Project and development teams'],
     ['tickets.csv', 'One row per issue, ready to import into a ticketing tool. Ticket IDs match report.docx', 'Development team'],
     ['occurrences.csv', 'Every place each issue was found', 'Development team'],
+    ['qa-checklist.csv', 'The ten most serious issues, to check by hand before the report goes out', 'Whoever reviews the audit'],
   ];
   if (plan.options.reports.audience && plan.project.settings.audience?.personas.length) {
     pack.splice(1, 0, ['audience.docx', 'What the site is for, who it serves, and whether each of them can do what they came to do', 'Leadership, marketing and content']);

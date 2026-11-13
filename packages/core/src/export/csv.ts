@@ -1,7 +1,8 @@
 import { stringify } from 'csv-stringify/sync';
 import { writeFileSync } from 'node:fs';
 import type { ExportPlan, PlannedTicket } from './plan.js';
-import type { Priority } from '../types.js';
+import { SEVERITIES, type Priority } from '../types.js';
+import { isAdvisory } from '../tickets/advisory.js';
 
 /**
  * tickets.csv columns, in the order the spec sets (section 7.3), without the status and history
@@ -180,7 +181,37 @@ export function occurrencesCsv(plan: ExportPlan): string {
   return toCsv([OCCURRENCE_COLUMNS, ...rows]);
 }
 
-export function writeCsvFiles(plan: ExportPlan, paths: { tickets: string; occurrences: string }, presetId = 'prego') {
+export function writeCsvFiles(plan: ExportPlan, paths: { tickets: string; occurrences: string; checklist: string }, presetId = 'prego') {
   writeFileSync(paths.tickets, ticketsCsv(plan, presetId));
   writeFileSync(paths.occurrences, occurrencesCsv(plan));
+  writeFileSync(paths.checklist, checklistCsv(plan));
+}
+
+/** How many of the most serious tickets the spot-check sheet lists. */
+export const CHECKLIST_SIZE = 10;
+
+/**
+ * A sheet for checking the most serious findings by hand before a report goes to the client: the ten
+ * highest-severity tickets (advice left out), each with a page and element to look at, where its
+ * screenshot is in report.docx, and empty columns to record the check. About 15 minutes' work.
+ */
+export function checklistCsv(plan: ExportPlan): string {
+  const top = plan.tickets
+    .filter((t) => !isAdvisory(t))
+    .sort((a, b) => SEVERITIES.indexOf(a.severity) - SEVERITIES.indexOf(b.severity) || a.priority.localeCompare(b.priority) || b.locationsAffected - a.locationsAffected)
+    .slice(0, CHECKLIST_SIZE);
+  return toCsv([
+    ['Ticket ID', 'Severity', 'Issue', 'Page to check', 'Element', 'Screenshot', 'Pages affected', 'Confirmed? (Yes / No / Partly)', 'Notes'],
+    ...top.map((t) => [
+      t.ticketId,
+      t.severity,
+      t.title,
+      t.exampleLocation ?? '',
+      t.exampleSelector ?? '',
+      t.screenshotFile ? `report.docx, section ${t.reportSection}` : '',
+      String(t.locationsAffected),
+      '',
+      '',
+    ]),
+  ]);
 }

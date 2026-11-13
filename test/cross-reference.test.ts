@@ -47,7 +47,7 @@ describe('prego audit (CLI)', () => {
   });
 
   it('writes the full bundle into one folder (criterion 5)', () => {
-    expect(readdirSync(exportDir).sort()).toEqual(['occurrences.csv', 'report.docx', 'run.json', 'tickets.csv']);
+    expect(readdirSync(exportDir).sort()).toEqual(['occurrences.csv', 'qa-checklist.csv', 'report.docx', 'run.json', 'tickets.csv']);
   });
 
   it('embeds the screenshots in the report, then deletes them from Prego', async () => {

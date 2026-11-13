@@ -260,7 +260,7 @@ describe('exports', () => {
     const res = await post(`/api/runs/${completedRunId}/exports`, {});
     expect(res.status).toBe(201);
     const created = await res.json();
-    expect(created).toMatchObject({ preset: 'jira', files: ['report.docx', 'tickets.csv', 'occurrences.csv', 'run.json'] });
+    expect(created).toMatchObject({ preset: 'jira', files: ['report.docx', 'tickets.csv', 'occurrences.csv', 'qa-checklist.csv', 'run.json'] });
     expect(await (await api(`/api/runs/${completedRunId}/exports`)).json()).toContainEqual(expect.objectContaining({ id: created.id }));
 
     const csv = await (await api(`/api/exports/${created.id}/files/tickets.csv`)).text();

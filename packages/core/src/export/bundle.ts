@@ -28,7 +28,7 @@ export interface ExportResult {
   /** The export's ID in the exports log. */
   id: number;
   dir: string;
-  files: { report: string; tickets: string; occurrences: string; runJson: string; client?: string; overview?: string; audience?: string; future?: string };
+  files: { report: string; tickets: string; occurrences: string; checklist: string; runJson: string; client?: string; overview?: string; audience?: string; future?: string };
   plan: ExportPlan;
 }
 
@@ -50,6 +50,7 @@ export async function exportRun(db: PregoDb, runId: number, options: ExportOptio
     report: join(dir, 'report.docx'),
     tickets: join(dir, 'tickets.csv'),
     occurrences: join(dir, 'occurrences.csv'),
+    checklist: join(dir, 'qa-checklist.csv'),
     runJson: join(dir, 'run.json'),
   };
   mkdirSync(dir, { recursive: true });

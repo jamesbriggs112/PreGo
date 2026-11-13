@@ -96,6 +96,8 @@ export async function crawlSite(options: CrawlOptions): Promise<CrawlResult> {
   const pages: CrawledPage[] = [];
   const failed: FailedPage[] = [];
   const documents: DocumentLink[] = [];
+  /** Linked files to check, and the first page linking to each. */
+  const fileLinks = new Map<string, string>();
   const skipped: CrawlResult['skipped'] = [];
   const pageByContentHash = new Map<string, CrawledPage>();
 
@@ -192,6 +194,11 @@ export async function crawlSite(options: CrawlOptions): Promise<CrawlResult> {
           exclude,
           transformRequestFunction: (req) => {
             if (!isAllowed(req.url)) return false;
+            // Files are checked with a quick request after the crawl, not opened in the browser.
+            if (looksLikeFile(req.url)) {
+              if (!fileLinks.has(req.url)) fileLinks.set(req.url, request.url);
+              return false;
+            }
             if (looksLikeFeed(req.url)) {
               if (!skipped.some((s) => s.url === req.url)) skipped.push({ url: req.url, reason: 'notAPage' });
               return false;
@@ -239,6 +246,13 @@ export async function crawlSite(options: CrawlOptions): Promise<CrawlResult> {
     options.signal?.removeEventListener('abort', onAbort);
   }
 
+  for (const [url, referrer] of fileLinks) {
+    if (options.signal?.aborted) break;
+    const checked = await checkDocument(url, options.basicAuth);
+    if (checked.statusCode !== null && checked.statusCode < 400) documents.push({ ...checked, url, referrer });
+    else failed.push({ url, statusCode: checked.statusCode, error: checked.statusCode ? `HTTP ${checked.statusCode}` : 'No response', referrer });
+  }
+
   if (skipped.some((s) => s.reason === 'limit')) {
     stoppedEarly = true;
     stopReason ??= 'page limit';
@@ -259,6 +273,8 @@ const isHtml = (contentType: string) => /^(text\/html|application\/xhtml\+xml)$/
 const isFeedOrData = (contentType: string) => /(rss|atom|xml|json|javascript)/.test(mediaType(contentType)) && !/officedocument|opendocument/.test(contentType);
 /** RSS and Atom feeds and WordPress's data API, known by their addresses, so they aren't even requested. */
 export const looksLikeFeed = (url: string) => /\/(feed|rss|atom)(\.xml)?\/?$|\.(rss|atom)$|\/wp-json(\/|$)|[?&]feed=/i.test(new URL(url).pathname + new URL(url).search);
+/** Addresses of files people download rather than pages: PDFs, office documents, archives, media. */
+export const looksLikeFile = (url: string) => /\.(pdf|docx?|xlsx?|pptx?|odt|ods|odp|rtf|csv|zip|rar|7z|gz|epub|mp3|wav|mp4|mov|avi|dwg|eps|ai|psd)$/i.test(new URL(url).pathname);
 const isDownload = (error: Error) => /download is starting/i.test(error.message);
 const numberOrNull = (value: string | null | undefined) => (value && /^\d+$/.test(value) ? Number(value) : null);
 

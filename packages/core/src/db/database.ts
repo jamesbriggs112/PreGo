@@ -499,6 +499,12 @@ export class PregoDb {
   // Ticket registry
 
   /** Return the project's ticket ID for this fingerprint, allocating the next number if it's new. */
+  /** The ticket ID already given to a fingerprint in this project, without giving it one. */
+  existingTicketId(projectId: number, fingerprint: string): string | null {
+    const row = this.sqlite.prepare('SELECT ticketId FROM ticket_registry WHERE projectId = ? AND fingerprint = ?').get(projectId, fingerprint) as { ticketId: string } | undefined;
+    return row?.ticketId ?? null;
+  }
+
   ticketIdFor(projectId: number, fingerprint: string, category: Category, runId: number): { ticketId: string; isNew: boolean } {
     const existing = this.sqlite
       .prepare('SELECT ticketId FROM ticket_registry WHERE projectId = ? AND fingerprint = ?')

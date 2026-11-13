@@ -1,6 +1,7 @@
 import { CATEGORIES, CATEGORY_NAMES, SEVERITIES } from '../types.js';
 import { averagePerformance } from '../checks/lighthouse/lighthouse.js';
 import type { ExportPlan, PlannedTicket } from './plan.js';
+import { isAdvisory } from '../tickets/advisory.js';
 
 /**
  * Starting text for a client-facing report's written sections, worked out from the findings. Used
@@ -63,7 +64,10 @@ function serious(tickets: PlannedTicket[]): number {
 }
 
 /** Tickets grouped by rule, worst first, with the theme's shared recommendation. */
-function themes(tickets: PlannedTicket[]): { name: string; recommendation: string }[] {
+function themes(all: PlannedTicket[]): { name: string; recommendation: string }[] {
+  // Advice (AAA, best practice, spelling) only leads when there's nothing else.
+  const failures = all.filter((t) => !isAdvisory(t));
+  const tickets = failures.length ? failures : all;
   const groups = new Map<string, PlannedTicket[]>();
   for (const t of tickets) groups.set(`${t.engine}:${t.ruleId}`, [...(groups.get(`${t.engine}:${t.ruleId}`) ?? []), t]);
   const worst = (g: PlannedTicket[]) => Math.min(...g.map((t) => SEVERITIES.indexOf(t.severity)));

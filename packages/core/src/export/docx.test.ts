@@ -94,8 +94,20 @@ describe('report.docx', () => {
 describe('categoryScore', () => {
   it('falls with severity-weighted issues but never reaches zero quickly', () => {
     expect(categoryScore([])).toBe(100);
-    expect(categoryScore(['Critical'])).toBe(81);
-    expect(categoryScore(['Low'])).toBe(98);
-    expect(categoryScore(Array(20).fill('High'))).toBe(29);
+    expect(categoryScore([{ severity: 'Critical' }])).toBe(81);
+    expect(categoryScore([{ severity: 'Low' }])).toBe(98);
+    expect(categoryScore(Array(20).fill({ severity: 'High' }))).toBe(29);
+    // The same check failing on several components is one problem, at its worst severity.
+    expect(categoryScore([{ severity: 'High', ruleId: 'link-name', category: 'A11Y', wcagCriterion: '2.4.4', wcagLevel: 'A' }, { severity: 'Medium', ruleId: 'link-name', category: 'A11Y', wcagCriterion: '2.4.4', wcagLevel: 'A' }])).toBe(89);
+    // A problem on every page weighs half as much again as one on a single page.
+    expect(categoryScore([{ severity: 'Critical', locationsAffected: 1 }], 10)).toBe(80);
+    expect(categoryScore([{ severity: 'Critical', locationsAffected: 10 }], 10)).toBe(74);
+    // Advice doesn't count: AAA, best practice with no WCAG criterion, spelling.
+    const advice = [
+      { severity: 'Low', category: 'A11Y', ruleId: 'target-size-touch', wcagCriterion: '2.5.5', wcagLevel: 'AAA' },
+      { severity: 'Medium', category: 'A11Y', ruleId: 'region', wcagCriterion: null, wcagLevel: null },
+      { severity: 'Low', category: 'CONT', ruleId: 'spelling', wcagCriterion: null, wcagLevel: null },
+    ] as const;
+    expect(categoryScore([...advice])).toBe(100);
   });
 });

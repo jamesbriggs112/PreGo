@@ -1141,12 +1141,13 @@ function runSummary(run: Run) {
 export function scoresFor(db: PregoDb, run: Run): Partial<Record<Category, number>> {
   const checked = checkedCategories(run.settings);
   const tickets = db.getTickets(run.id).filter((t) => t.status === 'Open');
+  const audited = db.getLocations(run.id).filter((l) => l.audited).length;
   const scores: Partial<Record<Category, number>> = {};
   for (const category of CATEGORIES) {
     if (!checked.has(category)) continue;
     // Performance uses Lighthouse's score and Future readiness its checklist score, when there are figures.
     const measured = category === 'PERF' ? averagePerformance(db.getLocations(run.id)) : category === 'FUT' ? (assessReadiness(db.getLocations(run.id))?.score ?? null) : null;
-    scores[category] = measured ?? categoryScore(tickets.filter((t) => t.category === category).map((t) => t.severity));
+    scores[category] = measured ?? categoryScore(tickets.filter((t) => t.category === category), audited);
   }
   return scores;
 }

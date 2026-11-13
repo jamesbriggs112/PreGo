@@ -2,18 +2,54 @@ import { createHash } from 'node:crypto';
 import type { PregoDb, TicketOverride } from '../db/database.js';
 import { guidanceWithFallback } from '../checks/guidance.js';
 import { componentLabel } from './component.js';
+import { isAdvisory } from './advisory.js';
 import { AI_ENGINE } from '../checks/ai/ai.js';
 import { CATEGORY_NAMES, SEVERITIES, type Location, type Priority, type RawFinding, type Severity, type Ticket } from '../types.js';
 
 /**
- * A problem's fingerprint: rule + component + where it lives (the template, or `site` for components
- * shared by every page). The same problem gets the same fingerprint, and so the same ticket ID, on
- * every run.
+ * A problem's fingerprint in Prego's first grouping: rule + component + where it lives (the template,
+ * or `site` for components shared by every page). Still worked out so that projects audited before
+ * the current grouping keep their ticket IDs (see `buildTickets`).
  */
 export function fingerprint(finding: Pick<RawFinding, 'engine' | 'ruleId' | 'component' | 'componentShared' | 'selector'>, templateKey: string | null): string {
   const scope = finding.componentShared ? 'site' : `template:${templateKey ?? ''}`;
   const component = finding.component ?? `selector:${finding.selector}`;
   return createHash('sha1').update([finding.engine, finding.ruleId, scope, component].join('\n')).digest('hex').slice(0, 16);
+}
+
+/**
+ * A problem's fingerprint: rule + component, wherever it appears. The same component with the same
+ * problem on several page templates is one problem, so one ticket listing where it is. Interactive
+ * apps still group by screen address (see `groupingScope`).
+ */
+export function problemFingerprint(finding: Pick<RawFinding, 'engine' | 'ruleId' | 'component' | 'selector'>, location: Location | undefined): string {
+  const scope = location?.kind === 'state' ? groupingScope(location) : 'any';
+  const component = normaliseComponent(finding.component ?? `selector:${finding.selector}`);
+  // The same check in IBM's engine counts as axe's, so the two engines make one ticket.
+  const same = finding.engine === 'ibm' ? AXE_EQUIVALENT[finding.ruleId] : undefined;
+  const [engine, ruleId] = same ? ['axe-core', same] : [finding.engine, finding.ruleId];
+  return createHash('sha1').update(['v2', engine, ruleId, scope, component].join('\n')).digest('hex').slice(0, 16);
+}
+
+/** IBM Equal Access rules that test the same thing as an axe rule. */
+export const AXE_EQUIVALENT: Record<string, string> = {
+  html_lang_exists: 'html-has-lang',
+  text_contrast_sufficient: 'color-contrast',
+  a_text_purpose: 'link-name',
+  frame_title_exists: 'frame-title',
+  img_alt_valid: 'image-alt',
+  input_label_exists: 'label',
+  aria_widget_labelled: 'aria-input-field-name',
+  svg_graphics_labelled: 'svg-img-alt',
+  page_title_exists: 'document-title',
+};
+
+/**
+ * A component's path without the classes on <body>, which many sites set per page type or address
+ * (`page-node-type-article`, `path-frontpage`) and which would make one header look like several.
+ */
+export function normaliseComponent(component: string): string {
+  return component.replace(/^body(\.[^>]*)?(?=>|$)/, 'body');
 }
 
 const SEVERITY_RANK: Record<Severity, number> = { Critical: 1, High: 2, Medium: 3, Low: 4 };
@@ -44,6 +80,7 @@ export function buildTickets(db: PregoDb, runId: number, options: BuildTicketsOp
   if (!run) throw new Error(`Run ${runId} not found`);
   const locations = new Map(db.getLocations(runId).map((l) => [l.id, l]));
   const auditedCount = [...locations.values()].filter((l) => l.audited).length || 1;
+  const templateCount = new Set([...locations.values()].filter((l) => l.audited && l.kind === 'page').map((l) => l.templateKey)).size || 1;
   const keyJourney = new Set(options.keyJourneyUrls ?? []);
 
   // Group findings by fingerprint, in a fixed order so new IDs are allocated the same way every time.
@@ -56,20 +93,36 @@ export function buildTickets(db: PregoDb, runId: number, options: BuildTicketsOp
   const tickets: Ticket[] = [];
   db.transaction(() => {
     db.clearTickets(runId);
+    // One problem per fingerprint. A problem keeps the ticket ID it had under the first grouping
+    // (the lowest, when it was split across templates), so dismissals and notes carry over.
+    const problems = new Map<string, RawFinding[]>();
+    for (const finding of findings) {
+      const fp = problemFingerprint(finding, locations.get(finding.locationId));
+      problems.set(fp, [...(problems.get(fp) ?? []), finding]);
+    }
+    const ownIds = new Map<string, string>();
+    for (const [fp, group] of problems) {
+      const legacy = [...new Set(group.map((f) => fingerprint(f, groupingScope(locations.get(f.locationId)))))]
+        .map((old) => db.existingTicketId(run.projectId, old))
+        .filter((id): id is string => !!id)
+        .sort((a, b) => a.localeCompare(b, 'en', { numeric: true }));
+      ownIds.set(fp, legacy[0] ?? db.ticketIdFor(run.projectId, fp, group[0].category, runId).ticketId);
+    }
     // Group by ticket ID rather than fingerprint, so tickets the auditor merged stay merged.
     // `primary` is a finding that belongs to the ticket itself rather than one merged into it, so a
     // merged ticket keeps its own title and details.
     const groups = new Map<string, { fp: string; findings: RawFinding[]; primary?: RawFinding }>();
     const fingerprints = new Map<number, string>();
     for (const finding of findings) {
-      const fp = fingerprint(finding, groupingScope(locations.get(finding.locationId)));
+      const fp = problemFingerprint(finding, locations.get(finding.locationId));
       fingerprints.set(finding.id, fp);
-      const own = db.ticketIdFor(run.projectId, fp, finding.category, runId).ticketId;
+      const own = ownIds.get(fp)!;
       const ticketId = db.resolveMerge(run.projectId, own);
       if (!groups.has(ticketId)) groups.set(ticketId, { fp, findings: [] });
       const group = groups.get(ticketId)!;
       group.findings.push(finding);
-      if (own === ticketId && !group.primary) {
+      // The ticket's wording comes from axe when both engines found it, as axe's is plainer.
+      if (own === ticketId && (!group.primary || (group.primary.engine === 'ibm' && finding.engine !== 'ibm' && AXE_EQUIVALENT[group.primary.ruleId] === finding.ruleId))) {
         group.primary = finding;
         group.fp = fp;
       }
@@ -88,7 +141,7 @@ export function buildTickets(db: PregoDb, runId: number, options: BuildTicketsOp
             : affected.size === 1
               ? `“${location.title}” screen`
               : `${affected.size} screens`
-          : componentLabel(first.component ?? '', first.componentShared, location.templateKey);
+          : pagesLabel(first, affectedTemplates(affected, locations), templateCount);
       const criterion = first.wcagCriteria.join(', ') || null;
 
       const override = db.getOverride(run.projectId, ticketId);
@@ -107,7 +160,7 @@ export function buildTickets(db: PregoDb, runId: number, options: BuildTicketsOp
         wcagLevel: first.wcagLevel,
         ruleId: first.ruleId,
         engine: first.engine,
-        templateKey: first.componentShared ? null : location.kind === 'state' ? groupingScope(location) : location.templateKey,
+        templateKey: first.componentShared ? null : location.kind === 'state' ? groupingScope(location) : (onlyTemplate(affected, locations) ?? null),
         occurrences: findings.length,
         locationsAffected: affected.size,
         exampleLocation: location.url,
@@ -121,9 +174,10 @@ export function buildTickets(db: PregoDb, runId: number, options: BuildTicketsOp
         actual: first.failureSummary?.trim() || first.title,
         recommendation: guidance.recommendation,
         effort: guidance.effort,
-        labels: labelsFor(first),
+        labels: [...labelsFor(first), ...(new Set(findings.map((f) => f.engine)).size > 1 ? ['found-by-two-engines'] : [])],
         auditorNotes: '',
       };
+      if (isAdvisory(ticket)) ticket.labels.push('advisory');
       if (override) applyOverride(ticket, override, reach, onKeyJourney);
       db.saveTicket(ticket);
       tickets.push(ticket);
@@ -153,6 +207,29 @@ export function applyOverride(ticket: Ticket, override: TicketOverride, reach: n
   ticket.priority = override.priority ?? calculatePriority(ticket.severity, reach, onKeyJourney);
   if (override.auditorNotes !== null) ticket.auditorNotes = override.auditorNotes;
   if (override.dismissed) ticket.status = 'Dismissed';
+}
+
+/** The page templates a problem appears on. */
+function affectedTemplates(affected: Set<number>, locations: Map<number, Location>): string[] {
+  return [...new Set([...affected].map((id) => locations.get(id)?.templateKey ?? null).filter((t): t is string => !!t))].sort();
+}
+
+function onlyTemplate(affected: Set<number>, locations: Map<number, Location>): string | undefined {
+  const templates = affectedTemplates(affected, locations);
+  return templates.length === 1 ? templates[0] : undefined;
+}
+
+/**
+ * Where a problem is, for its title: the shared component (site header, footer), "most pages" when
+ * it's on at least half the page templates, or the templates themselves, three at most.
+ */
+function pagesLabel(first: RawFinding, templates: string[], templateCount: number): string {
+  const component = first.component ?? '';
+  if (component.startsWith('site:') || first.componentShared || templates.length <= 1) return componentLabel(component, first.componentShared, templates[0] ?? null);
+  const form = component.split('>').pop()?.split('.')[0] === 'form' ? 'form on ' : '';
+  if (templates.length / templateCount >= 0.5) return `${form}most pages`;
+  const shown = templates.slice(0, 3).join(', ');
+  return `${form}${shown}${templates.length > 3 ? ` and ${templates.length - 3} more` : ''}`;
 }
 
 /**

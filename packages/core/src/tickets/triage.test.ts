@@ -44,7 +44,7 @@ describe('ticket triage', () => {
   });
 
   it('dismisses a false positive and restores it', () => {
-    const contrast = find('color-contrast', '/');
+    const contrast = find('color-contrast', null);
     expect(updateTicket(db, runId, contrast.ticketId, { dismissed: true }).status).toBe('Dismissed');
     expect(buildExportPlan(db, runId).tickets.map((t) => t.ticketId)).not.toContain(contrast.ticketId);
     expect(updateTicket(db, runId, contrast.ticketId, { dismissed: false }).status).toBe('Open');
@@ -55,7 +55,7 @@ describe('ticket triage', () => {
     const home = find('heading-order', '/');
     const news = find('heading-order', '/news/*');
     const merged = mergeTickets(db, runId, home.ticketId, [news.ticketId]);
-    expect(merged).toMatchObject({ ticketId: home.ticketId, title: home.title, occurrences: home.occurrences + news.occurrences, locationsAffected: 3 });
+    expect(merged).toMatchObject({ ticketId: home.ticketId, title: 'Heading levels are skipped (most pages)', occurrences: home.occurrences + news.occurrences, locationsAffected: 3 });
     expect(db.getTicket(runId, news.ticketId)).toBeUndefined();
     expect(db.getOccurrences(runId, home.ticketId)).toHaveLength(home.occurrences + news.occurrences);
     expect(db.getOccurrences(runId, news.ticketId)).toHaveLength(0);
@@ -64,7 +64,7 @@ describe('ticket triage', () => {
   it('shows the changes in the next export', () => {
     const csv = ticketsCsv(buildExportPlan(db, runId));
     expect(csv).toContain('Client CMS sets this; check with dev team');
-    expect(csv).not.toContain(find('color-contrast', '/').ticketId);
+    expect(csv).not.toContain(find('color-contrast', null).ticketId);
     expect(csv).not.toContain(find('heading-order', '/news/*').ticketId);
   });
 
@@ -80,7 +80,7 @@ describe('ticket triage', () => {
     const again = db.getTickets(next.run.id);
     const byId = (id: string) => again.find((t) => t.ticketId === id);
     expect(byId(find('html-has-lang').ticketId)).toMatchObject({ severity: 'Low', auditorNotes: 'Client CMS sets this; check with dev team', status: 'Open' });
-    expect(byId(find('color-contrast', '/').ticketId)?.status).toBe('Dismissed');
+    expect(byId(find('color-contrast', null).ticketId)?.status).toBe('Dismissed');
     expect(byId(find('heading-order', '/news/*').ticketId)).toBeUndefined();
     expect(byId(find('heading-order', '/').ticketId)?.locationsAffected).toBe(3);
     // Untouched tickets keep their IDs.

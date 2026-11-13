@@ -18,7 +18,9 @@ import {
 } from 'docx';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { CATEGORIES, CATEGORY_NAMES, SEVERITIES, type Category, type Severity } from '../types.js';
+import { CATEGORIES, CATEGORY_NAMES, SEVERITIES, type Category, type Severity, type Ticket } from '../types.js';
+import { isAdvisory } from '../tickets/advisory.js';
+import { AXE_EQUIVALENT } from '../tickets/build.js';
 import { checkedCategories } from '../checks/categories.js';
 import { averagePerformance, type LighthouseScores } from '../checks/lighthouse/lighthouse.js';
 import { stateMapStates, type ExportPlan, type OutlineEntry, type PlannedTicket, type ReportSectionId, type ReportSectionPlan } from './plan.js';
@@ -48,9 +50,38 @@ export function resolveBranding(branding: ReportBranding = {}): Brand {
 /** Score penalty per ticket. The score is an indicator for comparing runs, not a compliance measure. */
 const SEVERITY_PENALTY: Record<Severity, number> = { Critical: 12, High: 6, Medium: 3, Low: 1 };
 
-/** 100 with no issues, falling with diminishing steps so large sites don't all sit at 0. One critical issue ≈ 81. */
-export function categoryScore(severities: Severity[]): number {
-  const penalty = severities.reduce((sum, s) => sum + SEVERITY_PENALTY[s], 0);
+export interface ScoredTicket {
+  severity: Severity;
+  /** Pages or screens it was found on. */
+  locationsAffected?: number;
+  category?: Ticket['category'];
+  ruleId?: string;
+  wcagCriterion?: string | null;
+  wcagLevel?: Ticket['wcagLevel'];
+}
+
+/**
+ * 100 with no issues, falling with diminishing steps so large sites don't all sit at 0. One critical
+ * issue on one page ≈ 81. Each distinct problem (a check that fails, however many components fail
+ * it) counts once, at its worst severity, weighted by how much of the site it's on: up to half as much
+ * again when it's on every page. Advisory tickets don't count. Tickets stay one per component.
+ */
+export function categoryScore(tickets: ScoredTicket[], audited = 1): number {
+  const problems = new Map<string, { severity: Severity; locations: number | undefined }>();
+  tickets.forEach((t, i) => {
+    if (t.ruleId && t.category && isAdvisory({ category: t.category, ruleId: t.ruleId, wcagCriterion: t.wcagCriterion ?? null, wcagLevel: t.wcagLevel ?? null })) return;
+    const key = t.ruleId ? (AXE_EQUIVALENT[t.ruleId] ?? t.ruleId) : `#${i}`;
+    const seen = problems.get(key);
+    if (!seen) problems.set(key, { severity: t.severity, locations: t.locationsAffected });
+    else {
+      if (SEVERITY_PENALTY[t.severity] > SEVERITY_PENALTY[seen.severity]) seen.severity = t.severity;
+      if (t.locationsAffected !== undefined) seen.locations = (seen.locations ?? 0) + t.locationsAffected;
+    }
+  });
+  const penalty = [...problems.values()].reduce(
+    (sum, p) => sum + SEVERITY_PENALTY[p.severity] * (p.locations === undefined ? 1 : 1 + 0.5 * Math.min(1, p.locations / Math.max(1, audited))),
+    0,
+  );
   return Math.round(100 / (1 + penalty / 50));
 }
 
@@ -62,19 +93,30 @@ export interface CategoryScore {
   category: Category;
   name: string;
   score: number | null;
+  /** Tickets that count towards the score. */
   issues: number;
   bySeverity: Record<Severity, number>;
+  /** Advisory tickets: listed, but not counted in the score. */
+  advice: number;
+}
+
+/** "17 issues, 4 critical", plus advice when there is some, to sit beside a score. */
+export function issuesText(c: Pick<CategoryScore, 'issues' | 'bySeverity' | 'advice'>): string {
+  const parts = [`${c.issues} ${plural(c.issues, 'issue')}`];
+  if (c.bySeverity.Critical) parts.push(`${c.bySeverity.Critical} critical`);
+  return parts.join(', ') + (c.advice ? ` (and ${c.advice} to consider)` : '');
 }
 
 /** Scores for every category. Performance uses Lighthouse's own score when it ran; everything else counts issues. */
 export function categoryScores(plan: ExportPlan): CategoryScore[] {
   const checked = checkedCategories(plan.run.settings);
   return CATEGORIES.map((category) => {
-    const tickets = plan.tickets.filter((t) => t.category === category);
+    const all = plan.tickets.filter((t) => t.category === category);
+    const tickets = all.filter((t) => !isAdvisory(t));
     const bySeverity = Object.fromEntries(SEVERITIES.map((s) => [s, tickets.filter((t) => t.severity === s).length])) as Record<Severity, number>;
     const measured = category === 'PERF' ? averagePerformance(plan.locations) : category === 'FUT' ? (assessReadiness(plan.locations)?.score ?? null) : null;
-    const score = checked.has(category) ? (measured ?? categoryScore(tickets.map((t) => t.severity))) : null;
-    return { category, name: CATEGORY_NAMES[category], score, issues: tickets.length, bySeverity };
+    const score = checked.has(category) ? (measured ?? categoryScore(tickets, auditedCount(plan))) : null;
+    return { category, name: CATEGORY_NAMES[category], score, issues: tickets.length, bySeverity, advice: all.length - tickets.length };
   });
 }
 
@@ -203,11 +245,13 @@ function executiveSummary(plan: ExportPlan, entry: OutlineEntry): (Paragraph | T
   }
   out.push(
     heading('Scores by category', HeadingLevel.HEADING_2),
-    para('Scores start at 100 and drop for each issue found, weighted by severity. They show where to focus first, not a measure of compliance.'),
+    para('Scores count each distinct problem once, weighted by severity and how much of the site it affects. They show where to focus, not compliance. Advice (AAA guidelines, best practice and spelling) is listed but not counted.'),
     table(
-      ['Category', 'Score', 'Issues', 'Critical', 'High', 'Medium', 'Low'],
+      ['Category', 'Score', 'Issues', 'Critical', 'High', 'Medium', 'Low', 'Advice'],
       categoryScores(plan).map((c) =>
-        c.score === null ? [c.name, 'Not checked', '–', '–', '–', '–', '–'] : [c.name, String(c.score), String(c.issues), ...SEVERITIES.map((s) => String(c.bySeverity[s]))],
+        c.score === null
+          ? [c.name, 'Not checked', '–', '–', '–', '–', '–', '–']
+          : [c.name, String(c.score), String(c.issues), ...SEVERITIES.map((s) => String(c.bySeverity[s])), String(c.advice)],
       ),
     ),
   );
@@ -527,7 +571,9 @@ export function themesOf(tickets: PlannedTicket[]): Theme[] {
     themes.get(key)!.tickets.push(t);
   }
   const worst = (theme: Theme) => Math.min(...theme.tickets.map((t) => SEVERITIES.indexOf(t.severity)));
-  return [...themes.values()].sort((a, b) => worst(a) - worst(b) || b.tickets.length - a.tickets.length);
+  // Advice (AAA, best practice, spelling) comes after failures, whatever its severity.
+  const advice = (theme: Theme) => (theme.tickets.every((t) => isAdvisory(t)) ? 1 : 0);
+  return [...themes.values()].sort((a, b) => advice(a) - advice(b) || worst(a) - worst(b) || b.tickets.length - a.tickets.length);
 }
 
 function where(t: PlannedTicket): string {

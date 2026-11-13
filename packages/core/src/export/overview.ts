@@ -1,7 +1,7 @@
 import { HeadingLevel, Packer, Paragraph, Table, TextRun } from 'docx';
 import { writeFileSync } from 'node:fs';
 import type { Category } from '../types.js';
-import { auditedCount, brandedDocument, categoryScores, cover, heading, para, plural, resolveBranding, scopeSentence, table, writtenText, type ReportBranding } from './docx.js';
+import { auditedCount, brandedDocument, categoryScores, issuesText, cover, heading, para, plural, resolveBranding, scopeSentence, table, writtenText, type ReportBranding } from './docx.js';
 import type { ExportPlan } from './plan.js';
 import { listItems } from './report-options.js';
 import { suggestReportText } from './suggest.js';
@@ -69,17 +69,17 @@ export async function overviewDocx(plan: ExportPlan, whyItMatters: string, brand
     ...(scores.length
       ? [
           table(
-            ['Area', 'Score', 'Rating', 'What it covers'],
+            ['Area', 'Score', 'Rating', 'Issues', 'What it covers'],
             [
-              ...scores.map((c) => [c.name, `${c.score} / 100`, scoreRating(c.score!), COVERS[c.category]]),
+              ...scores.map((c) => [c.name, `${c.score} / 100`, scoreRating(c.score!), issuesText(c), COVERS[c.category]]),
               // Future readiness is already in the scores when its checks ran.
               ...(readiness && !scores.some((c) => c.category === 'FUT')
-                ? [['Future readiness', `${readiness.score} / 100`, scoreRating(readiness.score), 'How the site appears in search and when shared, and how ready it is for AI assistants and voice search']]
+                ? [['Future readiness', `${readiness.score} / 100`, scoreRating(readiness.score), '–', 'How the site appears in search and when shared, and how ready it is for AI assistants and voice search']]
                 : []),
             ],
             { boldFirstColumn: true },
           ),
-          para('Scores start at 100 and drop for each issue found, weighted by severity; Performance is Lighthouse’s own score. They show where to focus first, not whether the site meets a standard.'),
+          para('Scores count each distinct problem once, weighted by severity and how much of the site it affects. They show where to focus, not compliance. Performance is Lighthouse’s own score.'),
         ]
       : [para('No scored checks were run in this audit.')]),
 

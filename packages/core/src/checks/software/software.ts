@@ -18,16 +18,23 @@ export function assessSoftware(software: DetectedSoftware, db: VulnDb): CheckFin
   const out: CheckFinding[] = [];
   const advisories = db.advisoriesFor(software.id, software.version);
   const date = db.date ? `Vulnerability data from ${new Date(db.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}.` : '';
+  // "Drupal 10" says which major version, not which release, so it can't show the site is vulnerable.
+  const majorOnly = !software.version.includes('.');
   const caveat = software.distro
     ? ' The header shows it’s packaged by a Linux distribution, which often fixes vulnerabilities without changing the version number, so the server may already be patched: ask the host to confirm.'
-    : ' Versions shown in headers and generator tags can be out of date, so confirm the version with whoever runs the site.';
+    : majorOnly
+      ? ` The ${software.evidence.split(':')[0]} gives only the major version, so Prego can’t tell which release runs: these affect some ${software.name} ${software.version} releases. Ask whoever runs the site to confirm it’s on the latest one.`
+      : ' Versions shown in headers and generator tags can be out of date, so confirm the version with whoever runs the site.';
   if (advisories.length) {
     const ids = advisories.map((a) => a.aliases.find((x) => x.startsWith('CVE-')) ?? a.id);
     const exploited = db.exploited(advisories.flatMap((a) => [a.id, ...a.aliases]));
     let severity = advisories.map((a) => a.severity).reduce(worse, 'Low');
     if (exploited.length) severity = worse(severity, 'High');
-    // A distribution's build may be patched, so it's a prompt to check, not a finding.
-    if (software.distro) severity = 'Low';
+    // Only a version number shows it, so it's a prompt to check with the host: Medium at most,
+    // unless a vulnerability known to be exploited applies to that exact release.
+    if (!exploited.length && SEVERITIES.indexOf(severity) > SEVERITIES.indexOf('Medium')) severity = 'Medium';
+    // A distribution's build may be patched, and a major version alone could be any release.
+    if (software.distro || majorOnly) severity = 'Low';
     const serious = advisories.filter((a) => a.severity === 'Critical' || a.severity === 'High').length;
     out.push(
       finding('vulnerable-software', software, severity, advisories[0].url,

@@ -199,6 +199,20 @@ describe('updating and using the local data', () => {
     expect(eol).toMatchObject([{ ruleId: 'end-of-life-software', severity: 'Medium', failureSummary: expect.stringMatching(/PHP 7\.4 no longer gets security fixes.+2022-11-28/) }]);
   });
 
+  it('treats a version number alone as a prompt to check: Medium at most, Low for a major version or a distribution build', () => {
+    const advisory = { id: 'CVE-2026-0001', aliases: [], severity: 'Critical', url: 'https://nvd.nist.gov/vuln/detail/CVE-2026-0001' };
+    const db = (exploited: string[]) => ({ date: null, advisoriesFor: () => [advisory], exploited: () => exploited, endOfLife: () => null }) as unknown as Parameters<typeof assessSoftware>[1];
+    const drupal = (version: string) => ({ id: 'drupal', name: 'Drupal', version, evidence: `Generator: Drupal ${version} (https://www.drupal.org)`, distro: false });
+    // "Drupal 10" could be any Drupal 10 release.
+    const [major] = assessSoftware(drupal('10'), db(['CVE-2026-0001']));
+    expect(major.severity).toBe('Low');
+    expect(major.failureSummary).toMatch(/gives only the major version, so Prego can’t tell which release runs/);
+    // A full version with no exploited vulnerability: check with the host.
+    expect(assessSoftware(drupal('10.2.3'), db([]))[0].severity).toBe('Medium');
+    // A full version with a vulnerability known to be exploited stays serious.
+    expect(assessSoftware(drupal('10.2.3'), db(['CVE-2026-0001']))[0].severity).toBe('Critical');
+  });
+
   it('adds OSV advisories, exploitation and end of life to a library Retire found', async () => {
     const dataDir = tempDir();
     await fakeUpdate(dataDir);

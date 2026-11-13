@@ -121,7 +121,7 @@ describe('report contents and analytics', () => {
 
     const saved = await (await fetch(`${base}/api/runs/${run.id}/report`, json('PUT', { clientFacing: true, include: { analytics: true }, text: { summary: 'Hello' } }))).json();
     // The client report has its own outline; the developer report keeps its layout.
-    expect(saved.clientOutline.map((o: { title: string }) => o.title).slice(0, 2)).toEqual(['Executive summary', 'Methodology']);
+    expect(saved.clientOutline.map((o: { title: string }) => o.title).slice(0, 2)).toEqual(['At a glance', 'What to fix first: the action plan']);
     expect(saved.outline.map((o: { title: string }) => o.title).slice(0, 2)).toEqual(['Executive summary', 'Scope and method']);
     expect(db.getReportOptions(run.id)).toMatchObject({ clientFacing: true, text: { summary: 'Hello' } });
 

@@ -62,7 +62,11 @@ export function templateName(templateKey: string): string {
   const star = templateKey.indexOf('*');
   if (star < 0) return templateKey;
   const prefix = templateKey.slice(0, star).replace(/[^/]*$/, '');
-  return prefix === '/' || !prefix ? 'pages like ' + templateKey : `pages under ${prefix}`;
+  if (prefix !== '/' && prefix) return `pages under ${prefix}`;
+  // Only wildcards: say how deep the pages are.
+  if (/\*\*/.test(templateKey)) return 'pages across the site';
+  const depth = templateKey.split('/').filter(Boolean).length;
+  return depth <= 1 ? 'top-level pages' : depth === 2 ? 'second-level pages' : 'deeper pages';
 }
 
 /** Human description of where a component is, for ticket titles. */

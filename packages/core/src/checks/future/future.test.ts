@@ -99,7 +99,7 @@ describe('the Search, sharing and future readiness report', () => {
     expect(Object.keys(zip.files).filter((f) => f.startsWith('word/media/')).length).toBe(3);
     // The Overview scores future readiness and lists the report in the pack.
     const overview = (await (await JSZip.loadAsync(readFileSync(exported.files.overview!))).file('word/document.xml')!.async('string')).replace(/<[^>]+>/g, ' ');
-    expect(overview).toMatch(/Future readiness\s+\d+ \/ 100/);
+    expect(overview).toMatch(/Future readiness\s+(Good|Needs attention|Needs significant work)\s+\d+ \/ 100/);
     expect(overview).toContain('future.docx');
     expect(existsSync(join(dataDir, 'runs', String(runId), 'sharing'))).toBe(false);
   }, 120_000);

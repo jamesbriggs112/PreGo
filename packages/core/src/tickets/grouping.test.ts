@@ -118,6 +118,8 @@ describe('one problem, one ticket', () => {
     expect(templateName('/')).toBe('home page');
     expect(templateName('/news/*/*')).toBe('pages under /news/');
     expect(templateName('/about.html')).toBe('/about.html');
-    expect(templateName('/*')).toBe('pages like /*');
+    expect(templateName('/*')).toBe('top-level pages');
+    expect(templateName('/*/*')).toBe('second-level pages');
+    expect(templateName('/**')).toBe('pages across the site');
   });
 });

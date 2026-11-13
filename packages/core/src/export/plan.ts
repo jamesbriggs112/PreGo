@@ -49,7 +49,7 @@ export interface ReportSectionPlan {
  * their cross-references always agree.
  */
 /** A numbered top-level section of report.docx. */
-export type ReportSectionId = 'summary' | 'method' | OptionalSection | 'findings' | 'map' | 'conclusion' | 'limitations';
+export type ReportSectionId = 'summary' | 'glance' | 'plan' | 'strengths' | 'method' | OptionalSection | 'findings' | 'map' | 'conclusion' | 'limitations';
 export interface OutlineEntry {
   id: ReportSectionId;
   number: number;
@@ -105,22 +105,42 @@ export function availableSections(project: Project, run: Run, locations: Locatio
 /** The report's sections, numbered in order. Findings come after the scene-setting sections. */
 export function reportOutline(run: Pick<Run, 'mode'>, options: ReportOptions, available: Record<OptionalSection, boolean>): OutlineEntry[] {
   const on = (id: OptionalSection) => options.include[id] && available[id];
-  const ids: (ReportSectionId | false)[] = [
-    'summary',
-    on('client') && 'client',
-    'method',
-    on('analytics') && 'analytics',
-    'findings',
-    on('content') && 'content',
-    on('ia') && 'ia',
-    on('profile') && 'profile',
-    'map',
-    on('competitors') && 'competitors',
-    options.clientFacing && !!options.text.conclusion && 'conclusion',
-    'limitations',
-  ];
+  // The client report leads with the verdict and the plan; how it was checked goes at the back.
+  const ids: (ReportSectionId | false)[] = options.clientFacing
+    ? [
+        'glance',
+        'plan',
+        'strengths',
+        on('client') && 'client',
+        on('analytics') && 'analytics',
+        'findings',
+        on('content') && 'content',
+        on('ia') && 'ia',
+        on('profile') && 'profile',
+        'map',
+        on('competitors') && 'competitors',
+        !!options.text.conclusion && 'conclusion',
+        'method',
+        'limitations',
+      ]
+    : [
+        'summary',
+        on('client') && 'client',
+        'method',
+        on('analytics') && 'analytics',
+        'findings',
+        on('content') && 'content',
+        on('ia') && 'ia',
+        on('profile') && 'profile',
+        'map',
+        on('competitors') && 'competitors',
+        'limitations',
+      ];
   const titles: Record<ReportSectionId, string> = {
     summary: 'Executive summary',
+    glance: 'At a glance',
+    plan: 'What to fix first: the action plan',
+    strengths: 'What’s working well',
     method: options.clientFacing ? 'Methodology' : 'Scope and method',
     client: 'About the client',
     profile: 'Site profile and sustainability',

@@ -40,6 +40,7 @@ export function asFreshAudit(json: RunJson): RunJson {
         !dropped.has(f.locationId) &&
         !unaudited.has(f.locationId) &&
         !(f.ruleId === 'broken-link' && /download is starting/i.test(f.failureSummary ?? '')) &&
+        !(f.ruleId === 'element-required-attributes' && /<iframe> is missing required "title"/.test(f.title)) &&
         !(['keyboard-trap', 'focus-not-visible'].includes(f.ruleId) && /^<(iframe|video|audio|object|embed)\b/i.test(f.html)),
     ),
   };

@@ -67,11 +67,11 @@ const REPORTS: ReportType[] = [
 ];
 
 const WRITTEN: Record<ReportTextKey, { label: string; hint: string; suggest?: 'keyFindings' | 'recommendations' | 'methodology'; rows: number }> = {
-  summary: { label: 'Executive summary', hint: 'An introduction to the client, the site and the purpose of the audit. Leave blank to use Prego’s summary of the findings.', rows: 5 },
-  keyFindings: { label: 'Key findings', hint: 'One per line. Leave blank to use the suggested findings. Shared by the leadership summary and the client report.', suggest: 'keyFindings', rows: 6 },
+  summary: { label: 'Executive summary', hint: 'Optional. An introduction to the client, the site and the purpose of the audit, shown under the verdict on the At a glance page.', rows: 5 },
+  keyFindings: { label: 'Key findings', hint: 'Optional. One per line, shown on the At a glance page. Leave blank to rely on the verdict and the action plan.', suggest: 'keyFindings', rows: 6 },
   recommendations: {
     label: 'Top recommendations',
-    hint: 'One per line, most important first. Leave blank to use the suggested recommendations. Shared by the leadership summary and the client report.',
+    hint: 'Optional. One per line, most important first, shown on the At a glance page. The action plan lists every fix either way.',
     suggest: 'recommendations',
     rows: 6,
   },

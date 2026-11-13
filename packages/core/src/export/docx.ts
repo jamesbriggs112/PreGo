@@ -28,6 +28,8 @@ import { listItems } from './report-options.js';
 import { trafficText } from './csv.js';
 import { suggestReportText } from './suggest.js';
 import { assessReadiness } from './readiness.js';
+import { actionPlanSection, glanceData, glanceSection, strengthsSection, type GlanceData } from './glance.js';
+import { guidanceWithFallback } from '../checks/guidance.js';
 import { analyticsSection, competitorSection, contentSection, iaSection, type SectionContext } from './sections.js';
 import { clientSection, profileSection } from './profile-sections.js';
 
@@ -130,8 +132,13 @@ export interface ReportExtras {
 export async function reportDocx(plan: ExportPlan, runDir: string, branding: ReportBranding = {}, extras: ReportExtras = {}): Promise<Buffer> {
   const brand = resolveBranding(branding);
   const context: SectionContext = { plan, runDir, charts: extras.charts ?? {}, helpers: { heading, para, table, pngImage, writtenText, plural } };
+  let data: GlanceData | undefined;
+  const glance = () => (data ??= glanceData(plan));
   const builders: Record<ReportSectionId, (entry: OutlineEntry) => (Paragraph | Table)[]> = {
     summary: (e) => executiveSummary(plan, e),
+    glance: (e) => [...glanceSection(plan, glance(), sectionHeading(e)), ...glanceWords(plan), pageBreak()],
+    plan: (e) => [...actionPlanSection(glance(), sectionHeading(e)), pageBreak()],
+    strengths: (e) => strengthsSection(glance(), sectionHeading(e)),
     method: (e) => scopeAndMethod(plan, e),
     analytics: (e) => analyticsSection(context, e),
     findings: (e) => findings(plan, runDir, e),
@@ -152,6 +159,18 @@ export async function reportDocx(plan: ExportPlan, runDir: string, branding: Rep
     ...(plan.options.clientFacing ? [] : appendix(plan)),
   ];
   return Packer.toBuffer(brandedDocument(brand, `${plan.project.name}: ${reportTitle(plan)}`, `${plan.project.name} audit`, children));
+}
+
+const sectionHeading = (e: OutlineEntry) => heading(`${e.number}. ${e.title}`, HeadingLevel.HEADING_1);
+const pageBreak = () => new Paragraph({ children: [new PageBreak()] });
+
+/** The auditor's own key findings and recommendations, when written: shown after the glance page's own. */
+export function glanceWords(plan: ExportPlan): Paragraph[] {
+  const { text } = plan.options;
+  const out: Paragraph[] = [];
+  if (text.keyFindings) out.push(heading('Key findings', HeadingLevel.HEADING_2), ...listItems(text.keyFindings).map((item) => new Paragraph({ bullet: { level: 0 }, children: [new TextRun(item)] })));
+  if (text.recommendations) out.push(heading('Our recommendations', HeadingLevel.HEADING_2), ...listItems(text.recommendations).map((item) => new Paragraph({ bullet: { level: 0 }, children: [new TextRun(item)] })));
+  return out;
 }
 
 /** A Word document in the report style: Arial, headings in the accent colour, and a footer with page numbers. */
@@ -271,7 +290,10 @@ function executiveSummary(plan: ExportPlan, entry: OutlineEntry): (Paragraph | T
   if (themes.length) {
     out.push(heading('Headline themes', HeadingLevel.HEADING_2));
     for (const theme of themes) {
-      out.push(new Paragraph({ bullet: { level: 0 }, children: [new TextRun({ text: theme.name, bold: true }), new TextRun(`: ${theme.tickets[0].whyItMatters}`)] }));
+      // A theme is one check, so its reason is that check's own, never a ticket's edited copy.
+      const first = theme.tickets[0];
+      const why = guidanceWithFallback(first.engine, first.ruleId, { title: first.title, description: first.description, helpUrl: null, wcagCriteria: first.wcagCriterion?.split(/,\s*/) }).whyItMatters;
+      out.push(new Paragraph({ bullet: { level: 0 }, children: [new TextRun({ text: theme.name, bold: true }), new TextRun(`: ${why}`)] }));
     }
   }
   out.push(new Paragraph({ children: [new PageBreak()] }));

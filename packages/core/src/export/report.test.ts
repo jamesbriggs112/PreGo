@@ -16,6 +16,7 @@ import { reportDocx, scopeSentence } from './docx.js';
 import { DEFAULT_REPORT_OPTIONS, listItems, parseReportOptions, type ReportOptions } from './report-options.js';
 import { measureCopy } from './sections.js';
 import { overviewDocx, scoreRating } from './overview.js';
+import { audienceDocx } from './audience-report.js';
 import { verifyExport } from './verify.js';
 import { DEFAULT_WHY_IT_MATTERS } from '../settings.js';
 import { competitorUrls } from '../audit/competitors.js';
@@ -95,9 +96,11 @@ describe('report options', () => {
     const all = { analytics: true, content: true, ia: true, competitors: true };
     expect(reportOutline({ mode: 'crawl' }, DEFAULT_REPORT_OPTIONS, all).map((o) => `${o.number} ${o.id}`)).toEqual(['2 summary', '3 method', '4 findings', '5 map', '6 limitations']);
     const client: ReportOptions = { clientFacing: true, reports: { overview: false, audience: false, future: false }, include: all, text: { conclusion: 'Done.' } };
+    // The client report leads with the verdict and the plan; how it was checked goes at the back.
     expect(reportOutline({ mode: 'crawl' }, client, all).map((o) => o.title)).toEqual([
-      'Executive summary',
-      'Methodology',
+      'At a glance',
+      'What to fix first: the action plan',
+      'What’s working well',
       'Analytics',
       'Findings by category',
       'Content and tone',
@@ -105,6 +108,7 @@ describe('report options', () => {
       'Site map summary',
       'Competitor analysis',
       'Conclusion',
+      'Methodology',
       'Limitations and manual testing',
     ]);
     // A section that's switched on but has nothing to show is left out.
@@ -269,23 +273,29 @@ describe('the client report', () => {
     const { zip, text } = await reportText(exported.dir, 'client-report.docx');
     const headings = [...text.matchAll(/^(\d+)\. (.+)$/gm)].map((m) => `${m[1]}. ${m[2]}`);
     const expected = [
-      '1. Executive summary',
-      '2. Methodology',
-      '3. Analytics',
-      '4. Findings by category',
-      '5. Content and tone',
-      '6. Information architecture',
-      '7. Site map summary',
-      '8. Competitor analysis',
-      '9. Conclusion',
-      '10. Limitations and manual testing',
+      '1. At a glance',
+      '2. What to fix first: the action plan',
+      '3. What’s working well',
+      '4. Analytics',
+      '5. Findings by category',
+      '6. Content and tone',
+      '7. Information architecture',
+      '8. Site map summary',
+      '9. Competitor analysis',
+      '10. Conclusion',
+      '11. Methodology',
+      '12. Limitations and manual testing',
     ];
     // Listed once on the contents page, then as the section headings.
     expect(headings).toEqual([...expected, ...expected]);
     expect(text).toContain('Website UX audit');
     expect(text).toMatch(/Acme makes widgets\.\nThis audit looks at the new site before launch\./);
     expect(text).toMatch(/Key findings\nImages are missing alt text\nSome text is hard to read/);
-    expect(text).toMatch(/Top recommendations\n1\./);
+    // A verdict, a status per area, and the first things to fix, each with who and how big a job.
+    expect(text).toMatch(/Area\nStatus\nScore\nIssues\n/);
+    expect(text).toMatch(/Fix these (three )?first\n1\.\t.+\. Where: .+\. (High|Medium|Low) impact, for .+\. Who: .+\. Effort: .+\./);
+    expect(text).toMatch(/Quick wins \(\d+\)|Plan next \(\d+\)/);
+    expect(text).toMatch(/#\nFix\nWhere\nWho\nEffort\nImpact\nRef\n/);
     expect(text).toContain('We crawled the site through its links and sitemap');
     expect(text).toContain('How people find the site');
     expect(text).toContain('Average reading ease');
@@ -331,19 +341,13 @@ describe('the Overview report', () => {
     expect([95, 90, 75, 55, 20].map(scoreRating)).toEqual(['In good shape', 'In good shape', 'A few things to fix', 'Needs attention', 'Needs significant work']);
   });
 
-  it('opens with scores at a glance, then why it matters, findings, recommendations and the pack', async () => {
+  it('is a one-pager: the verdict and status per area, the quick wins, and the pack', async () => {
     db.saveReportOptions(runId, { ...DEFAULT_REPORT_OPTIONS, reports: { overview: true, audience: false, future: false } });
     const text = await textOf(await overviewDocx(buildExportPlan(db, runId), DEFAULT_WHY_IT_MATTERS));
-    expect([...text.matchAll(/^(\d+)\. (.+)$/gm)].map((m) => m[2])).toEqual([
-      'At a glance',
-      'Why a healthy website matters',
-      'Key findings',
-      'Top recommendations',
-      'What’s in this pack',
-      'About these results',
-    ]);
+    expect([...text.matchAll(/^(\d+)\. (.+)$/gm)].map((m) => m[2])).toEqual(['At a glance', 'Quick wins', 'Why a healthy website matters', 'What’s in this pack']);
     expect(text).toContain('Website health overview');
-    expect(text).toMatch(/Accessibility\n\d+ \/ 100\n(In good shape|A few things to fix|Needs attention|Needs significant work)\n/);
+    expect(text).toMatch(/Accessibility\n(Good|Needs attention|Needs significant work)\n\d+ \/ 100\n\d+ issues?/);
+    expect(text).toMatch(/Fix these (three )?first\n/);
     expect(text).toContain('Regular checks like this one catch problems while they’re small.');
     expect(text).not.toMatch(/\b(complies with|is compliant|are compliant|legally compliant)\b/i);
   });
@@ -373,7 +377,7 @@ describe('the Overview report', () => {
     expect(text).toMatch(/Key findings\nForms lack labels\n/);
   });
 
-  it('says what the site is for, with gaps and who it serves, when the project has purposes', async () => {
+  it('leaves what the site is for to the Audience report, which shows the purposes, gaps and who it serves', async () => {
     const projectId = db.getRun(runId)!.projectId;
     db.saveProjectSettings(projectId, {
       audience: {
@@ -387,11 +391,12 @@ describe('the Overview report', () => {
       },
     });
     db.saveReportOptions(runId, { ...DEFAULT_REPORT_OPTIONS, reports: { overview: true, audience: false, future: false } });
-    const text = await textOf(await overviewDocx(buildExportPlan(db, runId), DEFAULT_WHY_IT_MATTERS));
-    expect(text).toMatch(/\d\. Where to focus\n(.|\n)*\d\. What the site is for\n/);
+    const plan = buildExportPlan(db, runId);
+    expect(await textOf(await overviewDocx(plan, DEFAULT_WHY_IT_MATTERS))).not.toContain('What the site is for');
+    const text = await textOf(await audienceDocx(plan, dataDir));
     expect(text).toMatch(/Show and sell products\nMain\nYes\nYes\n/);
     expect(text).toContain('Gaps: the site doesn’t yet help people book a demo.');
-    expect(text).toContain('Member of staff (internal): Works at Acme. Comes to find the Mark IV price.');
+    expect(text).toContain('Member of staff (internal)');
     db.saveProjectSettings(projectId, { audience: undefined });
   });
 

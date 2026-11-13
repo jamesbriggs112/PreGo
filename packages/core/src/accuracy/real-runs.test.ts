@@ -6,6 +6,7 @@ import { asFreshAudit, restoreRun, type RunJson } from '../export/restore.js';
 import { buildTickets } from '../tickets/build.js';
 import { buildExportPlan } from '../export/plan.js';
 import { categoryScores } from '../export/docx.js';
+import { actionPlan } from '../export/action-plan.js';
 
 // Real audits kept on this computer only (fixtures/qa-*/ is git-ignored, as they hold client data).
 // When they're here, rebuild their tickets and scores with the current rules and print them, so
@@ -55,5 +56,20 @@ describe.skipIf(!files.length)('real audits, rebuilt with the current rules', ()
       const fresh = asFreshAudit(JSON.parse(readFileSync(join(DIR, fcn), 'utf8')) as RunJson);
       expect(fresh.locations.filter((l) => l.audited && /latest\/news\?page=[12]/.test(l.url))).toEqual([]);
     }
+  });
+
+  it('puts real, high-impact quick wins first in the action plan, each with who, effort and impact (R-03)', () => {
+    const fcn = files.find((f) => f.startsWith('fcn-police'));
+    if (!fcn) return;
+    const db = new PregoDb(':memory:');
+    const runId = restoreRun(db, asFreshAudit(JSON.parse(readFileSync(join(DIR, fcn), 'utf8')) as RunJson));
+    buildTickets(db, runId);
+    const rows = actionPlan(buildExportPlan(db, runId));
+    db.close();
+    expect(rows[0]).toMatchObject({ group: 'Quick wins', impact: 'High', fix: expect.stringMatching(/^Give buttons a name/), where: expect.stringMatching(/^Site header, every page/) });
+    const quick = rows.filter((r) => r.group === 'Quick wins');
+    expect(quick.slice(0, 5).some((r) => /^Give icon links/.test(r.fix) && /^Site footer/.test(r.where))).toBe(true);
+    for (const r of rows) expect([r.who, r.effort, r.impact].every(Boolean)).toBe(true);
+    expect(rows.some((r) => r.fix.startsWith('Fix: '))).toBe(false);
   });
 });

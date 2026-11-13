@@ -134,9 +134,10 @@ describe('the cross-analysis', () => {
     expect(links).toContainEqual('“Help people get in touch” is a main purpose, but people may not manage to find the price list.');
 
     const text = (await (await JSZip.loadAsync(await overviewDocx(plan, 'Why.'))).file('word/document.xml')!.async('string')).replace(/<\/w:p>/g, '\n').replace(/<[^>]+>/g, '');
-    expect(text).toMatch(/2\. Where to focus\n/);
-    expect(text).toContain('Fix these first');
-    expect(text).toMatch(/Help people get in touch\nMain\nYes\nYes\n\d of \d\n\d+\n/);
+    // The overview says what the findings mean for these visitors, and the plan weighs them.
+    expect(text).toContain('What it means for your visitors');
+    expect(text).toContain('70% of visitors use a phone');
+    expect(text).toMatch(/Fix these (three )?first\n/);
     db.saveProjectSettings(projectId, { audience: profile, analytics: undefined });
   });
 });
